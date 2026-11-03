@@ -1,45 +1,43 @@
-import psycopg2
-import psycopg2.extras
 from typing import Optional, List, Any
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import Embeddings
+
+from core.datastore import connect_dados, default_read_policy
 
 from .graph import build_graph
 
 class BIAgent:
     def __init__(
         self,
-        dsn: str,
         llm_model: BaseChatModel,
         embedder: Embeddings,
-        dialect: str = "postgres",
+        dados_path: str | None = None,
+        dialect: str = "sqlite",
         validate_sql: bool = True,
         max_attempts: int = 2,
         system_prompt: str = "",
         checkpointer=None,
         callbacks: List[Any] = None,
     ):
-        self.dsn = dsn
+        self.dados_path = dados_path
         self.system_prompt = system_prompt
-        
-        workflow = build_graph(dsn, llm_model, embedder, dialect, validate_sql, max_attempts)
+
+        workflow = build_graph(dados_path, llm_model, embedder, dialect, validate_sql, max_attempts)
         self.app = workflow.compile(checkpointer=checkpointer)
-        
+
         if callbacks:
             self.app = self.app.with_config({"callbacks": callbacks})
 
-    def execute_query(self, sql: str, schema: str = None, max_rows: int = 100) -> List[dict]:
-        """Executa a query SQL filtrando pelo schema analítico (Tenant)."""
+    def execute_query(self, sql: str, schema: str = None, max_rows: int | None = None) -> List[dict]:
+        """Executa a query no dados.db (só leitura). Sem max_rows, devolve todas as linhas."""
         try:
             clean_sql = sql.strip().rstrip(';')
-            with psycopg2.connect(self.dsn) as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    if schema:
-                        cur.execute(f"SET search_path TO {schema}")
-                    cur.execute(f"SELECT * FROM ({clean_sql}) AS sub LIMIT {max_rows}")
-                    rows = [dict(r) for r in cur.fetchall()]
-            
+            if max_rows is not None:
+                clean_sql = f"SELECT * FROM ({clean_sql}) AS sub LIMIT {int(max_rows)}"
+            with connect_dados(default_read_policy(), self.dados_path) as conn:
+                rows = [dict(r) for r in conn.execute(clean_sql).fetchall()]
+
             if rows and all(v is None for r in rows for v in r.values()):
                 return []
             return rows

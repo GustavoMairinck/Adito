@@ -1,9 +1,9 @@
 from typing import Any
 
 from langchain_core.embeddings import Embeddings
-from pgvector.django import L2Distance
 
 from core.rich_logging import log_kv, log_node_end, log_node_start
+from core.vectors import nearest
 from knowledge.models import KnowledgeItem
 
 from ..config import KNOWLEDGE_LABELS, KNOWLEDGE_LIMITS
@@ -11,10 +11,12 @@ from ..state import BiAgentState
 
 
 def _search_knowledge(tenant_id: str, query_embedding: Any, item_type: str):
-    return KnowledgeItem.objects.filter(
+    items = KnowledgeItem.objects.filter(
         tenant_id=tenant_id,
         item_type=item_type,
-    ).order_by(L2Distance("embedding", query_embedding))[:KNOWLEDGE_LIMITS[item_type]]
+        embedding__isnull=False,
+    )
+    return [item for item, _ in nearest(items, query_embedding, KNOWLEDGE_LIMITS[item_type])]
 
 
 def query_extractor(state: BiAgentState, embedder: Embeddings) -> dict[str, str]:

@@ -1,7 +1,4 @@
-from urllib.parse import urlparse
-
-import psycopg2
-from psycopg2 import sql as pg_sql
+from core.datastore import connect_dados, default_read_policy
 from core.rich_logging import (
     log_error,
     log_node_end,
@@ -17,13 +14,12 @@ from ..state import BiAgentState
 
 def sql_validator(
     state: BiAgentState,
-    dsn: str,
+    dados_path: str | None,
     dialect: str,
     validate_sql: bool,
 ) -> dict[str, dict[str, object]]:
     sql = state["generated_sql"]
-    schema = state["db_schema_name"]
-    log_node_start("validator", f"schema={schema!r}")
+    log_node_start("validator", f"dados={dados_path or 'padrão'!r}")
     log_panel("bi", "SQL em validação", sql)
 
     if not validate_sql:
@@ -31,22 +27,16 @@ def sql_validator(
         log_node_end("validator", "valid=True")
         return {"validation_result": {"valid": True, "error": None}}
 
-    is_safe, error = validate_read_only_sql(sql, dialect=dialect)
+    policy = default_read_policy()
+    is_safe, error = validate_read_only_sql(sql, dialect=dialect, allowed_tables=policy.exposed_views)
     if not is_safe:
         log_error("bi", f"Validação de segurança falhou: {error}")
         log_node_end("validator", "valid=False")
         return {"validation_result": {"valid": False, "error": error}}
 
     try:
-        with psycopg2.connect(dsn) as conn:
-            with conn.cursor() as cur:
-                if schema:
-                    cur.execute(
-                        pg_sql.SQL("SET search_path TO {}, public").format(
-                            pg_sql.Identifier(schema)
-                        )
-                    )
-                cur.execute(pg_sql.SQL("EXPLAIN {}").format(pg_sql.SQL(sql)))
+        with connect_dados(policy, dados_path) as conn:
+            conn.execute(f"EXPLAIN {sql}")
         log_success("bi", "SQL validado com EXPLAIN.")
         log_node_end("validator", "valid=True")
         return {"validation_result": {"valid": True, "error": None}}

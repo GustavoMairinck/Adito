@@ -1,4 +1,5 @@
 from decimal import Decimal
+import json
 import os
 
 from django.db import connection
@@ -12,21 +13,16 @@ from .models import Dashboard, Widget
 from .serializers import DashboardSerializer, WidgetSerializer
 from chat.views import get_bi_agent
 from core.services.sales_bootstrap import SalesBootstrapOptions, resolve_tenant, run_sales_bootstrap
+from core.datastore import connect_dados
 from core.rich_logging import log_error, log_info, log_success
 
 ANALYTICS_VIEW = 'vfactvendasresolved'
 
-
-def _tenant_schema(request):
-    tenant = getattr(request.user, 'tenant', None)
-    if tenant and tenant.db_schema_name:
-        return tenant.db_schema_name
-    return os.getenv("DEFAULT_TENANT_SCHEMA")
-
-
-def _set_search_path(cursor, schema):
-    if schema:
-        cursor.execute(f"SET search_path TO {connection.ops.quote_name(schema)}")
+# Colunas de filtro devolvidas pelo SQLite como texto JSON (json_group_array).
+_JSON_COLUMNS = frozenset({
+    'anos_disponiveis', 'areas_disponiveis', 'modalidades_disponiveis', 'statuses_disponiveis',
+    'anos', 'modalidades', 'status', 'areas', 'instituicoes',
+})
 
 
 def _filters(request):
@@ -44,25 +40,26 @@ def _filters(request):
         if not value:
             continue
         if op == '=':
-            clauses.append(f"{column} = %s")
+            clauses.append(f"{column} = ?")
             params.append(value)
         else:
-            clauses.append(f"{column} ILIKE %s")
+            clauses.append(f"{column} LIKE ?")
             params.append(f"%{value}%")
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", params
 
 
-def _fetchall(request, query, params=None):
-    with connection.cursor() as cursor:
-        _set_search_path(cursor, _tenant_schema(request))
-        cursor.execute(query, params or [])
-        columns = [col[0] for col in cursor.description]
-        rows = cursor.fetchall()
-    return [dict(zip(columns, row)) for row in rows]
+def _fetchall(request, query, params=None, json_columns=frozenset()):
+    with connect_dados() as conn:
+        rows = [dict(row) for row in conn.execute(query, params or []).fetchall()]
+    for row in rows:
+        for key in json_columns & row.keys():
+            if isinstance(row[key], str):
+                row[key] = json.loads(row[key])
+    return rows
 
 
-def _fetchone(request, query, params=None):
-    rows = _fetchall(request, query, params)
+def _fetchone(request, query, params=None, json_columns=frozenset()):
+    rows = _fetchall(request, query, params, json_columns)
     return rows[0] if rows else {}
 
 
@@ -117,11 +114,11 @@ class WidgetViewSet(viewsets.ModelViewSet):
     def refresh(self, request, pk=None):
         """Re-executa o SQL do Widget no banco analítico."""
         widget = self.get_object()
-        schema = request.user.tenant.db_schema_name
-        log_info("dashboard", f"Atualizando widget id={widget.id} schema={schema!r} sql={widget.sql_validated[:100]!r}")
+        log_info("dashboard", f"Atualizando widget id={widget.id} sql={widget.sql_validated[:100]!r}")
 
         agent = get_bi_agent()
-        data = agent.execute_query(widget.sql_validated, schema=schema, max_rows=widget.limit_rows or 100)
+        # limit_rows=0 significa todas as linhas: o dashboard precisa do resultado completo.
+        data = agent.execute_query(widget.sql_validated, max_rows=widget.limit_rows or None)
 
         if data and isinstance(data, list) and data[0].get('error'):
             log_error("dashboard", f"Erro na query do widget {widget.id}: {data[0]['error']!r}")
@@ -148,7 +145,7 @@ def kpis(request):
         SELECT
           COALESCE(SUM(receita_liquida), 0) AS total_investido,
           COUNT(DISTINCT produto) AS projetos_ativos,
-          COALESCE(SUM(CASE WHEN ano = %s THEN receita_liquida ELSE 0 END), 0) AS pagamentos_ano_vigente,
+          COALESCE(SUM(CASE WHEN ano = ? THEN receita_liquida ELSE 0 END), 0) AS pagamentos_ano_vigente,
           COUNT(DISTINCT vendedor) AS equipe_alocada
         FROM {ANALYTICS_VIEW}
         {where}
@@ -188,7 +185,7 @@ def charts(request):
         ORDER BY ano
     """, params)
     mensal = _fetchall(request, f"""
-        SELECT mes AS month_num, mes::text AS month,
+        SELECT mes AS month_num, CAST(mes AS TEXT) AS month,
                COALESCE(SUM(receita_liquida), 0) AS value
         FROM {ANALYTICS_VIEW}
         {where}
@@ -197,13 +194,13 @@ def charts(request):
     """, params)
     filters = _fetchone(request, f"""
         SELECT
-          COALESCE(json_agg(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos_disponiveis,
-          COALESCE(json_agg(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas_disponiveis,
-          COALESCE(json_agg(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades_disponiveis,
-          COALESCE(json_agg(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS statuses_disponiveis,
-          COALESCE(MAX(ano), EXTRACT(YEAR FROM CURRENT_DATE)::int) AS ano_vigente
+          COALESCE(json_group_array(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos_disponiveis,
+          COALESCE(json_group_array(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas_disponiveis,
+          COALESCE(json_group_array(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades_disponiveis,
+          COALESCE(json_group_array(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS statuses_disponiveis,
+          COALESCE(MAX(ano), CAST(strftime('%Y', 'now') AS INTEGER)) AS ano_vigente
         FROM {ANALYTICS_VIEW}
-    """)
+    """, json_columns=_JSON_COLUMNS)
     return Response({
         "por_ano": por_ano,
         "mensal": mensal,
@@ -217,7 +214,7 @@ def projects(request):
     where, params = _filters(request)
     rows = _fetchall(request, f"""
         SELECT
-          MIN(id_venda::text) AS id,
+          MIN(CAST(id_venda AS TEXT)) AS id,
           produto AS projeto,
           MAX(cliente) AS edital,
           MAX(canal) AS modalidade,
@@ -235,13 +232,13 @@ def projects(request):
         row["valor_formatado"] = _money(row["valor"])
     filters = _fetchone(request, f"""
         SELECT
-          COALESCE(json_agg(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos,
-          COALESCE(json_agg(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades,
-          COALESCE(json_agg(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS status,
-          COALESCE(json_agg(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas,
-          COALESCE(json_agg(DISTINCT cliente) FILTER (WHERE cliente IS NOT NULL), '[]') AS instituicoes
+          COALESCE(json_group_array(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos,
+          COALESCE(json_group_array(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades,
+          COALESCE(json_group_array(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS status,
+          COALESCE(json_group_array(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas,
+          COALESCE(json_group_array(DISTINCT cliente) FILTER (WHERE cliente IS NOT NULL), '[]') AS instituicoes
         FROM {ANALYTICS_VIEW}
-    """)
+    """, json_columns=_JSON_COLUMNS)
     return Response({"data": rows, "total": len(rows), "filtros_disponiveis": filters})
 
 
@@ -307,47 +304,44 @@ def system_status(request):
 
     results = []
 
-    # ── PostgreSQL ──────────────────────────────────────────
+    # ── app.db (Django, conversas, índices) ─────────────────
     t0 = time.monotonic()
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-        pg_latency = round((time.monotonic() - t0) * 1000)
         results.append({
-            "name": "PostgreSQL + pgvector",
+            "name": "app.db",
             "status": "online",
-            "latency_ms": pg_latency,
-            "url": os.environ.get("PGVECTOR_HOST", "pgvector") + ":5432",
+            "latency_ms": round((time.monotonic() - t0) * 1000),
+            "url": str(connection.settings_dict["NAME"]),
         })
     except Exception as exc:
         results.append({
-            "name": "PostgreSQL + pgvector",
+            "name": "app.db",
             "status": "offline",
             "latency_ms": None,
-            "url": os.environ.get("PGVECTOR_HOST", "pgvector") + ":5432",
+            "url": str(connection.settings_dict["NAME"]),
             "error": str(exc)[:120],
         })
 
-    # ── Redis ───────────────────────────────────────────────
+    # ── dados.db (dados do usuário, só leitura) ─────────────
+    from core.datastore import connect_dados, dados_db_path
     t0 = time.monotonic()
     try:
-        import redis as redis_lib
-        redis_url = os.environ.get("REDIS_URL", "redis://redis-oraculo-esx:6379/0")
-        r = redis_lib.from_url(redis_url, socket_connect_timeout=2)
-        r.ping()
-        redis_latency = round((time.monotonic() - t0) * 1000)
+        with connect_dados() as conn:
+            conn.execute("SELECT 1")
         results.append({
-            "name": "Redis",
+            "name": "dados.db",
             "status": "online",
-            "latency_ms": redis_latency,
-            "url": redis_url.replace("redis://", ""),
+            "latency_ms": round((time.monotonic() - t0) * 1000),
+            "url": str(dados_db_path()),
         })
     except Exception as exc:
         results.append({
-            "name": "Redis",
+            "name": "dados.db",
             "status": "offline",
             "latency_ms": None,
-            "url": os.environ.get("REDIS_URL", "redis://redis-oraculo-esx:6379/0").replace("redis://", ""),
+            "url": str(dados_db_path()),
             "error": str(exc)[:120],
         })
 

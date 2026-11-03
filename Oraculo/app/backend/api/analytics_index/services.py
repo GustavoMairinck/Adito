@@ -3,8 +3,10 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from django.db import connection, transaction
-from pgvector.django import L2Distance
+from django.db import transaction
+
+from core.datastore import connect_dados
+from core.vectors import nearest
 
 from .config import TEXT_EMBEDDING_BATCH_SIZE, TEXT_EMBEDDING_TABLES, TEXT_EMBEDDING_TOP_K
 from .models import AnalyticsTextEmbedding
@@ -74,12 +76,7 @@ def make_candidate(source_table: str, payload: dict) -> TextEmbeddingCandidate |
 
 
 def _quote_name(name: str) -> str:
-    return connection.ops.quote_name(name)
-
-
-def _set_search_path(cursor, schema_name: str | None):
-    if schema_name:
-        cursor.execute(f"SET search_path TO {_quote_name(schema_name)}, public")
+    return '"' + name.replace('"', '""') + '"'
 
 
 def fetch_distinct_candidates(tenant, source_table: str) -> list[TextEmbeddingCandidate]:
@@ -87,26 +84,26 @@ def fetch_distinct_candidates(tenant, source_table: str) -> list[TextEmbeddingCa
     fields = config["fields"]
     quoted_fields = ", ".join(_quote_name(field) for field in fields)
     non_empty_checks = [
-        f"({_quote_name(field)} IS NOT NULL AND btrim({_quote_name(field)}::text) <> '')"
+        f"({_quote_name(field)} IS NOT NULL AND TRIM(CAST({_quote_name(field)} AS TEXT)) <> '')"
         for field in fields
     ]
     where = " OR ".join(non_empty_checks)
 
-    with connection.cursor() as cursor:
-        _set_search_path(cursor, tenant.db_schema_name)
-        cursor.execute("SELECT to_regclass(%s)", [source_table])
-        if cursor.fetchone()[0] is None:
-            schema = tenant.db_schema_name or "public"
+    with connect_dados() as conn:
+        found = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = ? AND type IN ('table', 'view')",
+            [source_table],
+        ).fetchone()
+        if found is None:
             raise ValueError(
-                f"Tabela/view analítica '{source_table}' não encontrada no schema '{schema}'. "
-                "Execute o bootstrap de dados antes de sincronizar embeddings."
+                f"Tabela/view analítica '{source_table}' não encontrada no dados.db. "
+                "Carregue os dados antes de sincronizar embeddings."
             )
-        cursor.execute(f"SELECT DISTINCT {quoted_fields} FROM {_quote_name(source_table)} WHERE {where}")
-        rows = cursor.fetchall()
+        rows = conn.execute(f"SELECT DISTINCT {quoted_fields} FROM {_quote_name(source_table)} WHERE {where}").fetchall()
 
     candidates = []
     for row in rows:
-        payload = dict(zip(fields, row))
+        payload = dict(zip(fields, tuple(row)))
         candidate = make_candidate(source_table, payload)
         if candidate:
             candidates.append(candidate)
@@ -206,17 +203,12 @@ def search_text_embeddings(tenant, query_embedding, table: str | None = None, to
     if table:
         qs = qs.filter(source_table=table)
 
-    rows = (
-        qs.annotate(distance=L2Distance("embedding", query_embedding))
-        .order_by("distance")[:top_k]
-    )
-
     return [
         {
             "source_table": row.source_table,
             "embedding_text": row.embedding_text,
             "payload_json": row.payload_json,
-            "distance": float(row.distance),
+            "distance": distance,
         }
-        for row in rows
+        for row, distance in nearest(qs, query_embedding, top_k)
     ]

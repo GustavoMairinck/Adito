@@ -1,9 +1,8 @@
 import uuid
 
 from django.db import models
-from pgvector.django import VectorField
-
 from core.models import Tenant
+from core.vectors import EmbeddingField
 
 
 class AnalyticsTextEmbedding(models.Model):
@@ -13,7 +12,7 @@ class AnalyticsTextEmbedding(models.Model):
     embedding_text = models.TextField()
     payload_json = models.JSONField(default=dict, blank=True)
     value_hash = models.CharField(max_length=64)
-    embedding = VectorField(dimensions=1024, null=True, blank=True)
+    embedding = EmbeddingField(dimensions=1024, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

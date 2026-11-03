@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
-from pgvector.django import VectorField
 from core.models import Tenant
+from core.vectors import EmbeddingField
 
 class KnowledgeItem(models.Model):
     ITEM_TYPES = [
@@ -15,7 +15,7 @@ class KnowledgeItem(models.Model):
     item_type = models.CharField(max_length=50, choices=ITEM_TYPES)
     content = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = VectorField(dimensions=1024, null=True, blank=True) # mistral-embed dimensions
+    embedding = EmbeddingField(dimensions=1024, null=True, blank=True) # mistral-embed dimensions
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

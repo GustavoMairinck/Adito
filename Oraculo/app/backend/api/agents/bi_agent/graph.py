@@ -40,7 +40,7 @@ def route_validation(state: BiAgentState, max_attempts: int) -> str:
 
 
 def build_graph(
-    dsn: str,
+    dados_path: str | None,
     llm_model: BaseChatModel,
     embedder,
     dialect: str,
@@ -58,7 +58,7 @@ def build_graph(
     workflow.add_node("generator", partial(sql_generator, llm_model=llm_model, dialect=dialect))
     workflow.add_node(
         "validator",
-        partial(sql_validator, dsn=dsn, dialect=dialect, validate_sql=validate_sql),
+        partial(sql_validator, dados_path=dados_path, dialect=dialect, validate_sql=validate_sql),
     )
     workflow.add_node("corrector", partial(sql_corrector, llm_model=llm_model, dialect=dialect))
     workflow.add_node("formatter", response_formatter)

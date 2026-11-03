@@ -3,13 +3,13 @@ import re
 from contextlib import asynccontextmanager
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langchain_core.messages import AIMessage
 
 from .state import MultiAgentState
 from .router import orchestrator_node
 from .conversational_agent import conversational_node
-from agents.config import REDIS_URL, TTL_CONFIG
+from agents.config import CHECKPOINT_DB_PATH
 
 mcp_tools = []
 
@@ -17,13 +17,13 @@ mcp_tools = []
 @asynccontextmanager
 async def get_graph():
     """
-    Compila o grafo com Redis Checkpointer.
+    Compila o grafo com checkpointer SQLite (no app.db por padrão).
     O histórico de mensagens fica isolado por thread_id.
     """
-    async with AsyncRedisSaver.from_conn_string(REDIS_URL, ttl=TTL_CONFIG) as _checkpointer:
-        await _checkpointer.asetup()
+    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH)) as _checkpointer:
+        await _checkpointer.setup()
         _graph = builder.compile(checkpointer=_checkpointer)
-        print(f"[Graph] Compilado com Redis checkpointer ({REDIS_URL}).")
+        print(f"[Graph] Compilado com checkpointer SQLite ({CHECKPOINT_DB_PATH}).")
         yield _graph
 
 

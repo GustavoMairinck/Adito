@@ -1,8 +1,7 @@
 django
 whitenoise
 djangorestframework
-pgvector
-psycopg2-binary
+numpy
 sqlglot
 langchain
 langchain-core
@@ -17,7 +16,7 @@ bcrypt
 python-jose[cryptography]
 sqlalchemy
 pandas
-langgraph-checkpoint-redis
+langgraph-checkpoint-sqlite
 djangorestframework-simplejwt
 django-cors-headers
 rich

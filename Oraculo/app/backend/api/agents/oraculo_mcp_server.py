@@ -26,10 +26,7 @@ _bi_agent = None
 def get_bi_agent():
     global _bi_agent
     if _bi_agent is None:
-        # Ignora POSTGRES_URL para evitar crash do psycopg2 com senhas contendo '%'
-        dsn = f"host={os.environ.get('PGVECTOR_HOST', 'localhost')} port={os.environ.get('PGVECTOR_PORT', '5432')} user={os.environ.get('PGVECTOR_USER', 'postgres')} password='{os.environ.get('PGVECTOR_PASSWORD', '')}' dbname={os.environ.get('PGVECTOR_DB', 'postgres')}"
         _bi_agent = BIAgent(
-            dsn=dsn,
             llm_model=ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY),
             embedder=MistralAIEmbeddings(model=MISTRAL_EMBEDDING_MODEL, api_key=MISTRAL_API_KEY),
             system_prompt=BI_AGENT_SYSTEM_PROMPT,

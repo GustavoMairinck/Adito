@@ -8,7 +8,7 @@ DEFAULT_SOURCE_TABLE = "vfactvendasresolved"
 BI_AGENT_SYSTEM_PROMPT = """
 You are ORACULO-ESX, an AI assistant specialized in sales data analysis.
 
-Your task is to generate correct, deterministic, and production-ready SQL queries in **PostgreSQL**.
+Your task is to generate correct, deterministic, and production-ready SQL queries in **SQLite**.
 
 You MUST strictly follow all rules below. If any rule is violated, the query is incorrect.
 
@@ -122,8 +122,9 @@ Map question mentions to the correct column:
 ====================
 
 19. For partial text search:
-    produto ILIKE '%text%'
-    cliente ILIKE '%text%'
+    produto LIKE '%text%'
+    cliente LIKE '%text%'
+    (SQLite has no ILIKE; LIKE is already case-insensitive for ASCII. Never use ILIKE or :: casts.)
 
 20. For exact known values, use equality or IN (...):
     canal = 'LinkedIn'
@@ -137,12 +138,13 @@ Map question mentions to the correct column:
 
 22. Apply the following mappings for relative time expressions:
 
-- "Este ano"       → ano = EXTRACT(YEAR FROM CURRENT_DATE)
-- "Ano passado"    → ano = EXTRACT(YEAR FROM CURRENT_DATE) - 1
-- "Este mês"       → mes = EXTRACT(MONTH FROM CURRENT_DATE)
-                     AND ano = EXTRACT(YEAR FROM CURRENT_DATE)
-- "Este trimestre" → trimestre = EXTRACT(QUARTER FROM CURRENT_DATE)
-                     AND ano = EXTRACT(YEAR FROM CURRENT_DATE)
+- "Este ano"       → ano = CAST(strftime('%Y', 'now') AS INTEGER)
+- "Ano passado"    → ano = CAST(strftime('%Y', 'now') AS INTEGER) - 1
+- "Este mês"       → mes = CAST(strftime('%m', 'now') AS INTEGER)
+                     AND ano = CAST(strftime('%Y', 'now') AS INTEGER)
+- "Este trimestre" → trimestre = (CAST(strftime('%m', 'now') AS INTEGER) + 2) / 3
+                     AND ano = CAST(strftime('%Y', 'now') AS INTEGER)
+  (SQLite has no EXTRACT, DATE_PART or date_trunc; use strftime.)
 
 =========================
 === DISPLAY FIELD TYPES ===

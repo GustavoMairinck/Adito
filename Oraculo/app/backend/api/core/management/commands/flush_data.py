@@ -92,8 +92,8 @@ class Command(BaseCommand):
             deleted_conv, _ = Conversation.objects.all().delete()
             deleted_users, _ = users_to_delete.delete()
 
-            # Limpa o estado do checkpointer Redis (histórico de conversas)
-            self._flush_redis_checkpoints()
+            # Limpa o estado do checkpointer (histórico de conversas do LangGraph)
+            self._flush_checkpoints()
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -104,27 +104,24 @@ class Command(BaseCommand):
             )
         )
 
-    def _flush_redis_checkpoints(self):
-        """Remove as chaves de checkpoint do LangGraph no Redis."""
+    def _flush_checkpoints(self):
+        """Remove o estado das conversas do LangGraph (tabelas do AsyncSqliteSaver)."""
+        import sqlite3
+
+        from agents.config import CHECKPOINT_DB_PATH
+
         try:
-            import redis
-            import os
-
-            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-            r = redis.from_url(redis_url, decode_responses=True)
-
-            # O AsyncRedisSaver do LangGraph usa prefixo "checkpoint:" por padrão
-            keys = r.keys("checkpoint:*")
-            if keys:
-                r.delete(*keys)
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Redis: {len(keys)} checkpoint(s) removido(s)."
-                    )
-                )
-            else:
-                self.stdout.write("Redis: nenhum checkpoint encontrado.")
+            with sqlite3.connect(CHECKPOINT_DB_PATH) as conn:
+                existing = {
+                    row[0]
+                    for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+                }
+                removed = 0
+                for table in ("writes", "checkpoints"):
+                    if table in existing:
+                        removed += conn.execute(f"DELETE FROM {table}").rowcount
+            self.stdout.write(self.style.SUCCESS(f"Checkpoints: {removed} registro(s) removido(s)."))
         except Exception as exc:
             self.stdout.write(
-                self.style.WARNING(f"Redis: não foi possível limpar checkpoints — {exc}")
+                self.style.WARNING(f"Checkpoints: não foi possível limpar — {exc}")
             )

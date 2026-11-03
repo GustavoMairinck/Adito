@@ -1,7 +1,7 @@
 import sqlglot
 from sqlglot import exp
 
-from .config import DEFAULT_SOURCE_TABLE
+from core.datastore import default_read_policy
 
 
 DISALLOWED_EXPRESSIONS = (
@@ -17,7 +17,13 @@ DISALLOWED_EXPRESSIONS = (
 )
 
 
-def validate_read_only_sql(sql: str, dialect: str = "postgres") -> tuple[bool, str | None]:
+def validate_read_only_sql(
+    sql: str,
+    dialect: str = "sqlite",
+    allowed_tables: set[str] | frozenset[str] | None = None,
+) -> tuple[bool, str | None]:
+    """Primeira barreira (sintática). A segunda é o authorizer do dados.db."""
+    allowed = {name.lower() for name in (allowed_tables or default_read_policy().exposed_views)}
     try:
         expressions = sqlglot.parse(sql, read=dialect)
     except Exception as exc:
@@ -34,12 +40,15 @@ def validate_read_only_sql(sql: str, dialect: str = "postgres") -> tuple[bool, s
     if blocked is not None:
         return False, f"Operação não permitida: {blocked.key.upper()}."
 
-    tables = {table.name.lower() for table in parsed.find_all(exp.Table)}
-    if tables != {DEFAULT_SOURCE_TABLE}:
+    # Nomes de CTE aparecem como tabela no parse; não são relações do banco.
+    cte_names = {cte.alias_or_name.lower() for cte in parsed.find_all(exp.CTE)}
+    tables = {table.name.lower() for table in parsed.find_all(exp.Table)} - cte_names
+    if not tables or not tables <= allowed:
         found = ", ".join(sorted(tables)) or "nenhuma"
+        expected = ", ".join(sorted(allowed))
         return (
             False,
-            f"Relação inválida. Use somente a tabela {DEFAULT_SOURCE_TABLE}. Encontrado: {found}.",
+            f"Relação inválida. Use somente: {expected}. Encontrado: {found}.",
         )
 
     return True, None

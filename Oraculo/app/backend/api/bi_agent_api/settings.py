@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -108,17 +107,18 @@ ASGI_APPLICATION = 'bi_agent_api.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-db_url = os.environ.get('POSTGRES_URL', 'postgresql://postgres:postgres@localhost:5432/postgres')
-parsed_db = urlparse(db_url)
+# app.db guarda só o que é do app; os dados do usuário ficam no dados.db (core.datastore).
+from core.datastore import app_db_path
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': parsed_db.path.lstrip('/'),
-        'USER': parsed_db.username,
-        'PASSWORD': parsed_db.password,
-        'HOST': parsed_db.hostname,
-        'PORT': parsed_db.port,
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': str(app_db_path()),
+        'OPTIONS': {
+            'timeout': 20,
+            'transaction_mode': 'IMMEDIATE',
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=20000;',
+        },
     }
 }
 

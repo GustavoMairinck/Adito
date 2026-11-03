@@ -12,9 +12,10 @@ MISTRAL_MODEL           = os.getenv("MISTRAL_MODEL", "ministral-14b-latest")
 MISTRAL_API_KEY         = os.getenv("MISTRAL_API_KEY")
 MISTRAL_EMBEDDING_MODEL = os.getenv("MISTRAL_EMBEDDING_MODEL", "mistral-embed")
 
-# ─── Redis ───────────────────────────────────────────────────────────────────
-REDIS_URL  = os.getenv("REDIS_URL", "redis://redis:6379")
-TTL_CONFIG = {"default_ttl": int(os.getenv("CHECKPOINTER_TTL", 86400)), "refresh_on_read": True}
+# ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
+# Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
+from core.datastore import app_db_path
+CHECKPOINT_DB_PATH = os.getenv("ORACULO_CHECKPOINT_DB") or app_db_path()
 
 # ─── Langfuse ─────────────────────────────────────────────────────────────────
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
@@ -29,7 +30,7 @@ ORACULO_MCP_URL = os.getenv("ORACULO_MCP_URL") or os.getenv("ORACULO_ESX_MCP_URL
 BI_AGENT_SYSTEM_PROMPT = """
 You are ORACULO-ESX, an AI assistant specialized in sales data analysis.
 
-Your task is to generate correct, deterministic, and production-ready SQL queries in PostgreSQL.
+Your task is to generate correct, deterministic, and production-ready SQL queries in SQLite.
 
 Rules:
 1. ALWAYS use only the table vfactvendasresolved.
@@ -69,8 +70,8 @@ Entity mapping:
 - região -> regiao
 
 Text filters:
-- produto ILIKE '%texto%'
-- cliente ILIKE '%texto%'
+- produto LIKE '%texto%'  (LIKE do SQLite já ignora maiúsculas/minúsculas em ASCII; não existe ILIKE)
+- cliente LIKE '%texto%'
 
 Temporal fields:
 - data_venda (date)

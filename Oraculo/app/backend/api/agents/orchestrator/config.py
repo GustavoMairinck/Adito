@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 MAX_LOOP_ITERATIONS = int(os.getenv("REACT_MAX_ITERATIONS", 3))
-MAX_ROWS_PER_ENTRY = int(os.getenv("REACT_MAX_ROWS", 50))
+MAX_ROWS_PER_ENTRY = int(os.getenv("REACT_MAX_ROWS", 20))  # linhas copiadas para o prompt do LLM
 MAX_CHARS_TEXT = int(os.getenv("REACT_MAX_CHARS_TEXT", 2000))
 MAX_TOTAL_CHARS = int(os.getenv("REACT_MAX_TOTAL_CHARS", 12000))
 

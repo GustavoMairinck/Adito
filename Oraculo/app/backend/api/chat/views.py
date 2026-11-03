@@ -80,7 +80,6 @@ def get_bi_agent():
             api_key=os.environ.get("MISTRAL_API_KEY")
         )
         _bi_agent = BIAgent(
-            dsn=os.environ.get("POSTGRES_URL"),
             llm_model=llm,
             embedder=embedder,
             system_prompt=BI_AGENT_SYSTEM_PROMPT
