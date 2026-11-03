@@ -1,0 +1,265 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme {
+  --color-primary: var(--bg-primary);
+  --color-surface: var(--bg-surface);
+  --color-surface-elevated: var(--bg-surface-elevated);
+  /* Azul ORACULO-ESX — acento único, derivado das logos */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-light: var(--accent-light);
+  /* Status — baseados nas cores do LEDS */
+  --color-success: #2e7d32;
+  --color-warning: #e65100;
+  --color-error: #b71c1c;
+  --color-border-subtle: var(--border-subtle);
+  --color-border-standard: var(--border-standard);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-pill: 9999px;
+
+  /* Sombras funcionais — shadow-as-border (Vercel), sem decoração */
+  --shadow-card: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+  --shadow-card-hover: rgba(0, 0, 0, 0.10) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px 4px 8px;
+  --shadow-float: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+  /* Mantidos como alias para não quebrar usos legacy */
+  --shadow-premium: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+  --shadow-elevated: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+}
+
+@layer base {
+  :root {
+    /* Fundo neutro frio — alinhado com vocabulário visual azul das logos */
+    --bg-primary:          #f5f6f8;
+    --bg-surface:          #ffffff;
+    --bg-surface-elevated: #eef0f3;
+    /* Bordas com toque sutil de azul marca */
+    --border-subtle:       rgba(30, 63, 189, 0.07);
+    --border-standard:     rgba(30, 63, 189, 0.14);
+    /* Textos — azul-preto, não cinza puro */
+    --text-primary:        #0f1923;
+    --text-secondary:      #4a5568;
+    --text-muted:          #8896a5;
+    /* Sombras funcionais */
+    --shadow-premium: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+    --shadow-elevated: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+
+    --accent:       #2248d4;
+    --accent-hover: #1a39b8;
+    --accent-light: #ebf0ff;
+
+    --conv-selected: rgba(0, 0, 0, 0.07);
+    --conv-hover:    rgba(0, 0, 0, 0.04);
+  }
+
+  .dark {
+    /* Azul-escuro profundo — tom de tinta */
+    --bg-primary:          #0d1117;
+    --bg-surface:          #161d27;
+    --bg-surface-elevated: #1e2736;
+    /* Bordas com toque sutil de azul claro */
+    --border-subtle:       rgba(99, 143, 255, 0.08);
+    --border-standard:     rgba(99, 143, 255, 0.15);
+    /* Textos frios e legíveis */
+    --text-primary:        #e8edf5;
+    --text-secondary:      #9baabf;
+    --text-muted:          #5f7291;
+    /* Sombras dark com borda sutil clara em vez de preta */
+    --shadow-premium: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.40) 0px 2px 5px;
+    --shadow-elevated: rgba(255, 255, 255, 0.12) 0px 0px 0px 1px, rgba(0, 0, 0, 0.50) 0px 6px 20px;
+
+    --accent:       #638bff;
+    --accent-hover: #82a3ff;
+    --accent-light: rgba(99, 139, 255, 0.15);
+
+    --conv-selected: rgba(255, 255, 255, 0.08);
+    --conv-hover:    rgba(255, 255, 255, 0.05);
+  }
+
+  html {
+    background: var(--bg-primary);
+  }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  /* Letter-spacing calibrado por tamanho — mais natural que tudo negativo uniforme */
+  h1 { font-weight: 600; letter-spacing: -0.025em; }
+  h2 { font-weight: 600; letter-spacing: -0.015em; }
+  h3 { letter-spacing: -0.01em; }
+  h4, h5, h6 { letter-spacing: -0.005em; }
+
+  p, span, input, button, textarea, select {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'IBM Plex Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .bg-primary { background-color: var(--bg-primary); }
+  .bg-surface { background-color: var(--bg-surface); }
+  .bg-surface-elevated { background-color: var(--bg-surface-elevated); }
+
+  .text-primary { color: var(--text-primary); }
+  .text-text-primary { color: var(--text-primary); }
+  .text-text-secondary { color: var(--text-secondary); }
+  .text-text-muted { color: var(--text-muted); }
+  .border-border-subtle { border-color: var(--border-subtle); }
+  .border-border-standard { border-color: var(--border-standard); }
+  .shadow-premium { box-shadow: var(--shadow-premium); }
+  .shadow-elevated { box-shadow: var(--shadow-elevated); }
+  /* shadow-inset-highlight removido — padrão AI, substitui por nada */
+  .shadow-card { box-shadow: var(--shadow-card, var(--shadow-premium)); }
+  .eyebrow {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+}
+
+@layer components {
+  /* Card — 8px radius, shadow-as-border funcional */
+  .premium-card {
+    background: var(--bg-surface);
+    border-radius: 8px;
+    box-shadow: var(--shadow-premium);
+    transition: box-shadow 150ms ease;
+  }
+
+  .premium-card:hover {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  /* glass-panel — restrito, sem inset highlight */
+  .glass-panel {
+    background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(12px);
+    border-radius: 12px;
+  }
+
+  /* btn-primary — preciso, sem sombra decorativa (IBM Carbon / Vercel) */
+  .btn-primary {
+    background: #1d2529;
+    color: #f0f4f8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 0.625rem 1rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: -0.005em;
+    transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease;
+  }
+
+  .btn-primary:hover {
+    background: #111820;
+    border-color: rgba(255, 255, 255, 0.13);
+  }
+
+  .btn-primary:active {
+    transform: scale(0.98);
+  }
+
+  .dark .btn-primary {
+    background: #2248d4;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .btn-primary:hover {
+    background: #1a39b8;
+  }
+
+  /* btn-secondary — limpo, sem cor de fundo */
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-standard);
+    border-radius: 6px;
+    padding: 0.625rem 1rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 150ms ease;
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-surface-elevated);
+    border-color: var(--text-muted);
+  }
+
+  .dark .btn-secondary {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* btn-accent — azul ORACULO-ESX, para ações primárias de marca */
+  .btn-accent {
+    background: #2248d4;
+    color: #ffffff;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 0.625rem 1rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: -0.005em;
+    transition: background-color 150ms ease;
+  }
+
+  .btn-accent:hover {
+    background: #1a39b8;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 25%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+}

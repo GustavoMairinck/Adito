@@ -1,0 +1,31 @@
+django
+whitenoise
+djangorestframework
+pgvector
+psycopg2-binary
+sqlglot
+langchain
+langchain-core
+langchain-google-genai
+langchain-mistralai
+langchain-community
+langgraph
+langfuse
+pydantic
+python-dotenv
+bcrypt
+python-jose[cryptography]
+sqlalchemy
+pandas
+langgraph-checkpoint-redis
+djangorestframework-simplejwt
+django-cors-headers
+rich
+
+# Dependências MCP e Orquestrador
+# fastmcp 4 exige mcp 2, incompatível com langchain-mcp-adapters
+fastmcp>=3.4,<4
+mcp<2
+langchain-mcp-adapters
+httpx
+daphne
