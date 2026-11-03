@@ -28,21 +28,28 @@ elif prod_env_path.exists():
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-troque-esta-chave',
-)
+from core.datastore import data_dir
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
 
-ALLOWED_HOSTS_ENV = os.environ.get('ALLOWED_HOSTS', '')
-if ALLOWED_HOSTS_ENV:
-    ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS_ENV.split(',') if h.strip()]
-else:
-    # Em desenvolvimento (DEBUG=True) aceita qualquer host; em produção exige a variável.
-    ALLOWED_HOSTS = ['*'] if DEBUG else []
+def _secret_key() -> str:
+    """Gerada uma vez por instalação e guardada na pasta de dados do usuário."""
+    if os.environ.get('DJANGO_SECRET_KEY'):
+        return os.environ['DJANGO_SECRET_KEY']
+    key_file = data_dir() / 'secret_key'
+    if not key_file.exists():
+        import secrets
+        key_file.write_text(secrets.token_urlsafe(50), encoding='utf-8')
+        key_file.chmod(0o600)
+    return key_file.read_text(encoding='utf-8').strip()
+
+
+SECRET_KEY = _secret_key()
+
+# Desktop: desligado por padrão; ligar só em desenvolvimento.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
+
+# O backend só ouve em 127.0.0.1 (o Tauri sobe o servidor nesse endereço).
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 # Application definition
@@ -58,7 +65,6 @@ INSTALLED_APPS = [
     
     # Third party
     'rest_framework',
-    'rest_framework_simplejwt',
     'corsheaders',
     
     # Local apps
@@ -167,43 +173,26 @@ STORAGES = {
     },
 }
 
-# ─── REST Framework & JWT ───────────────────────────────────────────────────
+# ─── REST Framework (sem login: token local do Tauri) ────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'core.authentication.CookieJWTAuthentication',
+        'core.local_auth.LocalTokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
 
-from datetime import timedelta
-JWT_SECRET = os.environ.get('JWT_SECRET')
-if not JWT_SECRET:
-    raise RuntimeError(
-        'JWT_SECRET is required for JWT signing and verification. '
-        'Set JWT_SECRET in .env or env.prod before starting the application.'
-    )
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+# Origem do webview do Tauri v2 (tauri://localhost no Linux/macOS, http://tauri.localhost
+# no Windows) e o Vite em desenvolvimento.
+from corsheaders.defaults import default_headers
 
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': False,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': JWT_SECRET,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-}
-
-# ─── CORS Configuration ──────────────────────────────────────────────────────
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "https://oraculo.agentes.leds.dev.br",
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
     "http://localhost:5173",
 ]
-CORS_ALLOW_CREDENTIALS = True
-
-# ─── CSRF Trusted Origins ───────────────────────────────────────────────────
-CSRF_TRUSTED_ORIGINS = [
-    "https://oraculo.agentes.leds.dev.br",
-    "http://localhost:5173",
-]
+CORS_ALLOW_HEADERS = (*default_headers, 'x-oraculo-token')

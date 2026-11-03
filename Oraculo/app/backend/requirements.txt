@@ -17,14 +17,9 @@ python-jose[cryptography]
 sqlalchemy
 pandas
 langgraph-checkpoint-sqlite
-djangorestframework-simplejwt
 django-cors-headers
 rich
 
-# Dependências MCP e Orquestrador
-# fastmcp 4 exige mcp 2, incompatível com langchain-mcp-adapters
-fastmcp>=3.4,<4
-mcp<2
-langchain-mcp-adapters
+# O bi_agent roda no mesmo processo (agents/bi_agent/tool.py); sem servidor MCP.
 httpx
 daphne

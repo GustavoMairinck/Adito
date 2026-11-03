@@ -19,6 +19,7 @@ export function createConversation(): Conversation {
   return {
     id: `local-${Date.now()}`,
     title: "Nova Conversa",
+    contextoId: null,
     messages: [createWelcomeMessage()],
     createdAt: now,
     updatedAt: now,
@@ -27,8 +28,9 @@ export function createConversation(): Conversation {
 
 function mapBackendMessage(message: any): ChatMessage {
   const metadata = message.metadata || {};
-  const table = metadata.data || [];
-  const isScalarResult = isScalarResultData(table);
+  // O histórico não guarda linhas; loadRows() reexecuta o SQL no dados.db.
+  const table: Array<Record<string, any>> = [];
+  const isScalarResult = false;
 
   return {
     id: String(message.id),
@@ -42,8 +44,9 @@ function mapBackendMessage(message: any): ChatMessage {
     timestamp: message.created_at,
     sql: metadata.sql,
     table,
-    chart: message.role === "user" || isScalarResult ? null : buildChart(table),
+    chart: null,
     isScalarResult,
+    needsRows: message.role !== "user" && !!metadata.sql,
     isFallback: metadata.type === "fallback",
     isChat: metadata.type === "chat",
     fallbackScore: metadata.score,
@@ -59,6 +62,7 @@ function mapBackendConversation(conversation: any): Conversation {
   return {
     id: String(conversation.id),
     title: conversation.title || "Nova Conversa",
+    contextoId: conversation.contexto ? String(conversation.contexto) : null,
     messages: [
       createWelcomeMessage(),
       ...(conversation.messages || []).map(mapBackendMessage),
@@ -92,6 +96,48 @@ export function useChatHistory() {
   clearLegacyChatStorage();
   resetToEmptyConversation();
 
+  const updateMessage = (convId: string, messageId: string, patch: Partial<ChatMessage>) => {
+    conversations.value = conversations.value.map((conversation) =>
+      conversation.id !== convId
+        ? conversation
+        : {
+            ...conversation,
+            messages: conversation.messages.map((message) =>
+              message.id === messageId ? { ...message, ...patch } : message,
+            ),
+          },
+    );
+  };
+
+  /** Recarrega as linhas das respostas da conversa aberta (o histórico só guarda o SQL). */
+  const loadRows = async (convId: string | null) => {
+    const conversation = conversations.value.find((c) => c.id === convId);
+    if (!conversation || convId?.startsWith("local-")) return;
+
+    const pending = conversation.messages.filter((m) => m.needsRows);
+    await Promise.all(
+      pending.map(async (message) => {
+        try {
+          const { data } = await httpClient.get(`/api/chat/messages/${message.id}/rows`);
+          const rows = data.data || [];
+          const isScalarResult = isScalarResultData(rows);
+          updateMessage(convId!, message.id, {
+            needsRows: false,
+            table: rows,
+            isScalarResult,
+            chart: isScalarResult ? null : buildChart(rows),
+          });
+        } catch (error: any) {
+          const detail = error?.response?.data?.message || "os dados mudaram; refaça a pergunta";
+          updateMessage(convId!, message.id, {
+            needsRows: false,
+            text: `${message.text}\n\n_Não foi possível recarregar os dados: ${detail}._`,
+          });
+        }
+      }),
+    );
+  };
+
   const syncFromBackend = async () => {
     try {
       const { data } = await httpClient.get("/api/chat/conversations");
@@ -104,8 +150,9 @@ export function useChatHistory() {
 
       conversations.value = data.map(mapBackendConversation);
       currentConvId.value = conversations.value[0]?.id || null;
+      loadRows(currentConvId.value);
     } catch {
-      // Mantem fallback local quando usuario ainda nao autenticou ou backend esta offline.
+      // Mantem fallback local quando o backend esta offline.
     }
   };
 
@@ -153,6 +200,13 @@ export function useChatHistory() {
 
   const setCurrentConvId = (id: string) => {
     currentConvId.value = id;
+    loadRows(id);
+  };
+
+  const setConversationContexto = (convId: string, contextoId: string | null) => {
+    conversations.value = conversations.value.map((conversation) =>
+      conversation.id === convId ? { ...conversation, contextoId } : conversation,
+    );
   };
 
   const currentConversation = computed(
@@ -169,6 +223,7 @@ export function useChatHistory() {
     handleDeleteConversation,
     updateCurrentConversation,
     replaceConversationId,
+    setConversationContexto,
     currentConversation,
     syncFromBackend,
   };

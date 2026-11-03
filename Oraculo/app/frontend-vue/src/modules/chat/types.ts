@@ -43,11 +43,15 @@ export interface ChatMessage {
   related_attributes?: RelatedAttribute[]
   question_temp?: string
   showSQL?: boolean
+  // Histórico guarda só o SQL: as linhas são recarregadas do dados.db ao abrir a conversa.
+  needsRows?: boolean
 }
 
 export interface Conversation {
   id: string
   title: string
+  // Contexto de dados fixo da conversa (no backend); nulo enquanto é uma conversa local nova.
+  contextoId?: string | null
   messages: ChatMessage[]
   createdAt: string
   updatedAt: string

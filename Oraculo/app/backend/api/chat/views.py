@@ -10,17 +10,12 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from .models import Conversation, Message, QueryExecution
 from .serializers import ConversationSerializer, MessageSerializer, QueryExecutionSerializer, AskRequestSerializer
-from agents.bi_agent.agent import BIAgent
+from agents.bi_agent.tool import get_bi_agent, local_tools
 from core.contexts import pick_contexto
 from agents.orchestrator import router as orchestrator_router
 from agents.orchestrator import graph as orchestrator_graph_module
 from agents.orchestrator.graph import get_graph
-from agents.orchestrator.mcp_client import get_mcp_client
 from langchain_core.messages import HumanMessage
-from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
-
-# Instância Singleton do BIAgent
-_bi_agent = None
 
 def _json_safe(value):
     if isinstance(value, Decimal):
@@ -68,25 +63,6 @@ def _scalar_result_answer(data: list[dict]) -> str | None:
     return f"O {label_pt} é {_format_number_pt_br(value)}."
 
 
-def get_bi_agent():
-    global _bi_agent
-    if _bi_agent is None:
-        llm = ChatMistralAI(
-            model=os.environ.get("MISTRAL_MODEL", "ministral-14b-latest"),
-            api_key=os.environ.get("MISTRAL_API_KEY")
-        )
-        embedder = MistralAIEmbeddings(
-            model=os.environ.get("MISTRAL_EMBEDDING_MODEL", "mistral-embed"),
-            api_key=os.environ.get("MISTRAL_API_KEY")
-        )
-        # O prompt vem do contexto de cada pergunta (core.contexts.build_system_prompt).
-        _bi_agent = BIAgent(
-            llm_model=llm,
-            embedder=embedder,
-        )
-    return _bi_agent
-
-
 def _conversation_for(user, tenant, conv_id, contexto_id, title):
     """Conversa existente (mantém o contexto) ou nova com contexto obrigatório."""
     if conv_id:
@@ -98,33 +74,32 @@ def _conversation_for(user, tenant, conv_id, contexto_id, title):
 
 
 async def _run_orchestrator(question: str, tenant, conversation, user) -> dict:
-    async with get_mcp_client() as mcp_client:
-        tools = await mcp_client.get_tools()
-        orchestrator_router.mcp_tools = tools
-        orchestrator_graph_module.mcp_tools = tools
+    tools = local_tools()
+    orchestrator_router.mcp_tools = tools
+    orchestrator_graph_module.mcp_tools = tools
 
-        thread_id = f"tenant_{tenant.id}:user_{user.id}:conv_{conversation.id}"
-        async with get_graph() as graph:
-            final_state = await graph.ainvoke(
-                {
-                    "messages": [HumanMessage(content=question)],
-                    "user_input": question,
-                    "calls": [],
-                    "tenant_id": str(tenant.id),
-                    "contexto_id": str(conversation.contexto_id),
+    thread_id = f"tenant_{tenant.id}:user_{user.id}:conv_{conversation.id}"
+    async with get_graph() as graph:
+        final_state = await graph.ainvoke(
+            {
+                "messages": [HumanMessage(content=question)],
+                "user_input": question,
+                "calls": [],
+                "tenant_id": str(tenant.id),
+                "contexto_id": str(conversation.contexto_id),
+                "thread_id": thread_id,
+            },
+            config={
+                "configurable": {
                     "thread_id": thread_id,
+                    "user_id": str(user.id),
                 },
-                config={
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "user_id": str(user.id),
-                    },
-                    "metadata": {
-                        "langfuse_session_id": thread_id,
-                        "langfuse_user_id": str(user.id),
-                    },
+                "metadata": {
+                    "langfuse_session_id": thread_id,
+                    "langfuse_user_id": str(user.id),
                 },
-            )
+            },
+        )
     return final_state or {}
 
 class ConversationViewSet(viewsets.ModelViewSet):
@@ -291,9 +266,9 @@ def ask_question(request):
     data = _json_safe(result.get('data') or [])
     valid = bool(result.get('valid'))
     response_type = result.get('response_type') or ('analysis' if sql or data else 'chat')
+    # Histórico guarda só o SQL; as linhas são reexecutadas ao abrir a conversa (message_rows).
     metadata = {
         "sql": sql,
-        "data": data,
         "type": response_type,
         "score": 1.0 if valid else 0.0,
         "message": result.get("message") or (answer if response_type == 'fallback' else None),
@@ -368,3 +343,29 @@ def query_executions_list(request):
 
     serializer = QueryExecutionSerializer(qs, many=True)
     return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def message_rows(request, pk):
+    """Reexecuta o SQL de uma resposta do histórico no dados.db, com a política do contexto da conversa.
+
+    O histórico não guarda linhas de resultado: abrir uma conversa antiga mostra os dados atuais.
+    """
+    message = get_object_or_404(
+        Message,
+        id=pk,
+        role='assistant',
+        conversation__user=request.user,
+        conversation__tenant=request.user.tenant,
+    )
+    sql = (message.metadata or {}).get('sql')
+    if not sql:
+        return Response({"data": []})
+
+    rows = get_bi_agent().execute_query(sql, contexto_id=message.conversation.contexto_id)
+    if rows and isinstance(rows[0], dict) and 'error' in rows[0]:
+        return Response(
+            {"message": "os dados mudaram desde esta pergunta; refaça a pergunta", "error": rows[0]['error']},
+            status=status.HTTP_409_CONFLICT,
+        )
+    return Response({"data": _json_safe(rows)})

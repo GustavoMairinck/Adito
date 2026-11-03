@@ -229,6 +229,36 @@ with sqlite3.connect(DATA_DIR / "app.db") as conn:
     tabelas = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 check("tabelas checkpoints/writes ao lado do Django", {"checkpoints", "writes", "core_contexto"} <= tabelas)
 
+print("\n[10] Sem login: token local do Tauri")
+from django.test import Client  # noqa: E402
+
+from agents.bi_agent.tool import local_tools  # noqa: E402
+
+os.environ["ORACULO_LOCAL_TOKEN"] = "token-de-teste"
+cli = Client(HTTP_HOST="127.0.0.1")
+check("health responde sem token", cli.get("/health").status_code == 200)
+check("api/me sem token é negado", cli.get("/api/me").status_code in (401, 403))
+check("api/me com token errado é negado", cli.get("/api/me", HTTP_X_ORACULO_TOKEN="errado").status_code == 401)
+me = cli.get("/api/me", HTTP_X_ORACULO_TOKEN="token-de-teste")
+check("api/me com token devolve o usuário local", me.status_code == 200 and me.json()["username"] == "local" and me.json()["role"] == "admin", me.content[:200])
+check("api/contextos com token", cli.get("/api/contextos", HTTP_X_ORACULO_TOKEN="token-de-teste").status_code == 200)
+check("stream do chat sem token é negado", cli.post("/api/chat/stream", "{}", content_type="application/json").status_code == 401)
+check("host fora de 127.0.0.1/localhost é recusado", Client(HTTP_HOST="evil.example").get("/health").status_code == 400)
+from chat.models import Conversation, Message  # noqa: E402
+
+conversa = Conversation.objects.create(user=User.objects.get(username="local"), tenant=tenant, contexto=contexto, title="h")
+resposta = Message.objects.create(conversation=conversa, role="assistant", content="ok",
+                                  metadata={"sql": "SELECT produto, total FROM v_resumo"})
+linhas = cli.get(f"/api/chat/messages/{resposta.id}/rows", HTTP_X_ORACULO_TOKEN="token-de-teste")
+check("histórico reexecuta o SQL e devolve as linhas atuais", linhas.status_code == 200 and len(linhas.json()["data"]) == 2, linhas.content[:200])
+quebrada = Message.objects.create(conversation=conversa, role="assistant", content="ok",
+                                  metadata={"sql": "SELECT coluna_que_sumiu FROM v_resumo"})
+check("SQL que não roda mais vira 409 com aviso", cli.get(f"/api/chat/messages/{quebrada.id}/rows", HTTP_X_ORACULO_TOKEN="token-de-teste").status_code == 409)
+ferramenta = local_tools()[0]
+check("bi_agent local com o mesmo contrato do MCP",
+      ferramenta.name == "bi_agent" and set(ferramenta.args) == {"instruction", "tenant_id", "contexto_id", "thread_id"},
+      ferramenta.args)
+
 print(f"\nResultado: {ok} OK, {len(falhas)} falha(s)")
 if falhas:
     print("Falhas:", falhas)

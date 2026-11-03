@@ -5,15 +5,13 @@ import time
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
-import jwt
-from django.conf import settings
 from core.contexts import pick_contexto
-from core.models import User
+from core.local_auth import get_local_user, is_valid_token, token_from_headers
 from core.rich_logging import log_error, log_info, log_section, log_success
-from agents.orchestrator.graph import get_graph, mcp_tools
-from agents.orchestrator.mcp_client import get_mcp_client
+from agents.bi_agent.tool import local_tools
+from agents.config import langfuse_callbacks
+from agents.orchestrator.graph import get_graph
 from langchain_core.messages import HumanMessage
-from langfuse.langchain import CallbackHandler
 from .models import Conversation, Message, QueryExecution
 from .views import (
     _clean_explanation,
@@ -29,21 +27,11 @@ def sse_event(event: str, payload: dict) -> str:
 
 @sync_to_async
 def get_user_auth_data(request):
-    # 1. Tenta pegar do cookie primeiro
-    token = request.COOKIES.get('access_token')
-
-    # 2. Fallback para o header Authorization
-    if not token:
-        auth_header = request.headers.get('Authorization')
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-
-    if not token:
+    # View Django pura (SSE): valida o mesmo token local que o DRF usa.
+    if not is_valid_token(token_from_headers(request.headers)):
         return None
     try:
-        signing_key = settings.SIMPLE_JWT.get('SIGNING_KEY', settings.SECRET_KEY)
-        payload = jwt.decode(token, signing_key, algorithms=['HS256'])
-        user = User.objects.select_related('tenant').get(id=payload.get('user_id'))
+        user = get_local_user()
         return {
             'user': user,
             'tenant_id': str(user.tenant.id) if user.tenant else None,
@@ -87,9 +75,9 @@ def persist_assistant_response(conversation, user_message, question: str, result
     response_type = result.get("type") or ("analysis" if sql or data else "chat")
     valid = bool(result.get("valid"))
 
+    # Histórico guarda só o SQL; as linhas são reexecutadas ao abrir a conversa (message_rows).
     metadata = {
         "sql": sql,
-        "data": data,
         "type": response_type,
         "score": 1.0 if valid else 0.0,
         "message": result.get("message") or (answer if response_type == "fallback" else None),
@@ -213,83 +201,74 @@ async def ask_stream(request):
                 "user_message_id": str(user_message.id),
             })
 
-            async with get_mcp_client() as mcp_client:
-                try:
-                    tools = await asyncio.wait_for(mcp_client.get_tools(), timeout=30)
-                except asyncio.TimeoutError:
-                    print("[Chat Stream] Timeout ao obter ferramentas MCP (>30s)")
-                    tools = []
-                except Exception as e:
-                    print(f"[Chat Stream] Erro ao obter ferramentas MCP: {e}")
-                    tools = []
-                
-                router.mcp_tools = tools
-                graph_module.mcp_tools = tools
+            # A ferramenta bi_agent roda no mesmo processo (antes: servidor MCP na porta 8005).
+            tools = local_tools()
+            router.mcp_tools = tools
+            graph_module.mcp_tools = tools
 
-                initial_state = {
-                    "messages": [HumanMessage(content=question)],
-                    "user_input": question,
-                    "calls": [],
-                    "tenant_id": tenant_id,
-                    "contexto_id": str(conversation.contexto_id),
+            initial_state = {
+                "messages": [HumanMessage(content=question)],
+                "user_input": question,
+                "calls": [],
+                "tenant_id": tenant_id,
+                "contexto_id": str(conversation.contexto_id),
+                "thread_id": thread_id,
+            }
+            config = {
+                "configurable": {
                     "thread_id": thread_id,
-                }
-                langfuse_handler = CallbackHandler()
-                config = {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "user_id": user_id
-                    },
-                    "metadata": {
-                        "langfuse_session_id": thread_id,
-                        "langfuse_user_id": user_id
-                    },
-                    "callbacks": [langfuse_handler]
-                }
-                final_state = None
-                has_emitted_result = False
+                    "user_id": user_id
+                },
+                "metadata": {
+                    "langfuse_session_id": thread_id,
+                    "langfuse_user_id": user_id
+                },
+                "callbacks": langfuse_callbacks(),
+            }
+            final_state = None
+            has_emitted_result = False
 
-                async with get_graph() as orchestrator_graph:
-                    async for mode, chunk in orchestrator_graph.astream(
-                        initial_state, config=config, stream_mode=["updates", "messages"]
-                    ):
-                        if mode == "messages":
-                            message_chunk, metadata = chunk
-                            if metadata.get("langgraph_node") == "conversational_agent" and message_chunk.text:
-                                yield sse_event("token", {"text": message_chunk.text})
-                            continue
+            async with get_graph() as orchestrator_graph:
+                async for mode, chunk in orchestrator_graph.astream(
+                    initial_state, config=config, stream_mode=["updates", "messages"]
+                ):
+                    if mode == "messages":
+                        message_chunk, metadata = chunk
+                        if metadata.get("langgraph_node") == "conversational_agent" and message_chunk.text:
+                            yield sse_event("token", {"text": message_chunk.text})
+                        continue
 
-                        for node_name, update in chunk.items():
-                            updates_list = update if isinstance(update, list) else [update]
+                    for node_name, update in chunk.items():
+                        updates_list = update if isinstance(update, list) else [update]
+                        for upd in updates_list:
+                            if isinstance(upd, dict):
+                                final_state = {**(final_state or {}), **upd}
+
+                        status_message = {
+                            "orchestrator":        "Roteando pergunta...",
+                            "mcp_tool_node":       "Consultando dados...",
+                            "reflection_data":     "Avaliando cobertura dos dados...",
+                            "report_agent":        "Gerando relatório analítico...",
+                            "conversational_agent": "Gerando resposta...",
+                        }.get(node_name, "Processando...")
+                        log_info("chat", f"nó={node_name} status={status_message}")
+                        yield sse_event("status", {
+                            "status": "processing",
+                            "step": node_name,
+                            "message": status_message,
+                        })
+
+                        if node_name in ("mcp_tool_node", "report_agent", "conversational_agent"):
                             for upd in updates_list:
                                 if isinstance(upd, dict):
-                                    final_state = {**(final_state or {}), **upd}
-
-                            status_message = {
-                                "orchestrator":        "Roteando pergunta...",
-                                "mcp_tool_node":       "Consultando dados...",
-                                "reflection_data":     "Avaliando cobertura dos dados...",
-                                "report_agent":        "Gerando relatório analítico...",
-                                "conversational_agent": "Gerando resposta...",
-                            }.get(node_name, "Processando...")
-                            log_info("chat", f"nó={node_name} status={status_message}")
-                            yield sse_event("status", {
-                                "status": "processing",
-                                "step": node_name,
-                                "message": status_message,
-                            })
-
-                            if node_name in ("mcp_tool_node", "report_agent", "conversational_agent"):
-                                for upd in updates_list:
-                                    if isinstance(upd, dict):
-                                        if has_emitted_result:
-                                            continue
-                                        res = build_final_result(upd)
-                                        # Emite se houver algo útil para apresentar
-                                        if res.get("data") or res.get("sql") or (res.get("answer") and res["answer"] != "Não consegui formular uma resposta."):
-                                            payload = await persist_assistant_response(conversation, user_message, question, res)
-                                            yield sse_event("result", payload)
-                                            has_emitted_result = True
+                                    if has_emitted_result:
+                                        continue
+                                    res = build_final_result(upd)
+                                    # Emite se houver algo útil para apresentar
+                                    if res.get("data") or res.get("sql") or (res.get("answer") and res["answer"] != "Não consegui formular uma resposta."):
+                                        payload = await persist_assistant_response(conversation, user_message, question, res)
+                                        yield sse_event("result", payload)
+                                        has_emitted_result = True
 
             if not final_state:
                 raise ValueError("Grafo finalizou sem estado.")

@@ -9,6 +9,8 @@ import ChatConversation from '@/modules/chat/components/ChatConversation.vue'
 import ChatInputArea from '@/modules/chat/components/ChatInputArea.vue'
 import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialog.vue'
 import ChatSidebar from '@/modules/chat/components/ChatSidebar.vue'
+import ContextoSelector from '@/modules/chat/components/ContextoSelector.vue'
+import { useContextos } from '@/common/composables/useContextos'
 import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
@@ -25,10 +27,15 @@ const {
   handleDeleteConversation,
   updateCurrentConversation,
   replaceConversationId,
+  setConversationContexto,
   currentConversation
 } = useChatHistory()
 
 const { askQuestionStream, checkHealth, isLoading } = useChatApi()
+const { selectedId: selectedContextoId, loadContextos } = useContextos()
+
+// Conversa ainda não salva no backend: o contexto pode ser escolhido.
+const isNewConversation = computed(() => !!currentConvId.value?.startsWith('local-'))
 
 const {
   pinModalOpen,
@@ -113,6 +120,9 @@ onMounted(() => {
   checkHealth().then((status) => {
     healthOnline.value = status
   })
+  loadContextos().catch(() => {
+    // Backend offline: o seletor fica vazio e a pergunta mostra o erro.
+  })
 
   const initialQuery = window.history.state?.initialQuery || route.query.q
   if (typeof initialQuery === 'string' && initialQuery.trim()) {
@@ -141,6 +151,8 @@ const sendQuestion = async (questionText?: string) => {
   }))
 
   const activeConversationId = currentConvId.value
+  const contextoId = currentConversation.value?.contextoId || selectedContextoId.value
+  let serverConversationId: string | null = null
   let draftCounter = 1
   let currentDraftId = `${Date.now()}-draft-${draftCounter}`
   let currentLoadingStatus: string | undefined = undefined
@@ -181,7 +193,14 @@ const sendQuestion = async (questionText?: string) => {
         isLoading: true
       }))
     },
-    onStatus: (status) => {
+    onStatus: (status, payload) => {
+      // O backend cria a conversa (com o contexto) antes de chamar o LLM e avisa no primeiro status;
+      // adotar o id aqui evita duplicar a conversa se a resposta falhar.
+      if (activeConversationId?.startsWith('local-') && payload?.conversation_id && !serverConversationId) {
+        serverConversationId = String(payload.conversation_id)
+        replaceConversationId(activeConversationId, serverConversationId)
+        setConversationContexto(serverConversationId, contextoId)
+      }
       currentLoadingStatus = status
       updateDraft((message) => ({
         ...message,
@@ -219,10 +238,12 @@ const sendQuestion = async (questionText?: string) => {
         }
       })
     }
-  })
+  }, contextoId)
 
-  if (activeConversationId && aiMessage.conversationId && activeConversationId !== aiMessage.conversationId) {
+  if (!serverConversationId && activeConversationId && aiMessage.conversationId && activeConversationId !== aiMessage.conversationId) {
     replaceConversationId(activeConversationId, aiMessage.conversationId)
+    // O backend fixou este contexto na conversa recém-criada.
+    setConversationContexto(aiMessage.conversationId, contextoId)
   }
 
   updateCurrentConversation((conversation) => {
@@ -272,7 +293,7 @@ const openPinModal = (message: ChatMessage) => {
       }
     }
   }
-  openPinModalBase(message, questionOriginal)
+  openPinModalBase(message, questionOriginal, currentConversation.value?.contextoId)
 }
 
 const requestDeleteConversation = (id: string) => {
@@ -367,6 +388,10 @@ const confirmDeleteConversation = async () => {
           @toggle-sql="toggleSql"
           @pin="openPinModal"
           @suggest="sendQuestion($event)"
+        />
+        <ContextoSelector
+          :is-new-conversation="isNewConversation"
+          :conversation-contexto-id="currentConversation?.contextoId"
         />
         <ChatInputArea v-model="input" :loading="isLoading" @send="sendQuestion()" />
       </div>

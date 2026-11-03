@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import httpClient from '@/common/api/httpClient'
-import { API_BASE } from '@/common/api/config'
+import { apiBase, authHeaders } from '@/common/api/config'
 import type { ChatMessage } from '@/modules/chat/types'
 
 function parseNumeric(value: unknown) {
@@ -118,12 +118,19 @@ export function useChatApi() {
     }
   }
 
-  const askQuestion = async (questionText: string, conversationId?: string | null): Promise<ChatMessage> => {
+  const askQuestion = async (
+    questionText: string,
+    conversationId?: string | null,
+    contextoId?: string | null
+  ): Promise<ChatMessage> => {
     isLoading.value = true
     try {
       const payload: Record<string, any> = { question: questionText }
       if (conversationId && !conversationId.startsWith('local-')) {
         payload.conversation_id = conversationId
+      } else if (contextoId) {
+        // Conversa nova: o backend fixa este contexto nela.
+        payload.contexto_id = contextoId
       }
       const { data } = await httpClient.post('/api/chat', payload)
       return mapResponseToMessage(data)
@@ -143,7 +150,8 @@ export function useChatApi() {
   const askQuestionStream = async (
     questionText: string,
     conversationId?: string | null,
-    handlers: StreamHandlers = {}
+    handlers: StreamHandlers = {},
+    contextoId?: string | null
   ): Promise<ChatMessage> => {
     isLoading.value = true
     try {
@@ -151,18 +159,28 @@ export function useChatApi() {
       if (conversationId) {
         payload.conversation_id = conversationId
       }
+      if (contextoId && (!conversationId || conversationId.startsWith('local-'))) {
+        // Conversa nova: o backend fixa este contexto nela.
+        payload.contexto_id = contextoId
+      }
 
-      const response = await fetch(`${API_BASE}/api/chat/stream`, {
+      const response = await fetch(`${apiBase()}/api/chat/stream`, {
         method: 'POST',
-        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...authHeaders()
         },
         body: JSON.stringify(payload)
       })
 
       if (!response.ok || !response.body) {
-        throw new Error(`Request failed with status code ${response.status}`)
+        let detail = `status ${response.status}`
+        try {
+          detail = (await response.json()).error || detail
+        } catch {
+          // corpo não é JSON
+        }
+        throw new Error(detail)
       }
 
       const reader = response.body.getReader()

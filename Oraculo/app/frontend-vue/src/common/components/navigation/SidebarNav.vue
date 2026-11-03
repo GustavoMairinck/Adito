@@ -3,13 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useRoute } from 'vue-router'
 import brandIcon from '@/common/assets/brand-icon.png'
-import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import {
   AreaChart,
   MessageSquare,
   Database,
   Settings,
-  LogOut,
   Sun,
   Moon,
   ShieldCheck,
@@ -24,13 +22,12 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:isOpen'])
 
-const { user, logout } = useAuth()
+const { user } = useAuth()
 const route = useRoute()
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const isCollapsed = ref(false)
 const isMobile = ref(false)
-const showLogoutModal = ref(false)
 
 // Robust mobile detection via media query
 onMounted(() => {
@@ -86,12 +83,6 @@ function toggleTheme() {
   }
   localStorage.setItem('theme', next)
   isDark.value = next === 'dark'
-}
-
-async function handleLogout() {
-  showLogoutModal.value = false
-  await logout()
-  window.location.assign('/login')
 }
 </script>
 
@@ -202,15 +193,6 @@ async function handleLogout() {
           <Moon v-else class="h-4 w-4 text-white/70" />
           <span v-if="!isEffectivelyCollapsed">{{ isDark ? 'Modo Claro' : 'Modo Escuro' }}</span>
         </button>
-
-        <button
-          :class="['flex w-full items-center gap-2.5 rounded-md border border-transparent text-[10px] font-medium uppercase tracking-[0.1em] text-white/45 transition-colors hover:bg-red-500/10 hover:text-red-400', isEffectivelyCollapsed ? 'justify-center p-3' : 'px-4 py-2.5']"
-          title="Encerrar Sessao"
-          @click="showLogoutModal = true"
-        >
-          <LogOut class="h-4 w-4" />
-          <span v-if="!isEffectivelyCollapsed">Sair</span>
-        </button>
       </div>
     </div>
 
@@ -218,15 +200,6 @@ async function handleLogout() {
       FAPES • IFES • LEDS
     </div>
   </aside>
-
-  <ConfirmModal
-    :is-open="showLogoutModal"
-    title="Encerrar Sessão"
-    message="Tem certeza que deseja sair? Seu acesso será desconectado."
-    confirm-text="Sim, Sair"
-    @confirm="handleLogout"
-    @close="showLogoutModal = false"
-  />
 </template>
 
 <style scoped>

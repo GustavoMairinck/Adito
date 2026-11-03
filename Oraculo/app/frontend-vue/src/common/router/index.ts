@@ -1,19 +1,17 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { useAuth } from '@/modules/auth/composables/useAuth'
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 
 // Module routes
-import authRoutes from '@/modules/auth/router'
 import dashboardRoutes from '@/modules/dashboard/router'
 import chatRoutes from '@/modules/chat/router'
 import dataExplorerRoutes from '@/modules/dataExplorer/router'
 import adminRoutes from '@/modules/admin/router'
 
+// Desktop sem login: não há rota /login nem guarda de autenticação.
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     redirect: '/chat'
   },
-  ...authRoutes,
   ...dashboardRoutes,
   ...chatRoutes,
   ...dataExplorerRoutes,
@@ -24,24 +22,10 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
+// Hash history: o webview do Tauri serve arquivos estáticos, sem fallback para rotas profundas.
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes
-})
-
-// Global Navigation Guard
-router.beforeEach((to) => {
-  const auth = useAuth()
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth !== false)
-  const isLoginPage = to.name === 'Login'
-
-  if (requiresAuth && !auth.isAuthenticated.value) {
-    // Redirect non-authenticated users to login
-    return { name: 'Login', query: { redirect: to.fullPath } }
-  } else if (isLoginPage && auth.isAuthenticated.value) {
-    // Redirect authenticated users away from login
-    return { name: 'ChatEstrategico' }
-  }
 })
 
 export default router

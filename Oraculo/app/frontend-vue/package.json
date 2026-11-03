@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@nuxt/ui": "^4.6.0",
+    "@tauri-apps/api": "^2.12.4",
     "@vueuse/motion": "^3.0.3",
     "apexcharts": "^5.10.4",
     "axios": "^1.13.6",

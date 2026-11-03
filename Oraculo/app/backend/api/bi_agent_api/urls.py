@@ -1,28 +1,16 @@
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
-from core.serializers import EmailTokenObtainPairSerializer
-
-class EmailTokenObtainPairView(TokenObtainPairView):
-    serializer_class = EmailTokenObtainPairSerializer
 
 from .views import health_check
 from dashboard import views as dashboard_views
 from chat.views import ask_question
-from core.auth_views import cookie_login, cookie_logout
-from core.views import contextos
+from core.views import contextos, me
 
+# Desktop sem login: não há rotas de autenticação; toda chamada leva o token local do Tauri.
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health', health_check),
-    path('api/auth/login/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/login', EmailTokenObtainPairView.as_view()),
-    path('api/auth/cookie/login', cookie_login, name='cookie_login'),
-    path('api/auth/cookie/logout', cookie_logout, name='cookie_logout'),
-    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/me', me),
     path('api/contextos', contextos),
     path('api/chat', ask_question),
     path('api/chat/', include('chat.urls')),

@@ -17,13 +17,17 @@ MISTRAL_EMBEDDING_MODEL = os.getenv("MISTRAL_EMBEDDING_MODEL", "mistral-embed")
 from core.datastore import app_db_path
 CHECKPOINT_DB_PATH = os.getenv("ORACULO_CHECKPOINT_DB") or app_db_path()
 
-# ─── Langfuse ─────────────────────────────────────────────────────────────────
+# ─── Langfuse (telemetria externa; desligada se as chaves não estiverem definidas) ─
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
 
-# ─── MCP Servers ──────────────────────────────────────────────────────────────
-ORACULO_MCP_URL = os.getenv("ORACULO_MCP_URL") or os.getenv("ORACULO_ESX_MCP_URL") or "http://oraculo_esx_mcp:8005/mcp"
+
+def langfuse_callbacks() -> list:
+    if not (LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY):
+        return []
+    from langfuse.langchain import CallbackHandler
+    return [CallbackHandler()]
 
 # ─── BI Agent ─────────────────────────────────────────────────────────────────
 # O prompt de SQL vem do contexto da conversa (core.contexts.build_system_prompt).

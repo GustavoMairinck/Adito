@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Janela principal: só as permissões básicas do core; backend_info é um comando do próprio app.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

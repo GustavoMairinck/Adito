@@ -9,10 +9,11 @@ export function useChatPin(showToast: (msg: string, type?: string) => void) {
 
   const { createWidget } = usePersonalDashboard()
 
-  const openPinModal = (message: any, questionOriginal?: string) => {
+  const openPinModal = (message: any, questionOriginal?: string, contextoId?: string | null) => {
     currentPinMessage.value = {
       ...message,
-      questionOriginal: questionOriginal || message.question_temp || ''
+      questionOriginal: questionOriginal || message.question_temp || '',
+      contextoId: contextoId || null
     }
     pinTitle.value = questionOriginal
       ? questionOriginal.substring(0, 50)
@@ -44,6 +45,8 @@ export function useChatPin(showToast: (msg: string, type?: string) => void) {
         title: pinTitle.value,
         question_original: currentPinMessage.value?.questionOriginal || 'Análise Pin',
         sql_validated: currentPinMessage.value?.sql || '',
+        // O widget roda o SQL com a política do contexto da conversa de onde veio.
+        contexto: currentPinMessage.value?.contextoId || null,
         chart_type: chartType as any,
         grid_w,
         grid_h,
