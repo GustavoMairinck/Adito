@@ -8,7 +8,7 @@ from django.db import transaction
 from core.datastore import connect_dados
 from core.vectors import nearest
 
-from .config import TEXT_EMBEDDING_BATCH_SIZE, TEXT_EMBEDDING_TABLES, TEXT_EMBEDDING_TOP_K
+from .config import TEXT_EMBEDDING_BATCH_SIZE, TEXT_EMBEDDING_TOP_K
 from .models import AnalyticsTextEmbedding
 
 
@@ -31,23 +31,25 @@ def value_hash(source_table: str, embedding_text: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def get_table_config(source_table: str) -> dict:
-    try:
-        return TEXT_EMBEDDING_TABLES[source_table]
-    except KeyError as exc:
-        configured = ", ".join(sorted(TEXT_EMBEDDING_TABLES))
-        raise ValueError(f"Tabela sem configuração de embeddings: {source_table}. Configuradas: {configured}") from exc
+def get_table_config(contexto, source_table: str) -> dict:
+    """Campos embedados de uma view vêm do embed_columns do views.json (nunca colunas sensíveis)."""
+    view = contexto.view_config(source_table)
+    fields = list(view.get("embed_columns", [])) if view else []
+    if not fields:
+        configured = ", ".join(configured_tables(contexto)) or "nenhuma"
+        raise ValueError(f"View sem embed_columns no contexto '{contexto.slug}': {source_table}. Configuradas: {configured}")
+    return {"fields": fields, "labels": {field: field.replace("_", " ").capitalize() for field in fields}}
 
 
-def configured_tables(table: str | None = None) -> list[str]:
+def configured_tables(contexto, table: str | None = None) -> list[str]:
+    tables = [view["name"] for view in contexto.views if view.get("embed_columns")]
     if table:
-        get_table_config(table)
+        get_table_config(contexto, table)
         return [table]
-    return list(TEXT_EMBEDDING_TABLES.keys())
+    return tables
 
 
-def make_embedding_text(source_table: str, payload: dict) -> str:
-    config = get_table_config(source_table)
+def make_embedding_text(config: dict, payload: dict) -> str:
     labels = config.get("labels", {})
     lines = []
 
@@ -61,9 +63,9 @@ def make_embedding_text(source_table: str, payload: dict) -> str:
     return "\n".join(lines)
 
 
-def make_candidate(source_table: str, payload: dict) -> TextEmbeddingCandidate | None:
-    cleaned_payload = {field: normalize_text(payload.get(field)) for field in get_table_config(source_table)["fields"]}
-    embedding_text = make_embedding_text(source_table, cleaned_payload)
+def make_candidate(source_table: str, config: dict, payload: dict) -> TextEmbeddingCandidate | None:
+    cleaned_payload = {field: normalize_text(payload.get(field)) for field in config["fields"]}
+    embedding_text = make_embedding_text(config, cleaned_payload)
     if not embedding_text:
         return None
 
@@ -79,8 +81,8 @@ def _quote_name(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def fetch_distinct_candidates(tenant, source_table: str) -> list[TextEmbeddingCandidate]:
-    config = get_table_config(source_table)
+def fetch_distinct_candidates(contexto, source_table: str) -> list[TextEmbeddingCandidate]:
+    config = get_table_config(contexto, source_table)
     fields = config["fields"]
     quoted_fields = ", ".join(_quote_name(field) for field in fields)
     non_empty_checks = [
@@ -104,7 +106,7 @@ def fetch_distinct_candidates(tenant, source_table: str) -> list[TextEmbeddingCa
     candidates = []
     for row in rows:
         payload = dict(zip(fields, tuple(row)))
-        candidate = make_candidate(source_table, payload)
+        candidate = make_candidate(source_table, config, payload)
         if candidate:
             candidates.append(candidate)
     return candidates
@@ -125,7 +127,7 @@ def embed_texts(embedder, texts: list[str]) -> list:
 
 
 def sync_text_embeddings(
-    tenant,
+    contexto,
     embedder,
     table: str | None = None,
     batch_size: int = TEXT_EMBEDDING_BATCH_SIZE,
@@ -134,14 +136,14 @@ def sync_text_embeddings(
 ) -> dict:
     summary = {"tables": {}, "created": 0, "skipped": 0, "dry_run": dry_run}
 
-    for source_table in configured_tables(table):
-        candidates = fetch_distinct_candidates(tenant, source_table)
+    for source_table in configured_tables(contexto, table):
+        candidates = fetch_distinct_candidates(contexto, source_table)
         if limit is not None:
             candidates = candidates[:limit]
         hashes = [candidate.value_hash for candidate in candidates]
         existing_hashes = set(
             AnalyticsTextEmbedding.objects.filter(
-                tenant=tenant,
+                contexto=contexto,
                 source_table=source_table,
                 value_hash__in=hashes,
             ).values_list("value_hash", flat=True)
@@ -164,7 +166,8 @@ def sync_text_embeddings(
             embeddings = embed_texts(embedder, texts)
             rows = [
                 AnalyticsTextEmbedding(
-                    tenant=tenant,
+                    tenant=contexto.tenant,
+                    contexto=contexto,
                     source_table=candidate.source_table,
                     embedding_text=candidate.embedding_text,
                     payload_json=candidate.payload_json,
@@ -181,25 +184,28 @@ def sync_text_embeddings(
 
 
 def rebuild_text_embeddings(
-    tenant,
+    contexto,
     embedder,
     table: str | None = None,
     batch_size: int = TEXT_EMBEDDING_BATCH_SIZE,
     dry_run: bool = False,
     limit: int | None = None,
 ) -> dict:
-    tables = configured_tables(table)
+    tables = configured_tables(contexto, table)
     if dry_run:
-        return sync_text_embeddings(tenant, embedder, table=table, batch_size=batch_size, dry_run=True, limit=limit)
+        return sync_text_embeddings(contexto, embedder, table=table, batch_size=batch_size, dry_run=True, limit=limit)
 
+    stale = AnalyticsTextEmbedding.objects.filter(contexto=contexto)
+    if table:
+        stale = stale.filter(source_table__in=tables)
     with transaction.atomic():
-        AnalyticsTextEmbedding.objects.filter(tenant=tenant, source_table__in=tables).delete()
+        stale.delete()
 
-    return sync_text_embeddings(tenant, embedder, table=table, batch_size=batch_size, dry_run=False, limit=limit)
+    return sync_text_embeddings(contexto, embedder, table=table, batch_size=batch_size, dry_run=False, limit=limit)
 
 
-def search_text_embeddings(tenant, query_embedding, table: str | None = None, top_k: int = TEXT_EMBEDDING_TOP_K) -> list[dict]:
-    qs = AnalyticsTextEmbedding.objects.filter(tenant=tenant, embedding__isnull=False)
+def search_text_embeddings(contexto, query_embedding, table: str | None = None, top_k: int = TEXT_EMBEDDING_TOP_K) -> list[dict]:
+    qs = AnalyticsTextEmbedding.objects.filter(contexto=contexto, embedding__isnull=False)
     if table:
         qs = qs.filter(source_table=table)
 

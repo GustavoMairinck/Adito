@@ -1,4 +1,5 @@
-from core.datastore import connect_dados, default_read_policy
+from core.contexts import read_policy_for
+from core.datastore import connect_dados
 from core.rich_logging import (
     log_error,
     log_node_end,
@@ -19,7 +20,7 @@ def sql_validator(
     validate_sql: bool,
 ) -> dict[str, dict[str, object]]:
     sql = state["generated_sql"]
-    log_node_start("validator", f"dados={dados_path or 'padrão'!r}")
+    log_node_start("validator", f"contexto={state.get('contexto_id')!r}")
     log_panel("bi", "SQL em validação", sql)
 
     if not validate_sql:
@@ -27,8 +28,12 @@ def sql_validator(
         log_node_end("validator", "valid=True")
         return {"validation_result": {"valid": True, "error": None}}
 
-    policy = default_read_policy()
-    is_safe, error = validate_read_only_sql(sql, dialect=dialect, allowed_tables=policy.exposed_views)
+    policy = read_policy_for(state.get("contexto_id"))
+    if not policy.exposed_views:
+        log_error("bi", "Sem contexto: nenhuma view exposta.")
+        log_node_end("validator", "valid=False")
+        return {"validation_result": {"valid": False, "error": "Nenhum contexto de dados selecionado."}}
+    is_safe, error = validate_read_only_sql(sql, policy.exposed_views, dialect=dialect)
     if not is_safe:
         log_error("bi", f"Validação de segurança falhou: {error}")
         log_node_end("validator", "valid=False")

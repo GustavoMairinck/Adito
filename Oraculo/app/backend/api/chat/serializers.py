@@ -13,7 +13,8 @@ class ConversationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['id', 'title', 'created_at', 'updated_at', 'createdAt', 'updatedAt', 'messages']
+        fields = ['id', 'title', 'contexto', 'created_at', 'updated_at', 'createdAt', 'updatedAt', 'messages']
+        read_only_fields = ['contexto']
 
 class QueryExecutionSerializer(serializers.ModelSerializer):
     user = serializers.CharField(source='user.username', read_only=True)
@@ -25,4 +26,6 @@ class QueryExecutionSerializer(serializers.ModelSerializer):
 class AskRequestSerializer(serializers.Serializer):
     question = serializers.CharField(required=True)
     conversation_id = serializers.UUIDField(required=False, allow_null=True)
+    # Só vale para conversa nova; a existente mantém o contexto com que foi criada.
+    contexto_id = serializers.UUIDField(required=False, allow_null=True)
     execute = serializers.BooleanField(default=False)

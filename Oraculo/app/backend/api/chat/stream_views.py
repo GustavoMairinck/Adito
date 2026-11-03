@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
 import jwt
 from django.conf import settings
+from core.contexts import pick_contexto
 from core.models import User
 from core.rich_logging import log_error, log_info, log_section, log_success
 from agents.orchestrator.graph import get_graph, mcp_tools
@@ -46,7 +47,6 @@ def get_user_auth_data(request):
         return {
             'user': user,
             'tenant_id': str(user.tenant.id) if user.tenant else None,
-            'db_schema': user.tenant.db_schema_name if user.tenant else None,
         }
     except Exception as e:
         log_error("auth", f"Erro ao autenticar stream: {e}")
@@ -55,7 +55,8 @@ def get_user_auth_data(request):
 
 
 @sync_to_async
-def prepare_conversation(auth_data: dict, question: str, raw_conversation_id: str | None):
+def prepare_conversation(auth_data: dict, question: str, raw_conversation_id: str | None, contexto_id: str | None = None):
+    """A conversa existente mantém seu contexto; uma nova precisa de um (pedido ou o único ativo)."""
     user = auth_data["user"]
     tenant = user.tenant
     conversation = None
@@ -67,7 +68,12 @@ def prepare_conversation(auth_data: dict, question: str, raw_conversation_id: st
             conversation = None
 
     if conversation is None:
-        conversation = Conversation.objects.create(user=user, tenant=tenant, title=question[:80] or "Nova conversa")
+        contexto = pick_contexto(tenant, contexto_id)
+        if contexto is None:
+            raise ValueError("Escolha um contexto de dados para iniciar a conversa.")
+        conversation = Conversation.objects.create(
+            user=user, tenant=tenant, contexto=contexto, title=question[:80] or "Nova conversa"
+        )
 
     user_message = Message.objects.create(conversation=conversation, role="user", content=question)
     return conversation, user_message
@@ -108,6 +114,7 @@ def persist_assistant_response(conversation, user_message, question: str, result
         QueryExecution.objects.create(
             user=conversation.user,
             tenant=conversation.tenant,
+            contexto=conversation.contexto,
             message=assistant_msg,
             question_original=question,
             generated_sql=sql,
@@ -177,6 +184,7 @@ async def ask_stream(request):
         body = json.loads(request.body)
         question = body.get('question')
         raw_conversation_id = body.get('conversation_id')
+        contexto_id = body.get('contexto_id')
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido'}, status=400)
 
@@ -184,9 +192,11 @@ async def ask_stream(request):
         return JsonResponse({'error': 'Pergunta obrigatória'}, status=400)
 
     tenant_id = auth_data['tenant_id']
-    db_schema  = auth_data['db_schema']
     user_id    = str(auth_data['user'].id)
-    conversation, user_message = await prepare_conversation(auth_data, question, raw_conversation_id)
+    try:
+        conversation, user_message = await prepare_conversation(auth_data, question, raw_conversation_id, contexto_id)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
     thread_id = f"tenant_{tenant_id}:user_{user_id}:conv_{conversation.id}"
     log_section("Chat Stream", "chat")
     log_info("chat", f"tenant={tenant_id} thread={thread_id}")
@@ -221,7 +231,7 @@ async def ask_stream(request):
                     "user_input": question,
                     "calls": [],
                     "tenant_id": tenant_id,
-                    "db_schema_name": db_schema,
+                    "contexto_id": str(conversation.contexto_id),
                     "thread_id": thread_id,
                 }
                 langfuse_handler = CallbackHandler()

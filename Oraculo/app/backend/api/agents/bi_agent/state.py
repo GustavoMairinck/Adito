@@ -5,7 +5,8 @@ import operator
 class AgentState(TypedDict):
     user_input: str
     tenant_id: str
-    db_schema_name: str
+    contexto_id: str
+    allowed_views: list[str]
     messages: Annotated[Sequence[BaseMessage], operator.add]
     system_prompt: str
     retrieved_schema: str

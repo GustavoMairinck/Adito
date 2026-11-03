@@ -6,13 +6,11 @@ from langchain_core.tools import tool
 
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
 from analytics_index.services import configured_tables, search_text_embeddings
-from core.models import Tenant
+from core.models import Contexto
 from core.rich_logging import log_info, log_success
 
-from ..config import DEFAULT_SOURCE_TABLE
 
-
-_tenant: Tenant | None = None
+_contexto: Contexto | None = None
 _embedder: Embeddings | None = None
 _top_k: int = TEXT_EMBEDDING_TOP_K
 _collected_candidates: list[dict[str, Any]] = []
@@ -21,12 +19,12 @@ _search_calls: list[dict[str, Any]] = []
 
 
 def configure_vector_search(
-    tenant: Tenant,
+    contexto: Contexto,
     embedder: Embeddings,
     top_k: int = TEXT_EMBEDDING_TOP_K,
 ) -> None:
-    global _tenant, _embedder, _top_k, _collected_candidates, _searched_terms, _search_calls
-    _tenant = tenant
+    global _contexto, _embedder, _top_k, _collected_candidates, _searched_terms, _search_calls
+    _contexto = contexto
     _embedder = embedder
     _top_k = top_k
     _collected_candidates = []
@@ -41,15 +39,16 @@ def vector_search_results() -> tuple[list[dict[str, Any]], list[str], list[dict[
 @tool
 def search_analytics_values(
     query: str,
-    source_table: str = DEFAULT_SOURCE_TABLE,
+    source_table: str = "",
     limit: int = TEXT_EMBEDDING_TOP_K,
 ) -> str:
-    """Search real analytical text values by semantic similarity."""
-    if _tenant is None or _embedder is None:
+    """Search real analytical text values by semantic similarity. source_table defaults to the first indexed view."""
+    if _contexto is None or _embedder is None:
         return json.dumps({"query": query, "results": []}, ensure_ascii=False)
 
+    tables = configured_tables(_contexto)
     clean_query = (query or "").strip()
-    clean_table = (source_table or DEFAULT_SOURCE_TABLE).strip()
+    clean_table = (source_table or (tables[0] if tables else "")).strip()
     try:
         requested_limit = int(limit or _top_k)
     except (TypeError, ValueError):
@@ -58,7 +57,7 @@ def search_analytics_values(
 
     if not clean_query:
         return json.dumps({"query": query, "results": []}, ensure_ascii=False)
-    if clean_table not in configured_tables():
+    if clean_table not in tables:
         return json.dumps({"query": clean_query, "source_table": clean_table, "results": []}, ensure_ascii=False)
 
     log_info(
@@ -67,7 +66,7 @@ def search_analytics_values(
     )
     query_embedding = _embedder.embed_query(clean_query)
     candidates = search_text_embeddings(
-        tenant=_tenant,
+        contexto=_contexto,
         query_embedding=query_embedding,
         table=clean_table,
         top_k=clean_limit,

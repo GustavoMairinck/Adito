@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from .models import Dashboard, Widget
 from .serializers import DashboardSerializer, WidgetSerializer
 from chat.views import get_bi_agent
-from core.services.sales_bootstrap import SalesBootstrapOptions, resolve_tenant, run_sales_bootstrap
+from core.contexts import pick_contexto
 from core.datastore import connect_dados
 from core.rich_logging import log_error, log_info, log_success
 
@@ -104,7 +104,13 @@ class WidgetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         dashboard = _get_or_create_default_dashboard(self.request.user)
-        serializer.save(dashboard=dashboard, sql_validated=serializer.validated_data.get('sql_validated', ''))
+        # Sem contexto explícito, usa o único ativo; o SQL do widget só roda com a política dele.
+        contexto = serializer.validated_data.get('contexto') or pick_contexto(self.request.user.tenant)
+        serializer.save(
+            dashboard=dashboard,
+            contexto=contexto,
+            sql_validated=serializer.validated_data.get('sql_validated', ''),
+        )
 
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
@@ -118,7 +124,7 @@ class WidgetViewSet(viewsets.ModelViewSet):
 
         agent = get_bi_agent()
         # limit_rows=0 significa todas as linhas: o dashboard precisa do resultado completo.
-        data = agent.execute_query(widget.sql_validated, max_rows=widget.limit_rows or None)
+        data = agent.execute_query(widget.sql_validated, contexto_id=widget.contexto_id, max_rows=widget.limit_rows or None)
 
         if data and isinstance(data, list) and data[0].get('error'):
             log_error("dashboard", f"Erro na query do widget {widget.id}: {data[0]['error']!r}")
@@ -400,31 +406,29 @@ def data_bootstrap(request):
     if not request.user.is_staff:
         raise PermissionDenied('Apenas administradores podem preparar os dados.')
 
-    tenant = getattr(request.user, 'tenant', None)
-    if not tenant:
-        tenant = resolve_tenant(
-            os.getenv("DEFAULT_TENANT_NAME"),
-            os.getenv("DEFAULT_TENANT_SCHEMA"),
-        )
+    # Desktop: recarrega e valida os contextos da pasta <dados do usuário>/contexts.
+    # A indexação (embeddings) usa a chave do usuário e roda separada.
+    from core.contexts import load_context_dir
+    from core.datastore import data_dir
 
-    try:
-        summary = run_sales_bootstrap(SalesBootstrapOptions(tenant=tenant, reset=True))
-    except Exception as exc:
-        log_error("data_bootstrap", f"Falha no bootstrap de dados: {exc}")
+    tenant = request.user.tenant
+    contexts_root = data_dir() / "contexts"
+    folders = sorted(p for p in contexts_root.glob("*") if (p / "views.json").exists())
+    if not folders:
         return Response(
-            {
-                "detail": "Falha ao preparar schema, dados, treinamento ou embeddings.",
-                "error": str(exc),
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            {"detail": f"Nenhum contexto encontrado em {contexts_root}."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    log_success("data_bootstrap", f"Bootstrap concluído para schema={summary['tenant']['schema']}")
-    return Response(
-        {
-            "status": "success",
-            "message": "Schema, dados, treinamento e embeddings preparados com sucesso.",
-            **summary,
-        },
-        status=status.HTTP_200_OK,
-    )
+    loaded = []
+    for folder in folders:
+        try:
+            contexto, examples, errors = load_context_dir(folder, tenant)
+        except Exception as exc:
+            log_error("data_bootstrap", f"Falha ao carregar {folder.name}: {exc}")
+            loaded.append({"pasta": folder.name, "ativo": False, "erros": [str(exc)]})
+            continue
+        loaded.append({"pasta": folder.name, "slug": contexto.slug, "ativo": not errors, "erros": errors})
+
+    log_success("data_bootstrap", f"{sum(c['ativo'] for c in loaded)}/{len(loaded)} contexto(s) válidos")
+    return Response({"status": "success", "contextos": loaded}, status=status.HTTP_200_OK)

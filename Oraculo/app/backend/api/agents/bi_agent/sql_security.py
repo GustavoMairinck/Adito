@@ -1,9 +1,6 @@
 import sqlglot
 from sqlglot import exp
 
-from core.datastore import default_read_policy
-
-
 DISALLOWED_EXPRESSIONS = (
     exp.Alter,
     exp.Command,
@@ -19,11 +16,11 @@ DISALLOWED_EXPRESSIONS = (
 
 def validate_read_only_sql(
     sql: str,
+    allowed_tables: set[str] | frozenset[str] | list[str],
     dialect: str = "sqlite",
-    allowed_tables: set[str] | frozenset[str] | None = None,
 ) -> tuple[bool, str | None]:
     """Primeira barreira (sintática). A segunda é o authorizer do dados.db."""
-    allowed = {name.lower() for name in (allowed_tables or default_read_policy().exposed_views)}
+    allowed = {name.lower() for name in allowed_tables}
     try:
         expressions = sqlglot.parse(sql, read=dialect)
     except Exception as exc:

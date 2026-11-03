@@ -1,0 +1,19 @@
+{
+  "contexto": "exemplo-vendas",
+  "nome": "Vendas (exemplo)",
+  "descricao": "Contexto de exemplo para testar o app com dados fictícios. Substitua pelos seus.",
+  "views": [
+    {
+      "name": "vfactvendasresolved",
+      "description": "Uma linha por venda.",
+      "sensitive_columns": ["cliente_cpf"],
+      "embed_columns": ["produto", "categoria_produto", "canal"],
+      "local_search_columns": ["cliente", "vendedor"]
+    },
+    {
+      "name": "v_resumo",
+      "description": "Receita total por produto (view sobre vfactvendasresolved)."
+    }
+  ],
+  "llm_row_limit": 20
+}

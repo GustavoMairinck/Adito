@@ -13,6 +13,7 @@ from .views import health_check
 from dashboard import views as dashboard_views
 from chat.views import ask_question
 from core.auth_views import cookie_login, cookie_logout
+from core.views import contextos
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -22,6 +23,7 @@ urlpatterns = [
     path('api/auth/cookie/login', cookie_login, name='cookie_login'),
     path('api/auth/cookie/logout', cookie_logout, name='cookie_logout'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/contextos', contextos),
     path('api/chat', ask_question),
     path('api/chat/', include('chat.urls')),
     path('api/dashboard/', include('dashboard.urls')),

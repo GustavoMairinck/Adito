@@ -10,8 +10,8 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from .models import Conversation, Message, QueryExecution
 from .serializers import ConversationSerializer, MessageSerializer, QueryExecutionSerializer, AskRequestSerializer
-from agents.config import BI_AGENT_SYSTEM_PROMPT
 from agents.bi_agent.agent import BIAgent
+from core.contexts import pick_contexto
 from agents.orchestrator import router as orchestrator_router
 from agents.orchestrator import graph as orchestrator_graph_module
 from agents.orchestrator.graph import get_graph
@@ -79,12 +79,22 @@ def get_bi_agent():
             model=os.environ.get("MISTRAL_EMBEDDING_MODEL", "mistral-embed"),
             api_key=os.environ.get("MISTRAL_API_KEY")
         )
+        # O prompt vem do contexto de cada pergunta (core.contexts.build_system_prompt).
         _bi_agent = BIAgent(
             llm_model=llm,
             embedder=embedder,
-            system_prompt=BI_AGENT_SYSTEM_PROMPT
         )
     return _bi_agent
+
+
+def _conversation_for(user, tenant, conv_id, contexto_id, title):
+    """Conversa existente (mantém o contexto) ou nova com contexto obrigatório."""
+    if conv_id:
+        return get_object_or_404(Conversation, id=conv_id, tenant=tenant, user=user)
+    contexto = pick_contexto(tenant, contexto_id)
+    if contexto is None:
+        raise serializers.ValidationError({"message": "Escolha um contexto de dados para iniciar a conversa."})
+    return Conversation.objects.create(user=user, tenant=tenant, contexto=contexto, title=title)
 
 
 async def _run_orchestrator(question: str, tenant, conversation, user) -> dict:
@@ -101,7 +111,7 @@ async def _run_orchestrator(question: str, tenant, conversation, user) -> dict:
                     "user_input": question,
                     "calls": [],
                     "tenant_id": str(tenant.id),
-                    "db_schema_name": tenant.db_schema_name,
+                    "contexto_id": str(conversation.contexto_id),
                     "thread_id": thread_id,
                 },
                 config={
@@ -133,7 +143,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
         tenant = getattr(user, 'tenant', None)
         if not tenant:
             raise serializers.ValidationError({"message": "Usuário não possui tenant configurado."})
-        serializer.save(user=user, tenant=tenant)
+        contexto = pick_contexto(tenant, self.request.data.get('contexto_id'))
+        if contexto is None:
+            raise serializers.ValidationError({"message": "Escolha um contexto de dados para a conversa."})
+        serializer.save(user=user, tenant=tenant, contexto=contexto)
 
     @action(detail=False, methods=['post'])
     def ask(self, request):
@@ -150,11 +163,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
         execute = serializer.validated_data['execute']
         
         # Recupera ou cria conversa
-        conv_id = serializer.validated_data.get('conversation_id')
-        if conv_id:
-            conversation = get_object_or_404(Conversation, id=conv_id, tenant=tenant, user=user)
-        else:
-            conversation = Conversation.objects.create(user=user, tenant=tenant, title=question[:50])
+        conversation = _conversation_for(
+            user, tenant,
+            serializer.validated_data.get('conversation_id'),
+            serializer.validated_data.get('contexto_id'),
+            question[:50],
+        )
 
         # Salva a mensagem do usuário
         Message.objects.create(conversation=conversation, role='user', content=question)
@@ -166,7 +180,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         result = agent.ask(
             question=question,
             tenant_id=str(tenant.id),
-            db_schema_name=tenant.db_schema_name,
+            contexto_id=str(conversation.contexto_id),
             thread_id=f"tenant_{tenant.id}:user_{user.id}:conv_{conversation.id}",
             execute=execute
         )
@@ -188,6 +202,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             QueryExecution.objects.create(
                 user=user,
                 tenant=tenant,
+                contexto=conversation.contexto,
                 message=assistant_msg,
                 question_original=question,
                 generated_sql=result['sql'],
@@ -221,11 +236,12 @@ def ask_question(request):
         return Response({"message": "Usuário não possui tenant configurado."}, status=status.HTTP_400_BAD_REQUEST)
 
     question = serializer.validated_data['question']
-    conv_id = serializer.validated_data.get('conversation_id')
-    if conv_id:
-        conversation = get_object_or_404(Conversation, id=conv_id, tenant=tenant, user=user)
-    else:
-        conversation = Conversation.objects.create(user=user, tenant=tenant, title=question[:80] or 'Nova conversa')
+    conversation = _conversation_for(
+        user, tenant,
+        serializer.validated_data.get('conversation_id'),
+        serializer.validated_data.get('contexto_id'),
+        question[:80] or 'Nova conversa',
+    )
 
     user_msg = Message.objects.create(conversation=conversation, role='user', content=question)
 
@@ -302,6 +318,7 @@ def ask_question(request):
         QueryExecution.objects.create(
             user=user,
             tenant=tenant,
+            contexto=conversation.contexto,
             message=assistant_msg,
             question_original=question,
             generated_sql=sql,

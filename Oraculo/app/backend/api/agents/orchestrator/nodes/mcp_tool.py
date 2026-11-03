@@ -154,7 +154,7 @@ async def run_mcp_tool_node(
                 {
                     "instruction": instruction,
                     "tenant_id": state.get("tenant_id", ""),
-                    "db_schema_name": state.get("db_schema_name", ""),
+                    "contexto_id": state.get("contexto_id", ""),
                     "thread_id": state.get("thread_id", "default_session"),
                 }
             )

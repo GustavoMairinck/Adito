@@ -35,10 +35,6 @@ def dados_db_path() -> Path:
     return Path(os.environ.get("ORACULO_DADOS_DB") or data_dir() / "dados.db")
 
 
-def _env_set(name: str) -> set[str]:
-    return {item.strip().lower() for item in os.environ.get(name, "").split(",") if item.strip()}
-
-
 @dataclass(frozen=True)
 class ReadPolicy:
     """O que o SQL de nível superior pode ler no dados.db.
@@ -68,22 +64,6 @@ _ALWAYS_ALLOWED = {
     sqlite3.SQLITE_FUNCTION,
     getattr(sqlite3, "SQLITE_RECURSIVE", 33),
 }
-
-
-def default_read_policy() -> ReadPolicy:
-    """Política vinda do ambiente até os contextos existirem.
-
-    ORACULO_EXPOSED_VIEWS="v_a,v_b" e ORACULO_SENSITIVE_COLUMNS="v_a.cpf,v_b.email".
-    """
-    from agents.bi_agent.config import DEFAULT_SOURCE_TABLE
-
-    views = _env_set("ORACULO_EXPOSED_VIEWS") or {DEFAULT_SOURCE_TABLE}
-    sensitive = {
-        tuple(item.split(".", 1))
-        for item in _env_set("ORACULO_SENSITIVE_COLUMNS")
-        if "." in item
-    }
-    return ReadPolicy(frozenset(views), frozenset(sensitive))
 
 
 def connect_dados(policy: ReadPolicy | None = None, path: Path | str | None = None) -> sqlite3.Connection:

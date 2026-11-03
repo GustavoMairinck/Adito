@@ -1,11 +1,13 @@
 import uuid
 from django.db import models
-from core.models import User, Tenant
+from core.models import Contexto, User, Tenant
 
 class Conversation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations')
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='conversations')
+    # Escolhido ao criar a conversa e fixo nela.
+    contexto = models.ForeignKey(Contexto, on_delete=models.PROTECT, null=True, blank=True, related_name='conversations')
     title = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -38,6 +40,7 @@ class QueryExecution(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='query_executions')
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='query_executions')
+    contexto = models.ForeignKey(Contexto, on_delete=models.SET_NULL, null=True, blank=True, related_name='query_executions')
     message = models.ForeignKey(Message, on_delete=models.SET_NULL, null=True, blank=True, related_name='query_executions')
     question_original = models.TextField(blank=True)
     generated_sql = models.TextField()

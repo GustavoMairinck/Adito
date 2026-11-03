@@ -13,7 +13,6 @@ from agents.config import (
     MISTRAL_MODEL,
     MISTRAL_API_KEY,
     MISTRAL_EMBEDDING_MODEL,
-    BI_AGENT_SYSTEM_PROMPT,
 )
 from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 from langfuse.langchain import CallbackHandler
@@ -29,13 +28,12 @@ def get_bi_agent():
         _bi_agent = BIAgent(
             llm_model=ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY),
             embedder=MistralAIEmbeddings(model=MISTRAL_EMBEDDING_MODEL, api_key=MISTRAL_API_KEY),
-            system_prompt=BI_AGENT_SYSTEM_PROMPT,
         )
     return _bi_agent
 
 
 @mcp.tool()
-def bi_agent(instruction: str, tenant_id: str, db_schema_name: str, thread_id: str = "default_session") -> str:
+def bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: str = "default_session") -> str:
     """
     Utilize esta ferramenta estritamente para buscar dados quantitativos, financeiros e comerciais
     de vendas ESX: receita, produtos, clientes, canais, vendedores, regiões, lucro, descontos,
@@ -49,7 +47,7 @@ def bi_agent(instruction: str, tenant_id: str, db_schema_name: str, thread_id: s
     result = get_bi_agent().ask(
         question=instruction,
         tenant_id=tenant_id,
-        db_schema_name=db_schema_name,
+        contexto_id=contexto_id,
         thread_id=thread_id,
         callbacks=[langfuse_handler],
         execute=True,

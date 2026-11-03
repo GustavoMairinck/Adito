@@ -27,7 +27,7 @@ class MultiAgentState(TypedDict):
     
     # controle de multi-tenancy
     tenant_id: Optional[str]
-    db_schema_name: Optional[str]
+    contexto_id: Optional[str]
     thread_id: Optional[str]
     
     # campos visuais do frontend (fallback, suggestions, etc)

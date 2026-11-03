@@ -1,13 +1,20 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Tenant, User
+from .models import Contexto, Tenant, User
 
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ('name', 'db_schema_name', 'created_at')
-    search_fields = ('name', 'db_schema_name')
+    list_display = ('name', 'created_at')
+    search_fields = ('name',)
     ordering = ('name',)
+
+
+@admin.register(Contexto)
+class ContextoAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'tenant', 'is_active', 'updated_at')
+    list_filter = ('is_active', 'tenant')
+    search_fields = ('name', 'slug')
 
 
 @admin.register(User)

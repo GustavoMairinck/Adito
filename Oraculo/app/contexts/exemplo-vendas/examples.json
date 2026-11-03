@@ -1,0 +1,18 @@
+[
+  {
+    "question": "Qual a receita líquida total por produto?",
+    "sql": "SELECT produto, SUM(receita_liquida) AS receita_liquida_total FROM vfactvendasresolved GROUP BY produto ORDER BY receita_liquida_total DESC"
+  },
+  {
+    "question": "Quantas vendas houve por canal?",
+    "sql": "SELECT canal, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY canal ORDER BY total_vendas DESC"
+  },
+  {
+    "question": "Qual a receita por ano?",
+    "sql": "SELECT ano, SUM(receita_liquida) AS receita FROM vfactvendasresolved GROUP BY ano ORDER BY ano"
+  },
+  {
+    "question": "Qual produto mais faturou?",
+    "sql": "SELECT produto, total FROM v_resumo ORDER BY total DESC LIMIT 1"
+  }
+]

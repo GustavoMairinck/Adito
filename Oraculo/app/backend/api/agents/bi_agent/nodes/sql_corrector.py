@@ -3,7 +3,7 @@ from langchain_core.messages import HumanMessage
 
 from core.rich_logging import log_node_end, log_node_start, log_panel
 
-from ..config import DEFAULT_SOURCE_TABLE, SQLResponse
+from ..config import SQLResponse
 from ..state import BiAgentState
 from .field_formats import field_formats_as_strings
 
@@ -21,8 +21,8 @@ def sql_corrector(
     prompt = (
         f"The {dialect} query failed.\n"
         f"Wrong Query: {sql}\nError: {error}\n"
-        f"Correct it using ONLY the table {DEFAULT_SOURCE_TABLE}, with lowercase columns, "
-        f"no schema prefix, and PostgreSQL syntax. Maintain the same structured output format."
+        f"Correct it using ONLY these views: {', '.join(state.get('allowed_views', []))}, "
+        f"with lowercase columns, no schema prefix, and SQLite syntax. Maintain the same structured output format."
     )
     structured_llm = llm_model.with_structured_output(SQLResponse)
     response = structured_llm.invoke([HumanMessage(content=prompt)])

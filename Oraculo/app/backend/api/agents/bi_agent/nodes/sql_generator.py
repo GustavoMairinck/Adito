@@ -27,7 +27,7 @@ def sql_generator(
     system_content = (
         f"You are a SQL expert for the {dialect.upper()} database.\n"
         f"Use the CONTEXT below to generate the best possible query.\n\n"
-        f"Write the explanation field in Brazilian Portuguese. Keep SQL unchanged in valid PostgreSQL.\n\n"
+        f"Write the explanation field in Brazilian Portuguese. Keep SQL unchanged in valid SQLite.\n\n"
         f"RETRIEVED CONTEXT:\n{state['retrieved_schema']}\n\n"
         f"{state.get('system_prompt', '')}"
     )

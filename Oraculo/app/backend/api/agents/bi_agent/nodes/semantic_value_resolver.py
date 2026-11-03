@@ -5,7 +5,8 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
-from core.models import Tenant
+from analytics_index.services import configured_tables
+from core.contexts import get_contexto
 from core.rich_logging import (
     log_error,
     log_info,
@@ -57,14 +58,13 @@ def semantic_value_resolver(
     user_input = state["user_input"]
     log_node_start("semantic_value_resolver", f"pergunta={user_input[:120]!r}")
 
-    try:
-        tenant = Tenant.objects.get(id=state["tenant_id"])
-    except Exception as exc:
-        log_warning("rewrite", f"Tenant indisponível para resolver valores: {exc}")
+    contexto = get_contexto(state.get("contexto_id"))
+    if contexto is None or not configured_tables(contexto):
+        log_warning("rewrite", "Contexto sem views indexadas (embed_columns); pulando resolução de valores.")
         log_node_end("semantic_value_resolver", "sem candidatos")
         return _empty_resolution()
 
-    configure_vector_search(tenant=tenant, embedder=embedder, top_k=top_k)
+    configure_vector_search(contexto=contexto, embedder=embedder, top_k=top_k)
 
     try:
         agent = create_react_agent(

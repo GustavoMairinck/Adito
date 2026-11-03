@@ -1,6 +1,6 @@
 import uuid
 from django.db import models
-from core.models import User, Tenant
+from core.models import Contexto, User, Tenant
 
 class Dashboard(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -31,6 +31,8 @@ class Widget(models.Model):
     ]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name='widgets')
+    # O SQL do widget roda com a política do contexto em que foi gerado.
+    contexto = models.ForeignKey(Contexto, on_delete=models.PROTECT, null=True, blank=True, related_name='widgets')
     title = models.CharField(max_length=255)
     question_original = models.TextField()
     sql_validated = models.TextField()

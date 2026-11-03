@@ -40,7 +40,7 @@ async def mcp_tool_node(state: MultiAgentState):
                 invoke_args = {
                     "instruction":    instruction,
                     "tenant_id":      state.get("tenant_id", ""),
-                    "db_schema_name": state.get("db_schema_name", ""),
+                    "contexto_id": state.get("contexto_id", ""),
                     "thread_id":      state.get("thread_id", "default_session"),
                 }
                 result = await t.ainvoke(invoke_args)
@@ -111,7 +111,7 @@ def route_from_orchestrator(state: MultiAgentState):
             "messages":              state.get("messages", []),
             "user_input":            state.get("user_input", ""),
             "tenant_id":             state.get("tenant_id"),
-            "db_schema_name":        state.get("db_schema_name"),
+            "contexto_id":        state.get("contexto_id"),
             "thread_id":             state.get("thread_id"),
             "delegation_instruction": call.get("delegation_instruction"),
         }
