@@ -1,18 +1,18 @@
 {
   "contexto": "exemplo-vendas",
-  "nome": "Vendas (exemplo)",
-  "descricao": "Contexto de exemplo para testar o app com dados fictícios. Substitua pelos seus.",
+  "nome": "Vendas (demonstração)",
+  "descricao": "Demonstração de vendas que vinha com o Oráculo web: 1.200 vendas de 2023 a 2026. Gere o dados.db com scripts/gerar_dados_demo.py.",
   "views": [
     {
       "name": "vfactvendasresolved",
-      "description": "Uma linha por venda.",
-      "sensitive_columns": ["cliente_cpf"],
-      "embed_columns": ["produto", "categoria_produto", "canal"],
-      "local_search_columns": ["cliente", "vendedor"]
+      "description": "Uma linha por venda, já com produto, cliente, região, canal, vendedor e data.",
+      "sensitive_columns": [],
+      "embed_columns": ["produto", "categoria_produto", "segmento_produto", "cliente", "porte_cliente", "setor_cliente", "cidade", "estado", "regiao", "canal", "equipe_vendas"],
+      "local_search_columns": ["vendedor"]
     },
     {
-      "name": "v_resumo",
-      "description": "Receita total por produto (view sobre vfactvendasresolved)."
+      "name": "v_receita_produto",
+      "description": "Receita líquida, lucro e número de vendas por produto, categoria e ano (view sobre vfactvendasresolved)."
     }
   ],
   "llm_row_limit": 20

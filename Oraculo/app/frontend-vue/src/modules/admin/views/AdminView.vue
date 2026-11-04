@@ -451,56 +451,32 @@ async function handleSync() {
       { timeout: 1000 * 900 }
     )
 
+    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.db e indexação do RAG).
     const data = response.data || {}
-    const counts = data.counts || {}
+    const contextos: any[] = data.contextos || []
     const triggeredAt = new Date().toISOString()
-    const trainingCounts = Object.values((data.training?.counts || {}) as Record<string, number>)
-    const trainingCount = trainingCounts.reduce((sum, value) => sum + Number(value || 0), 0)
-    const stages: EtlTriggeredRun[] = [
-      {
-        dagId: 'schema',
-        label: 'Schema',
-        dagRunId: `${data.schema?.statements ?? 0} statements`,
-        state: data.schema?.applied ? 'success' : 'pending',
-        triggeredAt
-      },
-      {
-        dagId: 'data',
-        label: 'Dados mock',
-        dagRunId: `${data.data?.insert_statements ?? 0} inserts`,
-        state: data.data?.applied ? 'success' : 'pending',
-        triggeredAt
-      },
-      {
-        dagId: 'view',
-        label: 'View vfactvendasresolved',
-        dagRunId: `${counts.vfactvendasresolved ?? 0} linhas`,
-        state: data.view?.available ? 'success' : 'pending',
-        triggeredAt
-      },
-      {
-        dagId: 'training',
-        label: 'Treinamento',
-        dagRunId: `${trainingCount} itens`,
-        state: data.training?.applied ? 'success' : 'pending',
-        triggeredAt
-      },
-      {
-        dagId: 'embeddings',
-        label: 'Embeddings',
-        dagRunId: data.embeddings?.applied ? 'sincronizados' : 'pendente',
-        state: data.embeddings?.applied ? 'success' : 'pending',
-        triggeredAt
-      }
-    ]
+    const stages: EtlTriggeredRun[] = contextos.map((ctx) => ({
+      dagId: ctx.slug || ctx.pasta,
+      label: ctx.nome || ctx.pasta,
+      dagRunId: !ctx.ativo
+        ? (ctx.erros || []).join(' ')
+        : ctx.indexado
+          ? `${ctx.rag_itens} itens de RAG, ${ctx.valores} valores`
+          : 'válido; sem indexação (falta a chave da Mistral)',
+      state: ctx.ativo && ctx.indexado ? 'success' : ctx.ativo ? 'pending' : 'failed',
+      triggeredAt
+    }))
+    const validos = contextos.filter((ctx) => ctx.ativo).length
 
     etlLogs.value.unshift({
       id: Date.now(),
       timestamp: triggeredAt,
-      message: data.message || 'Schema, dados, treinamento e embeddings preparados com sucesso.',
-      status: 'success',
-      totalRecords: counts.vfactvendasresolved || 0,
-      changedRecords: counts.vfactvendasresolved || 0,
+      message: data.chave_configurada
+        ? `${validos} de ${contextos.length} contexto(s) válidos e indexados.`
+        : `${validos} de ${contextos.length} contexto(s) válidos. Configure a chave da Mistral para indexar o RAG.`,
+      status: validos === contextos.length ? 'success' : 'error',
+      totalRecords: contextos.length,
+      changedRecords: validos,
       rows: [],
       runs: stages
     })
@@ -1076,9 +1052,10 @@ onBeforeUnmount(() => {
                 <Database class="h-8 w-8 text-accent" stroke-width="1.5" />
               </div>
               <div class="space-y-1">
-                <h2 class="text-xl font-semibold text-text-primary">Preparar Dados de Vendas</h2>
+                <h2 class="text-xl font-semibold text-text-primary">Carregar Contextos</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
-                  Aplica o schema, recarrega os dados mock, recria a view, treina a knowledge base e sincroniza embeddings.
+                  Valida os contextos da pasta de dados contra o dados.db e, com a chave da Mistral configurada,
+                  gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
                 </p>
               </div>
             </div>

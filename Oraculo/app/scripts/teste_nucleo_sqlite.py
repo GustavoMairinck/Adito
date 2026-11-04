@@ -15,8 +15,31 @@ from pathlib import Path
 API_DIR = Path(sys.argv[1])
 REPO_DIR = API_DIR.parent.parent
 DATA_DIR = Path(os.environ["ORACULO_DATA_DIR"])
-EXEMPLO = REPO_DIR / "contexts" / "exemplo-vendas"
+DEMO_CONTEXTO = REPO_DIR / "contexts" / "exemplo-vendas"
 sys.path.insert(0, str(API_DIR))
+
+# Contexto próprio do teste, sobre o dados.db mínimo abaixo (com uma coluna sensível).
+EXEMPLO = DATA_DIR / "ctx-teste"
+shutil.rmtree(EXEMPLO, ignore_errors=True)
+EXEMPLO.mkdir(parents=True)
+(EXEMPLO / "views.json").write_text(json.dumps({
+    "contexto": "exemplo-vendas",
+    "nome": "Vendas (teste)",
+    "views": [
+        {"name": "vfactvendasresolved", "description": "Uma linha por venda.",
+         "sensitive_columns": ["cliente_cpf"], "embed_columns": ["produto", "categoria_produto", "canal"],
+         "local_search_columns": ["cliente", "vendedor"]},
+        {"name": "v_resumo", "description": "Receita total por produto."},
+    ],
+    "llm_row_limit": 20,
+}), encoding="utf-8")
+(EXEMPLO / "rules.md").write_text("Receita: SUM(receita_liquida)\n", encoding="utf-8")
+(EXEMPLO / "examples.json").write_text(json.dumps([
+    {"question": "Receita por produto?", "sql": "SELECT produto, SUM(receita_liquida) FROM vfactvendasresolved GROUP BY produto"},
+    {"question": "Vendas por canal?", "sql": "SELECT canal, COUNT(id_venda) FROM vfactvendasresolved GROUP BY canal"},
+    {"question": "Receita por ano?", "sql": "SELECT ano, SUM(receita_liquida) FROM vfactvendasresolved GROUP BY ano"},
+    {"question": "Produto que mais faturou?", "sql": "SELECT produto, total FROM v_resumo ORDER BY total DESC LIMIT 1"},
+]), encoding="utf-8")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "bi_agent_api.settings")
 
 ok = 0
@@ -212,8 +235,11 @@ user.is_staff = True
 user.save()
 req = fac.post("/x")
 force_authenticate(req, user=user)
+chave_salva = os.environ.pop("MISTRAL_API_KEY")  # sem chave: só valida, não chama a Mistral
 resp = dv.data_bootstrap(req)
+os.environ["MISTRAL_API_KEY"] = chave_salva
 check("recarga de contextos da pasta de dados", resp.status_code == 200 and resp.data["contextos"][0]["ativo"], resp.data)
+check("sem chave a recarga não indexa e avisa", resp.data["chave_configurada"] is False and resp.data["contextos"][0]["indexado"] is False, resp.data)
 
 print("\n[9] Checkpointer SQLite no app.db")
 from agents.orchestrator.graph import get_graph  # noqa: E402
@@ -254,10 +280,38 @@ check("histórico reexecuta o SQL e devolve as linhas atuais", linhas.status_cod
 quebrada = Message.objects.create(conversation=conversa, role="assistant", content="ok",
                                   metadata={"sql": "SELECT coluna_que_sumiu FROM v_resumo"})
 check("SQL que não roda mais vira 409 com aviso", cli.get(f"/api/chat/messages/{quebrada.id}/rows", HTTP_X_ORACULO_TOKEN="token-de-teste").status_code == 409)
+tok = {"HTTP_X_ORACULO_TOKEN": "token-de-teste"}
+check("api/me informa que a chave está configurada", cli.get("/api/me", **tok).json()["llm_configured"] is True)
+chave = os.environ.pop("MISTRAL_API_KEY")
+check("api/me informa chave ausente", cli.get("/api/me", **tok).json()["llm_configured"] is False)
+sem_chave = cli.post("/api/chat/stream", json.dumps({"question": "oi"}), content_type="application/json", **tok)
+check("chat sem chave responde 503 pedindo a configuração", sem_chave.status_code == 503 and "Configurações" in sem_chave.json()["error"], sem_chave.content[:200])
+os.environ["MISTRAL_API_KEY"] = chave
+check("teste de chave vazia é recusado", cli.post("/api/config/test-llm-key", {"key": ""}, content_type="application/json", **tok).status_code == 400)
+falsa = cli.post("/api/config/test-llm-key", {"key": "chave-falsa"}, content_type="application/json", **tok).json()
+check("chave falsa é reprovada (ou sem rede)", falsa["ok"] is False and falsa["reason"] in {"Chave inválida.", "Sem conexão com a Mistral. Verifique a internet e tente de novo."}, falsa)
 ferramenta = local_tools()[0]
 check("bi_agent local com o mesmo contrato do MCP",
       ferramenta.name == "bi_agent" and set(ferramenta.args) == {"instruction", "tenant_id", "contexto_id", "thread_id"},
       ferramenta.args)
+
+print("\n[11] Demonstração de vendas (scripts/gerar_dados_demo.py + contexts/exemplo-vendas)")
+import subprocess  # noqa: E402
+
+demo_db = DATA_DIR / "demo.db"
+demo_db.unlink(missing_ok=True)
+gerado = subprocess.run([sys.executable, str(REPO_DIR / "scripts" / "gerar_dados_demo.py"), str(demo_db)], capture_output=True, text=True)
+check("gerador cria o dados.db da demo com 1.200 vendas", gerado.returncode == 0 and "vfactvendasresolved: 1200 linhas" in gerado.stdout, gerado.stderr[-300:])
+demo_ctx, demo_exemplos, demo_erros = load_context_dir(DEMO_CONTEXTO, tenant, dados_path=demo_db)
+check("contexto de exemplo é válido contra a demo", not demo_erros, demo_erros)
+quebrados = []
+for exemplo in demo_exemplos:
+    try:
+        with connect_dados(read_policy_for(demo_ctx), demo_db) as conn:
+            conn.execute(exemplo["sql"]).fetchall()
+    except Exception as exc:
+        quebrados.append((exemplo["question"], str(exc)))
+check(f"os {len(demo_exemplos)} exemplos rodam na demo com a política do contexto", len(demo_exemplos) == 68 and not quebrados, quebrados[:3])
 
 print(f"\nResultado: {ok} OK, {len(falhas)} falha(s)")
 if falhas:

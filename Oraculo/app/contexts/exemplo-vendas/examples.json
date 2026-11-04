@@ -1,18 +1,274 @@
 [
-  {
-    "question": "Qual a receita líquida total por produto?",
-    "sql": "SELECT produto, SUM(receita_liquida) AS receita_liquida_total FROM vfactvendasresolved GROUP BY produto ORDER BY receita_liquida_total DESC"
-  },
-  {
-    "question": "Quantas vendas houve por canal?",
-    "sql": "SELECT canal, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY canal ORDER BY total_vendas DESC"
-  },
-  {
-    "question": "Qual a receita por ano?",
-    "sql": "SELECT ano, SUM(receita_liquida) AS receita FROM vfactvendasresolved GROUP BY ano ORDER BY ano"
-  },
-  {
-    "question": "Qual produto mais faturou?",
-    "sql": "SELECT produto, total FROM v_resumo ORDER BY total DESC LIMIT 1"
-  }
+    {
+        "question": "Qual a receita líquida total por produto?",
+        "sql": "SELECT produto, SUM(receita_liquida) AS receita_liquida_total FROM vfactvendasresolved GROUP BY produto ORDER BY receita_liquida_total DESC"
+    },
+    {
+        "question": "Quais são os 5 produtos mais vendidos por quantidade?",
+        "sql": "SELECT produto, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY produto ORDER BY total_unidades DESC LIMIT 5"
+    },
+    {
+        "question": "Qual o lucro total por categoria de produto?",
+        "sql": "SELECT categoria_produto, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY categoria_produto ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Qual o segmento de produto com maior receita líquida?",
+        "sql": "SELECT segmento_produto, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY segmento_produto ORDER BY receita_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual o valor bruto total por produto?",
+        "sql": "SELECT produto, SUM(valor_bruto) AS valor_bruto_total FROM vfactvendasresolved GROUP BY produto ORDER BY valor_bruto_total DESC"
+    },
+    {
+        "question": "Qual o desconto médio concedido por categoria de produto?",
+        "sql": "SELECT categoria_produto, AVG(desconto) AS desconto_medio FROM vfactvendasresolved GROUP BY categoria_produto ORDER BY desconto_medio DESC"
+    },
+    {
+        "question": "Qual a margem de lucro percentual por produto?",
+        "sql": "SELECT produto, SUM(lucro) / NULLIF(SUM(receita_liquida), 0) * 100 AS margem_percentual FROM vfactvendasresolved GROUP BY produto ORDER BY margem_percentual DESC"
+    },
+    {
+        "question": "Quantas vendas foram realizadas por produto?",
+        "sql": "SELECT produto, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY produto ORDER BY total_vendas DESC"
+    },
+    {
+        "question": "Qual o custo total por segmento de produto?",
+        "sql": "SELECT segmento_produto, SUM(custo) AS custo_total FROM vfactvendasresolved GROUP BY segmento_produto ORDER BY custo_total DESC"
+    },
+    {
+        "question": "Qual o ticket médio por produto?",
+        "sql": "SELECT produto, AVG(receita_liquida) AS ticket_medio FROM vfactvendasresolved GROUP BY produto ORDER BY ticket_medio DESC"
+    },
+    {
+        "question": "Qual a receita líquida total por cliente?",
+        "sql": "SELECT cliente, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY cliente ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Quais clientes geraram mais lucro?",
+        "sql": "SELECT cliente, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY cliente ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Qual o número de vendas por porte de cliente?",
+        "sql": "SELECT porte_cliente, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY porte_cliente ORDER BY total_vendas DESC"
+    },
+    {
+        "question": "Qual a receita líquida total por setor do cliente?",
+        "sql": "SELECT setor_cliente, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY setor_cliente ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Qual o lucro médio por cliente?",
+        "sql": "SELECT cliente, AVG(lucro) AS lucro_medio FROM vfactvendasresolved GROUP BY cliente ORDER BY lucro_medio DESC"
+    },
+    {
+        "question": "Quantos clientes distintos compraram neste ano?",
+        "sql": "SELECT COUNT(DISTINCT cliente) AS total_clientes FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER)"
+    },
+    {
+        "question": "Qual o valor bruto total por setor do cliente?",
+        "sql": "SELECT setor_cliente, SUM(valor_bruto) AS valor_bruto_total FROM vfactvendasresolved GROUP BY setor_cliente ORDER BY valor_bruto_total DESC"
+    },
+    {
+        "question": "Qual o desconto total concedido por porte de cliente?",
+        "sql": "SELECT porte_cliente, SUM(desconto) AS desconto_total FROM vfactvendasresolved GROUP BY porte_cliente ORDER BY desconto_total DESC"
+    },
+    {
+        "question": "Qual o canal de vendas com maior receita líquida?",
+        "sql": "SELECT canal, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY canal ORDER BY receita_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a receita líquida total por canal de venda?",
+        "sql": "SELECT canal, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY canal ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Quantas vendas foram feitas por canal?",
+        "sql": "SELECT canal, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY canal ORDER BY total_vendas DESC"
+    },
+    {
+        "question": "Qual o lucro por canal de venda?",
+        "sql": "SELECT canal, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY canal ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Qual o desconto médio por canal de venda?",
+        "sql": "SELECT canal, AVG(desconto) AS desconto_medio FROM vfactvendasresolved GROUP BY canal ORDER BY desconto_medio DESC"
+    },
+    {
+        "question": "Qual canal tem o maior ticket médio?",
+        "sql": "SELECT canal, AVG(receita_liquida) AS ticket_medio FROM vfactvendasresolved GROUP BY canal ORDER BY ticket_medio DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a participação percentual de cada canal na receita total?",
+        "sql": "SELECT canal, SUM(receita_liquida) AS receita_canal, SUM(receita_liquida) * 100.0 / SUM(SUM(receita_liquida)) OVER () AS percentual FROM vfactvendasresolved GROUP BY canal ORDER BY receita_canal DESC"
+    },
+    {
+        "question": "Qual o vendedor com maior receita líquida?",
+        "sql": "SELECT vendedor, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY vendedor ORDER BY receita_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual o lucro total por vendedor?",
+        "sql": "SELECT vendedor, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY vendedor ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Quantas vendas cada vendedor realizou?",
+        "sql": "SELECT vendedor, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY vendedor ORDER BY total_vendas DESC"
+    },
+    {
+        "question": "Qual a receita líquida por equipe de vendas?",
+        "sql": "SELECT equipe_vendas, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY equipe_vendas ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Qual a margem de lucro por vendedor?",
+        "sql": "SELECT vendedor, SUM(lucro) / NULLIF(SUM(receita_liquida), 0) * 100 AS margem_percentual FROM vfactvendasresolved GROUP BY vendedor ORDER BY margem_percentual DESC"
+    },
+    {
+        "question": "Qual a quantidade total vendida por vendedor?",
+        "sql": "SELECT vendedor, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY vendedor ORDER BY total_unidades DESC"
+    },
+    {
+        "question": "Qual o ticket médio por vendedor?",
+        "sql": "SELECT vendedor, AVG(receita_liquida) AS ticket_medio FROM vfactvendasresolved GROUP BY vendedor ORDER BY ticket_medio DESC"
+    },
+    {
+        "question": "Qual equipe de vendas tem maior margem de lucro?",
+        "sql": "SELECT equipe_vendas, SUM(lucro) / NULLIF(SUM(receita_liquida), 0) * 100 AS margem_percentual FROM vfactvendasresolved GROUP BY equipe_vendas ORDER BY margem_percentual DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a receita líquida total por estado?",
+        "sql": "SELECT estado, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY estado ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Qual o lucro total por região geográfica?",
+        "sql": "SELECT regiao, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY regiao ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Qual cidade gerou mais receita líquida?",
+        "sql": "SELECT cidade, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY cidade ORDER BY receita_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a quantidade total vendida por região?",
+        "sql": "SELECT regiao, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY regiao ORDER BY total_unidades DESC"
+    },
+    {
+        "question": "Qual o desconto total por estado?",
+        "sql": "SELECT estado, SUM(desconto) AS desconto_total FROM vfactvendasresolved GROUP BY estado ORDER BY desconto_total DESC"
+    },
+    {
+        "question": "Quantas vendas foram realizadas por cidade?",
+        "sql": "SELECT cidade, COUNT(id_venda) AS total_vendas FROM vfactvendasresolved GROUP BY cidade ORDER BY total_vendas DESC"
+    },
+    {
+        "question": "Qual a receita líquida total por ano?",
+        "sql": "SELECT ano, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY ano ORDER BY ano"
+    },
+    {
+        "question": "Qual a receita líquida por mês neste ano?",
+        "sql": "SELECT mes, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) GROUP BY mes ORDER BY mes"
+    },
+    {
+        "question": "Qual o lucro por trimestre neste ano?",
+        "sql": "SELECT trimestre, SUM(lucro) AS lucro_total FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) GROUP BY trimestre ORDER BY trimestre"
+    },
+    {
+        "question": "Qual o crescimento da receita líquida ano a ano?",
+        "sql": "SELECT ano, SUM(receita_liquida) AS receita_total, SUM(receita_liquida) - LAG(SUM(receita_liquida)) OVER (ORDER BY ano) AS crescimento FROM vfactvendasresolved GROUP BY ano ORDER BY ano"
+    },
+    {
+        "question": "Qual o mês com maior receita líquida no histórico?",
+        "sql": "SELECT ano, mes, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY ano, mes ORDER BY receita_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual o trimestre com maior lucro no histórico?",
+        "sql": "SELECT ano, trimestre, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY ano, trimestre ORDER BY lucro_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a receita líquida acumulada nos últimos 3 meses?",
+        "sql": "SELECT SUM(receita_liquida) AS receita_ultimos_3_meses FROM vfactvendasresolved WHERE data_venda >= date('now', '-3 months')"
+    },
+    {
+        "question": "Qual a evolução semanal da receita líquida neste ano?",
+        "sql": "SELECT semana, SUM(receita_liquida) AS receita_semana FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) GROUP BY semana ORDER BY semana"
+    },
+    {
+        "question": "Qual o resumo financeiro geral (receita, custo, lucro, desconto total)?",
+        "sql": "SELECT SUM(valor_bruto) AS faturamento_bruto, SUM(desconto) AS descontos_concedidos, SUM(receita_liquida) AS receita_liquida_total, SUM(custo) AS custo_total, SUM(lucro) AS lucro_total FROM vfactvendasresolved"
+    },
+    {
+        "question": "Qual o ranking de produtos por margem de lucro?",
+        "sql": "SELECT produto, SUM(receita_liquida) AS receita_total, SUM(lucro) AS lucro_total, SUM(lucro) / NULLIF(SUM(receita_liquida), 0) * 100 AS margem_percentual FROM vfactvendasresolved GROUP BY produto ORDER BY margem_percentual DESC"
+    },
+    {
+        "question": "Qual o produto mais vendido por setor do cliente?",
+        "sql": "SELECT setor_cliente, produto, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY setor_cliente, produto ORDER BY setor_cliente, total_unidades DESC"
+    },
+    {
+        "question": "Qual canal gera mais lucro por segmento de produto?",
+        "sql": "SELECT segmento_produto, canal, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY segmento_produto, canal ORDER BY segmento_produto, lucro_total DESC"
+    },
+    {
+        "question": "Quais vendedores têm receita acima da média?",
+        "sql": "SELECT vendedor, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY vendedor HAVING SUM(receita_liquida) > (SELECT AVG(receita_vendedor) FROM (SELECT SUM(receita_liquida) AS receita_vendedor FROM vfactvendasresolved GROUP BY vendedor) AS sub) ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Qual o percentual de desconto médio por produto?",
+        "sql": "SELECT produto, AVG(desconto) / NULLIF(AVG(valor_bruto), 0) * 100 AS percentual_desconto_medio FROM vfactvendasresolved GROUP BY produto ORDER BY percentual_desconto_medio DESC"
+    },
+    {
+        "question": "Qual o lucro total por produto e canal?",
+        "sql": "SELECT produto, canal, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY produto, canal ORDER BY lucro_total DESC"
+    },
+    {
+        "question": "Qual o valor bruto versus receita líquida por ano?",
+        "sql": "SELECT ano, SUM(valor_bruto) AS valor_bruto_total, SUM(receita_liquida) AS receita_liquida_total, SUM(desconto) AS total_desconto FROM vfactvendasresolved GROUP BY ano ORDER BY ano"
+    },
+    {
+        "question": "Qual o cliente com maior quantidade total comprada?",
+        "sql": "SELECT cliente, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY cliente ORDER BY total_unidades DESC LIMIT 1"
+    },
+    {
+        "question": "Qual a receita líquida por vendedor em cada trimestre deste ano?",
+        "sql": "SELECT vendedor, trimestre, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) GROUP BY vendedor, trimestre ORDER BY vendedor, trimestre"
+    },
+    {
+        "question": "Qual o produto com maior desconto total concedido?",
+        "sql": "SELECT produto, SUM(desconto) AS desconto_total FROM vfactvendasresolved GROUP BY produto ORDER BY desconto_total DESC LIMIT 1"
+    },
+    {
+        "question": "Qual o custo médio por unidade vendida por produto?",
+        "sql": "SELECT produto, SUM(custo) / NULLIF(SUM(quantidade_vendida), 0) AS custo_medio_por_unidade FROM vfactvendasresolved GROUP BY produto ORDER BY custo_medio_por_unidade DESC"
+    },
+    {
+        "question": "Qual a receita líquida por estado e por produto?",
+        "sql": "SELECT estado, produto, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved GROUP BY estado, produto ORDER BY estado, receita_total DESC"
+    },
+    {
+        "question": "Quais produtos foram vendidos em mais de uma região?",
+        "sql": "SELECT produto, COUNT(DISTINCT regiao) AS total_regioes FROM vfactvendasresolved GROUP BY produto HAVING COUNT(DISTINCT regiao) > 1 ORDER BY total_regioes DESC"
+    },
+    {
+        "question": "Qual o total de vendas e receita por equipe de vendas neste ano?",
+        "sql": "SELECT equipe_vendas, COUNT(id_venda) AS total_vendas, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) GROUP BY equipe_vendas ORDER BY receita_total DESC"
+    },
+    {
+        "question": "Qual o lucro gerado por cada canal em cada região?",
+        "sql": "SELECT regiao, canal, SUM(lucro) AS lucro_total FROM vfactvendasresolved GROUP BY regiao, canal ORDER BY regiao, lucro_total DESC"
+    },
+    {
+        "question": "Qual o percentual do custo sobre a receita líquida por produto?",
+        "sql": "SELECT produto, SUM(custo) / NULLIF(SUM(receita_liquida), 0) * 100 AS percentual_custo FROM vfactvendasresolved GROUP BY produto ORDER BY percentual_custo DESC"
+    },
+    {
+        "question": "Quais clientes compraram mais de um produto diferente?",
+        "sql": "SELECT cliente, COUNT(DISTINCT produto) AS total_produtos_distintos FROM vfactvendasresolved GROUP BY cliente HAVING COUNT(DISTINCT produto) > 1 ORDER BY total_produtos_distintos DESC"
+    },
+    {
+        "question": "Qual o total de unidades vendidas e receita por mês no ano passado?",
+        "sql": "SELECT mes, SUM(quantidade_vendida) AS total_unidades, SUM(receita_liquida) AS receita_total FROM vfactvendasresolved WHERE ano = CAST(strftime('%Y', 'now') AS INTEGER) - 1 GROUP BY mes ORDER BY mes"
+    },
+    {
+        "question": "Quais são os 3 canais com maior quantidade de unidades vendidas?",
+        "sql": "SELECT canal, SUM(quantidade_vendida) AS total_unidades FROM vfactvendasresolved GROUP BY canal ORDER BY total_unidades DESC LIMIT 3"
+    },
+    {
+        "question": "Qual o lucro médio por venda em cada categoria de produto?",
+        "sql": "SELECT categoria_produto, AVG(lucro) AS lucro_medio_por_venda FROM vfactvendasresolved GROUP BY categoria_produto ORDER BY lucro_medio_por_venda DESC"
+    }
 ]

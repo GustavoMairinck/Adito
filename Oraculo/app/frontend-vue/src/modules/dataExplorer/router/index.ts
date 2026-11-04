@@ -13,18 +13,6 @@ const dataExplorerRoutes: RouteRecordRaw[] = [
         component: () => import('@/modules/dataExplorer/views/ExplorarDadosView.vue')
       }
     ]
-  },
-  {
-    path: '/admin/data-validation',
-    component: MainLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'DataValidation',
-        component: () => import('@/modules/dataExplorer/views/DataValidationView.vue')
-      }
-    ]
   }
 ]
 

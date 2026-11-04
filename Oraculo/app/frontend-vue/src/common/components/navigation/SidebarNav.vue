@@ -6,12 +6,10 @@ import brandIcon from '@/common/assets/brand-icon.png'
 import {
   AreaChart,
   MessageSquare,
-  Database,
   Settings,
   KeyRound,
   Sun,
   Moon,
-  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
   X
@@ -56,8 +54,7 @@ function closeSidebar() {
 const menuItems = [
   { icon: MessageSquare, label: 'Chat', path: '/chat' },
   { icon: AreaChart, label: 'Meu Dashboard', path: '/meu-dashboard' },
-  { icon: Database, label: 'Explorar Dados', path: '/explorar' },
-  { icon: ShieldCheck, label: 'Validacao de Dados', path: '/admin/data-validation', adminOnly: true },
+  // "Explorar Dados" fica fora do menu até ser refeita por contexto (filters.json); a rota /explorar continua.
   { icon: Settings, label: 'Administracao', path: '/admin', adminOnly: true },
   { icon: KeyRound, label: 'Configurações', path: '/configuracoes' }
 ]

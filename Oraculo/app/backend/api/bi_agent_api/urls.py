@@ -22,8 +22,6 @@ urlpatterns = [
     path('api/projects/top', dashboard_views.top_projects),
     path('api/projects', dashboard_views.projects),
     path('api/charts', dashboard_views.charts),
-    path('api/admin/data-validation', dashboard_views.data_validation),
-    path('api/admin/data-validation/analytics', dashboard_views.data_validation_analytics),
     path('api/admin/system-status', dashboard_views.system_status),
     path('api/admin/data/bootstrap', dashboard_views.data_bootstrap),
 ]

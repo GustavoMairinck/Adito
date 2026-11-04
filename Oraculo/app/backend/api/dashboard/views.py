@@ -68,10 +68,6 @@ def _money(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _metric(value):
-    return {"oltp": value, "olap": value, "delta_abs": 0, "delta_pct": 0, "status": "ok"}
-
-
 def _get_or_create_default_dashboard(user):
     dashboard, _ = Dashboard.objects.get_or_create(
         user=user,
@@ -249,60 +245,6 @@ def projects(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsAdminUser])
-def data_validation(request):
-    row = _fetchone(request, f"""
-        SELECT
-          COUNT(*) AS total_linhas,
-          COUNT(DISTINCT produto) AS qtd_produtos,
-          COUNT(DISTINCT cliente) AS qtd_clientes,
-          COUNT(DISTINCT canal) AS qtd_canais
-        FROM {ANALYTICS_VIEW}
-    """)
-    checks = [
-        {"id": "postgres-total-linhas", "name": "Linhas na view analítica", "oltp_value": row["total_linhas"], "olap_value": row["total_linhas"], "delta_abs": 0, "delta_pct": 0, "detail": "Validação direta no PostgreSQL após bootstrap.", "status": "ok"},
-        {"id": "postgres-produtos", "name": "Produtos distintos", "oltp_value": row["qtd_produtos"], "olap_value": row["qtd_produtos"], "delta_abs": 0, "delta_pct": 0, "detail": "Métrica calculada na view consolidada de vendas.", "status": "ok"},
-        {"id": "postgres-clientes", "name": "Clientes distintos", "oltp_value": row["qtd_clientes"], "olap_value": row["qtd_clientes"], "delta_abs": 0, "delta_pct": 0, "detail": "Métrica calculada na view consolidada de vendas.", "status": "ok"},
-        {"id": "postgres-canais", "name": "Canais distintos", "oltp_value": row["qtd_canais"], "olap_value": row["qtd_canais"], "delta_abs": 0, "delta_pct": 0, "detail": "Métrica calculada na view consolidada de vendas.", "status": "ok"},
-    ]
-    return Response({
-        "timestamp": timezone.now().isoformat(),
-        "summary": {"total": len(checks), "ok": len(checks), "warning": 0, "critical": 0},
-        "checks": checks,
-    })
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, IsAdminUser])
-def data_validation_analytics(request):
-    rows = _fetchall(request, f"""
-        SELECT
-          ano,
-          COALESCE(SUM(receita_liquida), 0) AS valor_pago,
-          COUNT(DISTINCT produto) AS qtd_projetos,
-          COUNT(DISTINCT cliente) AS qtd_pessoas,
-          COUNT(DISTINCT canal) AS qtd_editais,
-          COUNT(DISTINCT categoria_produto) AS qtd_modalidades,
-          COUNT(DISTINCT porte_cliente) AS qtd_status
-        FROM {ANALYTICS_VIEW}
-        GROUP BY ano
-        ORDER BY ano DESC
-    """)
-    return Response({"analytics_by_year": [
-        {
-            "ano": row["ano"],
-            "valor_pago": _metric(row["valor_pago"]),
-            "qtd_projetos": _metric(row["qtd_projetos"]),
-            "qtd_pessoas": _metric(row["qtd_pessoas"]),
-            "qtd_editais": _metric(row["qtd_editais"]),
-            "qtd_modalidades": _metric(row["qtd_modalidades"]),
-            "qtd_status": _metric(row["qtd_status"]),
-        }
-        for row in rows
-    ]})
-
-
-@api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def system_status(request):
     """Verifica o status real dos serviços de infraestrutura em tempo real."""
@@ -408,8 +350,10 @@ def data_bootstrap(request):
 
     # Desktop: recarrega e valida os contextos da pasta <dados do usuário>/contexts.
     # A indexação (embeddings) usa a chave do usuário e roda separada.
-    from core.contexts import load_context_dir
+    from analytics_index.management.commands.sync_text_embeddings import get_embedder
+    from core.contexts import index_contexto, load_context_dir
     from core.datastore import data_dir
+    from core.views import llm_configured
 
     tenant = request.user.tenant
     contexts_root = data_dir() / "contexts"
@@ -428,7 +372,21 @@ def data_bootstrap(request):
             log_error("data_bootstrap", f"Falha ao carregar {folder.name}: {exc}")
             loaded.append({"pasta": folder.name, "ativo": False, "erros": [str(exc)]})
             continue
-        loaded.append({"pasta": folder.name, "slug": contexto.slug, "ativo": not errors, "erros": errors})
+        item = {"pasta": folder.name, "slug": contexto.slug, "nome": contexto.name, "ativo": not errors, "erros": errors}
+        if not errors and llm_configured():
+            # RAG (esquema, regras, exemplos) e índice de valores; usa a chave do usuário.
+            try:
+                summary = index_contexto(contexto, get_embedder(), examples)
+                item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=summary["values"]["created"])
+            except Exception as exc:
+                log_error("data_bootstrap", f"Falha ao indexar {contexto.slug}: {exc}")
+                item.update(indexado=False, erros=[f"Indexação falhou: {exc}"])
+        else:
+            item["indexado"] = False
+        loaded.append(item)
 
     log_success("data_bootstrap", f"{sum(c['ativo'] for c in loaded)}/{len(loaded)} contexto(s) válidos")
-    return Response({"status": "success", "contextos": loaded}, status=status.HTTP_200_OK)
+    return Response(
+        {"status": "success", "chave_configurada": llm_configured(), "contextos": loaded},
+        status=status.HTTP_200_OK,
+    )
