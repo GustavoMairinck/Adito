@@ -7,7 +7,7 @@ Assistente de BI: você pergunta em português, o agente gera o SQL, executa nos
 - **Dados:** dois arquivos SQLite na pasta do usuário — `app.db` (conversas, dashboards, contextos) e `dados.db` (seus dados, aberto só para leitura).
 - **LLM:** Mistral; cada usuário informa a própria chave, guardada no cofre do sistema.
 
-As decisões do porte estão em [docs/PORTE_DESKTOP_DECISOES.md](docs/PORTE_DESKTOP_DECISOES.md). O `SETUP_GUIDE.md` e os `docker-compose.yml` são da versão web e não valem aqui.
+As decisões do porte estão em [../docs/](../docs/): as user stories em [../docs/stories/](../docs/stories/) e o registro completo em [../docs/PORTE_DESKTOP_DECISOES.md](../docs/PORTE_DESKTOP_DECISOES.md).
 
 > **Este guia é para desenvolvimento.** Por enquanto o app roda só a partir do código, por isso pede Python, Node e Rust (e, no Windows, o Visual Studio Build Tools). Quando o projeto estiver completo, haverá instaladores (`.exe` no Windows; `.deb`/`.AppImage` no Linux) que rodam sem nenhuma dessas ferramentas. Antes disso é preciso empacotar o backend Python com PyInstaller.
 
@@ -60,11 +60,11 @@ A chave da Mistral fica no **Gerenciador de Credenciais** do Windows.
 
 ## 2. Instalar as dependências (uma vez)
 
-Todos os comandos partem da raiz do repositório.
+Todos os comandos partem desta pasta (`Oraculo/app`).
 
 ### Backend Python
 
-O app procura o Python em `.venv/` na raiz do repositório — o nome e o lugar importam.
+O app procura o Python em `.venv/` dentro de `Oraculo/app` — o nome e o lugar importam.
 
 Linux:
 
@@ -113,7 +113,7 @@ contexts/<nome>/       um contexto por pasta: views.json, rules.md, examples.jso
 
 ### Usar a demonstração de vendas
 
-O repositório traz a mesma demo de vendas do Oráculo web (1.200 vendas) e um contexto pronto para ela.
+Esta pasta traz a mesma demo de vendas do Oráculo web (1.200 vendas) e um contexto pronto para ela.
 
 Linux:
 
@@ -142,7 +142,7 @@ Copy-Item -Recurse contexts\exemplo-vendas "$D\contexts\"
 
 ## 4. Rodar
 
-São dois terminais, ambos a partir da raiz do repositório.
+São dois terminais, ambos a partir de `Oraculo/app`.
 
 **Terminal 1 — front (deixe aberto):**
 
@@ -205,5 +205,6 @@ frontend-vue/       front Vue/Vite
 backend/api/        Django, agentes (LangGraph), chat, dashboard
 contexts/           contexto de exemplo (demo de vendas)
 scripts/            geração da demo e testes do núcleo
-docs/               decisões do porte desktop
+backend/training/   schema da demo de vendas (lido por scripts/gerar_dados_demo.py)
+mudanças/mudanca/   dados da demo de vendas (lidos por scripts/gerar_dados_demo.py)
 ```
