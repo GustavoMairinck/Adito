@@ -9,7 +9,7 @@ Assistente de BI: você pergunta em português, o agente gera o SQL, executa nos
 
 As decisões do porte estão em [docs/PORTE_DESKTOP_DECISOES.md](docs/PORTE_DESKTOP_DECISOES.md). O `SETUP_GUIDE.md` e os `docker-compose.yml` são da versão web e não valem aqui.
 
-> Por enquanto o app roda em **modo de desenvolvimento** (a partir do código). O instalador (`.deb`, `.AppImage`, `.msi`, `.exe`) depende de empacotar o backend Python com PyInstaller, que ainda não foi feito.
+> **Este guia é para desenvolvimento.** Por enquanto o app roda só a partir do código, por isso pede Python, Node e Rust (e, no Windows, o Visual Studio Build Tools). Quando o projeto estiver completo, haverá instaladores (`.exe` no Windows; `.deb`/`.AppImage` no Linux) que rodam sem nenhuma dessas ferramentas. Antes disso é preciso empacotar o backend Python com PyInstaller.
 
 ---
 
@@ -42,9 +42,15 @@ A chave da Mistral fica no **Secret Service** (GNOME Keyring ou KWallet), que j�
 
 ### Windows 10/11
 
+> **Só para desenvolvimento.** O Build Tools abaixo é exigido apenas de quem compila o projeto no Windows, porque o Rust usa o linker da Microsoft. Quando o projeto estiver completo, haverá um instalador `.exe` que roda sem Visual Studio, Rust, Node ou Python.
+
 1. Instale o [Python](https://www.python.org/downloads/) marcando **"Add python.exe to PATH"**.
 2. Instale o [Node.js LTS](https://nodejs.org).
-3. Instale o [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) com a carga **"Desenvolvimento para desktop com C++"**.
+3. Instale o Visual Studio Build Tools. Basta o compilador e o SDK (2 a 3 GB, em vez da carga completa de 6 a 8 GB):
+   ```powershell
+   winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621"
+   ```
+   Sem `winget`, use o [instalador](https://visualstudio.microsoft.com/visual-cpp-build-tools/) e marque a carga **"Desenvolvimento para desktop com C++"**.
 4. Instale o Rust com o [rustup-init.exe](https://rustup.rs).
 5. O WebView2 já vem no Windows 10/11 atualizado.
 
