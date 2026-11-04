@@ -1,0 +1,33 @@
+{
+  "name": "oraculo-esx-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@nuxt/ui": "^4.6.0",
+    "@tauri-apps/api": "^2.12.4",
+    "@vueuse/motion": "^3.0.3",
+    "apexcharts": "^5.10.4",
+    "axios": "^1.13.6",
+    "grid-layout-plus": "^1.1.1",
+    "lucide-vue-next": "^1.0.0",
+    "tailwindcss": "^4.2.2",
+    "vue": "^3.5.30",
+    "vue-router": "^5.0.4",
+    "vue3-apexcharts": "^1.11.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/node": "^24.12.0",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/tsconfig": "^0.9.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1",
+    "vue-tsc": "^3.2.5"
+  }
+}

@@ -1,0 +1,25 @@
+django
+whitenoise
+djangorestframework
+numpy
+sqlglot
+langchain
+langchain-core
+langchain-google-genai
+langchain-mistralai
+langchain-community
+langgraph
+langfuse
+pydantic
+python-dotenv
+bcrypt
+python-jose[cryptography]
+sqlalchemy
+pandas
+langgraph-checkpoint-sqlite
+django-cors-headers
+rich
+
+# O bi_agent roda no mesmo processo (agents/bi_agent/tool.py); sem servidor MCP.
+httpx
+daphne
