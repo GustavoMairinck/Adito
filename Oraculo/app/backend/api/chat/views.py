@@ -12,6 +12,7 @@ from .models import Conversation, Message, QueryExecution
 from .serializers import ConversationSerializer, MessageSerializer, QueryExecutionSerializer, AskRequestSerializer
 from agents.bi_agent.tool import get_bi_agent, local_tools
 from core.contexts import pick_contexto
+from core.views import LLM_KEY_MISSING, llm_configured
 from agents.orchestrator import router as orchestrator_router
 from agents.orchestrator import graph as orchestrator_graph_module
 from agents.orchestrator.graph import get_graph
@@ -209,6 +210,8 @@ def ask_question(request):
     tenant = getattr(user, 'tenant', None)
     if not tenant:
         return Response({"message": "Usuário não possui tenant configurado."}, status=status.HTTP_400_BAD_REQUEST)
+    if not llm_configured():
+        return Response({"message": LLM_KEY_MISSING}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     question = serializer.validated_data['question']
     conversation = _conversation_for(

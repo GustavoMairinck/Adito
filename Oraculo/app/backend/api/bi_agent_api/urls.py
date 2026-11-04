@@ -4,13 +4,14 @@ from django.urls import path, include
 from .views import health_check
 from dashboard import views as dashboard_views
 from chat.views import ask_question
-from core.views import contextos, me
+from core.views import contextos, me, test_llm_key
 
 # Desktop sem login: não há rotas de autenticação; toda chamada leva o token local do Tauri.
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health', health_check),
     path('api/me', me),
+    path('api/config/test-llm-key', test_llm_key),
     path('api/contextos', contextos),
     path('api/chat', ask_question),
     path('api/chat/', include('chat.urls')),

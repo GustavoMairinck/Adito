@@ -5,6 +5,7 @@ import dashboardRoutes from '@/modules/dashboard/router'
 import chatRoutes from '@/modules/chat/router'
 import dataExplorerRoutes from '@/modules/dataExplorer/router'
 import adminRoutes from '@/modules/admin/router'
+import settingsRoutes from '@/modules/settings/router'
 
 // Desktop sem login: não há rota /login nem guarda de autenticação.
 const routes: RouteRecordRaw[] = [
@@ -16,6 +17,7 @@ const routes: RouteRecordRaw[] = [
   ...chatRoutes,
   ...dataExplorerRoutes,
   ...adminRoutes,
+  ...settingsRoutes,
   {
     path: '/:pathMatch(.*)*',
     redirect: '/chat'

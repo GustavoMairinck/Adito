@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
 from core.contexts import pick_contexto
 from core.local_auth import get_local_user, is_valid_token, token_from_headers
+from core.views import LLM_KEY_MISSING, llm_configured
 from core.rich_logging import log_error, log_info, log_section, log_success
 from agents.bi_agent.tool import local_tools
 from agents.config import langfuse_callbacks
@@ -178,6 +179,9 @@ async def ask_stream(request):
 
     if not question:
         return JsonResponse({'error': 'Pergunta obrigatória'}, status=400)
+
+    if not llm_configured():
+        return JsonResponse({'error': LLM_KEY_MISSING}, status=503)
 
     tenant_id = auth_data['tenant_id']
     user_id    = str(auth_data['user'].id)

@@ -15,7 +15,10 @@ export default defineConfig({
     }
   },
   server: {
+    // O app Tauri em modo dev carrega exatamente esta porta (src-tauri/tauri.conf.json → devUrl);
+    // se ela estiver ocupada, falhar é melhor que subir noutra porta que o app não acha.
     port: 5173,
+    strictPort: true,
     host: true,
     watch: {
       usePolling: true

@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Database,
   Settings,
+  KeyRound,
   Sun,
   Moon,
   ShieldCheck,
@@ -57,7 +58,8 @@ const menuItems = [
   { icon: AreaChart, label: 'Meu Dashboard', path: '/meu-dashboard' },
   { icon: Database, label: 'Explorar Dados', path: '/explorar' },
   { icon: ShieldCheck, label: 'Validacao de Dados', path: '/admin/data-validation', adminOnly: true },
-  { icon: Settings, label: 'Administracao', path: '/admin', adminOnly: true }
+  { icon: Settings, label: 'Administracao', path: '/admin', adminOnly: true },
+  { icon: KeyRound, label: 'Configurações', path: '/configuracoes' }
 ]
 
 const visibleMenuItems = computed(() =>

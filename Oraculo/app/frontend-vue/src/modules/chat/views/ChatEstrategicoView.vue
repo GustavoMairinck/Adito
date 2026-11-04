@@ -11,6 +11,7 @@ import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialo
 import ChatSidebar from '@/modules/chat/components/ChatSidebar.vue'
 import ContextoSelector from '@/modules/chat/components/ContextoSelector.vue'
 import { useContextos } from '@/common/composables/useContextos'
+import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
@@ -36,6 +37,10 @@ const { selectedId: selectedContextoId, loadContextos } = useContextos()
 
 // Conversa ainda não salva no backend: o contexto pode ser escolhido.
 const isNewConversation = computed(() => !!currentConvId.value?.startsWith('local-'))
+
+// Sem chave da Mistral o app abre, mas o chat fica desativado com o motivo à vista.
+const { user } = useAuth()
+const llmConfigured = computed(() => !!user.value?.llm_configured)
 
 const {
   pinModalOpen,
@@ -133,6 +138,10 @@ onMounted(() => {
 const sendQuestion = async (questionText?: string) => {
   const userInput = (questionText ?? input.value).trim()
   if (!userInput || isLoading.value) return
+  if (!llmConfigured.value) {
+    showToast('Configure a chave da Mistral em Configurações para usar o chat.', 'error')
+    return
+  }
 
   input.value = ''
 
@@ -389,6 +398,14 @@ const confirmDeleteConversation = async () => {
           @pin="openPinModal"
           @suggest="sendQuestion($event)"
         />
+        <RouterLink
+          v-if="!llmConfigured"
+          to="/configuracoes"
+          class="mx-4 mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+        >
+          <AlertCircle class="h-4 w-4 shrink-0" />
+          O chat está desativado: falta a chave da Mistral. Clique para configurar.
+        </RouterLink>
         <ContextoSelector
           :is-new-conversation="isNewConversation"
           :conversation-contexto-id="currentConversation?.contextoId"
