@@ -1,0 +1,46 @@
+/backend/.venv
+venv/
+/backend/api/venv/
+/backend/api/staticfiles/
+.env*
+!.env.example
+!env.prod
+env
+/backend/.env
+# Kubernetes Secrets
+k8s/secrets.yaml
+k8s/.env.secrets
+k8s/.env.*
+.env.k8s
+/scripts/diagnostics/reports
+/database/scripts
+/database/scripts_test/
+.venv/
+study/
+# Ignorar Cache do Python Globalmente (em qualquer pasta)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignorar o diretório do Banco de Dados Interno do Cube.js
+.cubestore/
+
+# Projetos legados/anteriores
+projetos_anteriores/
+
+airflow/logs
+
+
+target/
+dbt_packages/
+logs/
+.env
+airflow/.env
+dbt/packages-lock.yml
+airflow/dags/__pycache__/
+airflow/dags/logs/
+.codex
+airflow/dags/jobs/__pycache__
+dbt/.user.yml
+dbt/package-lock.yml
+dbt_bak
