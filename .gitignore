@@ -1,0 +1,8 @@
+/.agents
+/.scrumaidev
+/docs
+/scripts
+/templates
+/AGENTS.md
+/.gitmessage
+*.env
