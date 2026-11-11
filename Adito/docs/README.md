@@ -25,6 +25,13 @@ Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo 
 | [US-014](stories/US-014_busca-local-nomes.md) | Resolver nomes de pessoas sem enviá-los à nuvem | Backlog |
 | [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard e Explorar Dados por contexto | Backlog |
 
+## ETL do Adito (EPIC-07)
+
+Extração de SRC, SigPesq, CNPq/DGP e Lattes e cruzamento por nome, em [../etl/](../etl/). Carga no banco unificado por [../scripts/popular_banco.py](../scripts/popular_banco.py).
+
+- **[discovery/adito.md](discovery/adito.md)** (rev. 4) e **[requirements/adito-etl.md](requirements/adito-etl.md)**.
+- **[product_backlog.md](product_backlog.md)**: stories US-ETL-01 a US-ETL-07 em [stories/](stories/).
+
 ## Decisões em uma linha
 
 | Tema | Decisão | US |
