@@ -65,7 +65,7 @@ python3 popular_banco.py --so-gerar                    # só gera o SQL e o rela
 
 - **Estrutura intacta:** não altera o banco (nada de CREATE, ALTER, DROP ou TRUNCATE). Se já houver dados, a carga para sem gravar nada; para recarregar, rode `./recriar_banco.sh` antes.
 - **Tabelas de domínio:** as do `01_tipos_e_dominios.sql` não recebem linhas novas. Valor fora delas ou fora de um ENUM vira NULL e aparece no relatório.
-- **Pessoas:** uma linha em `pessoa` por pessoa do cruzamento (nome normalizado, regras do horizon_etl). CPF, e-mail, telefone, fax e data de nascimento não vêm do ETL e ficam vazios; sexo e endereço profissional (Lattes, sem telefone) e o endereço do grupo (CNPq) entram. Antes de executar, o SQL é conferido contra e-mail e CPF.
+- **Pessoas:** uma linha em `pessoa` por pessoa do cruzamento (nome normalizado, regras do horizon_etl). O banco não tem CPF nem e-mail de pessoa (colunas removidas do DDL); telefone, fax e data de nascimento não vêm do ETL e ficam vazios; sexo e endereço profissional (Lattes, sem telefone) e o endereço do grupo (CNPq) entram. Antes de executar, o SQL é conferido contra e-mail e CPF.
 - **`pessoa_lattes`:** além dos titulares de currículo, tem linhas sem dados para quem só aparece num currículo (integrante de projeto, orientando, aluno de banca), porque as tabelas do Lattes exigem `pessoa_lattes`.
 - **Orientações sem projeto:** a orientação do SigPesq cujo projeto não está no relatório de projetos ganha um `projeto_pesquisa` mínimo (só título).
 - **Onde ficam as saídas:** o SQL e o relatório (`carga_banco.sql`, `carga_banco_relatorio.json`) vão para `<etl>/saida/`, fora deste repositório, porque têm nomes de pessoas.

@@ -36,7 +36,7 @@
 | `organizacao` | — | Superclasse de instituições, campi e órgãos de fomento |
 | `instituicao_lattes` | `organizacao` | Subclasse com `sigla` e `pais` |
 | `instituicao_parceira_cnpq` | `organizacao` | Subclasse com `sigla` e `uf` |
-| `pessoa` | — | Superclasse de indivíduos (`nome`, `cpf`) |
+| `pessoa` | — | Superclasse de indivíduos (`nome`; sem CPF, removido em 11/11/2026 por LGPD) |
 | `pessoa_lattes` | `pessoa` | Perfil Lattes (`id_lattes`, `url_lattes`, etc.) |
 | `pessoa_src` | `pessoa` | Dados do SRC (`dt_nasc DATE`) |
 | `pesquisador` | `pessoa` | Papel de pesquisador (`id_titulacao`, `id_organizacao`) |
@@ -85,7 +85,7 @@
 
 ## 3. Correções Críticas de Modelagem Aplicadas
 
-1. **Email Único e Exclusivo:** Mantida uma única tabela `unificado.email` com `CHECK ((id_pessoa IS NOT NULL AND id_grupo_pesquisa_cnpq IS NULL) OR (id_pessoa IS NULL AND id_grupo_pesquisa_cnpq IS NOT NULL))`.
+1. **Email só de grupo:** a tabela `unificado.email` guarda apenas o e-mail de contato do `grupo_pesquisa_cnpq` (`id_grupo_pesquisa_cnpq NOT NULL`). O e-mail de pessoa (`id_pessoa`) e o `pessoa.cpf` foram removidos em 11/11/2026 (LGPD: o ETL do Adito não guarda CPF nem e-mail de pessoa).
 2. **Campus em Projeto de Pesquisa:** Removida a FK duplicada de organização genérica, mantendo apenas `id_campus REFERENCES organizacao(id)`.
 3. **Múltiplos Avaliadores na Banca:** `banca_examinadora` referencia um único candidato (`id_candidato`), e os avaliadores foram modelados na tabela de junção `membro_banca_examinadora`.
 4. **Hierarquia de Áreas:** `area_atuacao` possui `id_grande_area NOT NULL REFERENCES grande_area(id)`.

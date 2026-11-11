@@ -173,7 +173,6 @@ CREATE INDEX idx_area_atuacao_pessoa ON unificado.area_atuacao(id_pessoa_lattes)
 CREATE INDEX idx_pesquisador_titulacao ON unificado.pesquisador(id_titulacao);
 CREATE INDEX idx_estudante_curso ON unificado.estudante(id_curso);
 CREATE INDEX idx_grupo_pesquisa_org ON unificado.grupo_pesquisa(id_organizacao);
-CREATE INDEX idx_email_pessoa ON unificado.email(id_pessoa);
 CREATE INDEX idx_email_grupo ON unificado.email(id_grupo_pesquisa_cnpq);
 CREATE INDEX idx_acao_coordenador ON unificado.acao(id_coordenador);
 CREATE INDEX idx_atividade_acao ON unificado.atividade(id_acao);

@@ -20,8 +20,9 @@ Uso (a partir de Adito/scripts/; o ETL é a pasta irmã Adito/etl/):
 Pré-requisito no ETL: `adito-etl cruzar` já rodado (gera `trabalho/pessoas.json`).
 
 Dados pessoais: o ETL não guarda CPF, e-mail, telefone, fax nem data de
-nascimento; `pessoa.cpf`, `pessoa_src.dt_nasc`, `email`, `telefone` e `fax`
-ficam vazios. Sexo e endereço profissional (Lattes, sem telefone) e o endereço
+nascimento. O banco não tem mais `pessoa.cpf` nem e-mail de pessoa (removidos do
+DDL em 2026-11-11); `pessoa_src.dt_nasc`, `email` (só de grupo), `telefone` e
+`fax` ficam vazios. Sexo e endereço profissional (Lattes, sem telefone) e o endereço
 do grupo (CNPq) entram (decisão do usuário em 2026-11-11). Antes de executar, o SQL
 gerado é conferido: se tiver algo com formato de e-mail ou CPF, a carga para.
 
@@ -369,7 +370,7 @@ class Carga:
             raise SystemExit(f"erro: {arq} não existe; rode `adito-etl cruzar` no ETL antes")
         self.indice: dict[str, list[tuple[int, dict]]] = defaultdict(list)
         for p in ler(arq):
-            pid = self.novo("pessoa", nome=p["nome"], cpf=None)
+            pid = self.novo("pessoa", nome=p["nome"])
             for f in {p["nome_normalizado"], *p.get("variantes", [])}:
                 self.indice[f].append((pid, p))
 
