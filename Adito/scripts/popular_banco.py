@@ -490,6 +490,18 @@ class Carga:
                              id_vinculo=self.dominio("vinculo", p.get("Vínculo")))
 
     # ================================================================ SigPesq
+    @staticmethod
+    def cancelamento(bruto: Any) -> tuple[str | None, str | None]:
+        """'Por Maria Exemplo Silva Em 11/05/2022 17:39' -> ('Maria Exemplo Silva', '2022-05-11')."""
+        s = texto(bruto)
+        if not s:
+            return None, None
+        s = re.sub(r"(?i)^por\s+", "", s)
+        m = re.match(r"(?i)^(.*?)\s+em\s+(\d{1,2}/\d{1,2}/\d{2,4}.*)$", s)
+        if m:
+            return (texto(m.group(1)), data(m.group(2)))
+        return s, None
+
     def sigpesq(self) -> None:
         pasta = self.etl / "brutos" / "sigpesq"
         linhas = lambda sub: [l for f in sorted((pasta / sub).glob("*.json")) for l in ler(f).get("linhas", [])]
@@ -576,11 +588,11 @@ class Carga:
                                id_area_conhecimento=self.area(o.get("AreaConhecimento"), o.get("GradeArea")))
             fin = None if forma(o.get("AgFinanciadora")) in ("", "voluntario") else \
                 self.org(o.get("AgFinanciadora"), "AgenciaFinanciamento")
-            canc = texto(o.get("CanceladoPor"))
+            nome_canc, data_canc = self.cancelamento(o.get("CanceladoPor"))
             self.novo("orientacao", id_origem=inteiro(o.get("Id")), ano=ano(o.get("Ano")),
                       valor_bolsa=dinheiro(o.get("Valor")), data_inicio=data(o.get("Inicio")),
                       data_fim=data(o.get("Fim")), cancelado=booleano(o.get("Cancelado")),
-                      nome_cancelador=re.sub(r"(?i)^por\s+", "", canc) if canc else None, data_cancelado=None,
+                      nome_cancelador=nome_canc, data_cancelado=data_canc,
                       relatorio_enviado=None if not texto(o.get("AvaliacaoRelatorio")) else
                       forma(o.get("AvaliacaoRelatorio")) != "nao enviado",
                       modalidade=self.enum("tipo_modalidade", o.get("Modalidade")),
