@@ -207,6 +207,7 @@ class Carga:
         self.avisos: Counter = Counter()
         self.exemplos: dict[str, set[str]] = defaultdict(set)
         self.sem_coluna: Counter = Counter()
+        self.pares_area: dict[str, str] = {}
 
     # ---------------------------------------------------------------- básicos
     def aviso(self, tipo: str, exemplo: Any = None) -> None:
@@ -302,8 +303,27 @@ class Carga:
         nome = texto(nome)
         if not nome:
             return None
-        return self.unico("area_conhecimento", forma(nome), nome=nome,
-                          id_grande_area=self.grande_area(grande))
+        i = self.unico("area_conhecimento", forma(nome), nome=nome, id_grande_area=None)
+        self.par_area(nome, grande)
+        return i
+
+    def par_area(self, area: Any, grande: Any) -> None:
+        """Guarda que `area` pertence a `grande`; usado no fim por `completar_areas`."""
+        if texto(area) and texto(grande):
+            self.pares_area.setdefault(forma(area), texto(grande))
+
+    def completar_areas(self) -> None:
+        """Liga cada área à sua grande área, com os pares vistos em qualquer fonte
+        (a área pode ter sido criada antes por uma fonte sem a grande área)."""
+        for k, i in list(self.cache.items()):
+            if len(k) == 2 and k[0] == "area_conhecimento":
+                chave = k[1]
+                linha = self.linhas["area_conhecimento"][i]
+                if linha.get("id_grande_area") is None and chave in self.pares_area:
+                    linha["id_grande_area"] = self.grande_area(self.pares_area[chave])
+        sem = sum(1 for l in self.linhas["area_conhecimento"].values() if l.get("id_grande_area") is None)
+        if sem:
+            self.avisos["área de conhecimento sem grande área em nenhuma fonte (gravada NULL)"] += sem
 
     def simples(self, tabela: str, coluna: str, valor: Any) -> int | None:
         v = texto(valor)
@@ -340,17 +360,23 @@ class Carga:
             self.sub("pessoa_lattes", pid, **cols)
         return pid
 
-    def pesquisador(self, nome: Any, fonte: str) -> int | None:
+    def pesquisador(self, nome: Any, fonte: str, organizacao: int | None = None,
+                    titulacao: Any = None) -> int | None:
         pid = self.pessoa(nome, fonte)
         if pid is not None:
-            self.sub("pesquisador", pid)
+            self.sub("pesquisador", pid, id_organizacao=organizacao,
+                     id_titulacao=self.simples("titulacao", "nome", titulacao))
         return pid
 
-    def estudante(self, nome: Any, fonte: str, campus: Any = None, curso: Any = None) -> int | None:
+    NIVEL = {"ENSINO_PROFISSIONAL_DE_NIVEL_TECNICO": "ENSINO_PROFISSIONAL_TECNICO"}
+
+    def estudante(self, nome: Any, fonte: str, campus: Any = None, curso: Any = None,
+                  nivel: Any = None) -> int | None:
         pid = self.pessoa(nome, fonte)
         if pid is not None:
             self.sub("estudante", pid, id_campus=self.campus(campus),
-                     id_curso=self.simples("curso", "nome", curso))
+                     id_curso=self.simples("curso", "nome", curso),
+                     id_nivel_treinamento=self.dominio("nivel_treinamento", nivel, self.NIVEL) if nivel else None)
         return pid
 
     # ================================================================ SRC
@@ -487,7 +513,7 @@ class Carga:
 
         minimos = 0
         for o in linhas("orientacoes"):
-            orientador = self.pesquisador(o.get("Orientador"), "sigpesq")
+            orientador = self.pesquisador(o.get("Orientador"), "sigpesq", self.campus(o.get("CampusOrientador")))
             orientado = self.estudante(o.get("Orientado"), "sigpesq", o.get("Campus"), o.get("Curso"))
             if orientador is None or orientado is None:
                 self.aviso("orientação SigPesq sem orientador ou orientado (NOT NULL; não gravada)", o.get("Id"))
@@ -526,6 +552,9 @@ class Carga:
         self.avisos["projetos SigPesq mínimos criados para orientações (só título)"] += minimos
 
     # ================================================================ Lattes
+    ORDEM_TITULACAO = ["POS_DOUTORADO", "LIVRE_DOCENCIA", "DOUTORADO", "MESTRADO_PROFISSIONAL", "MESTRADO",
+                       "ESPECIALIZACAO", "APERFEICOAMENTO", "GRADUACAO"]
+
     MODALIDADE_ORIENTACAO = {"POS_DOUTORADO", "DOUTORADO", "MESTRADO", "ESPECIALIZACAO", "TCC",
                              "INICIACAO_CIENTIFICA", "OUTROS"}
 
@@ -548,7 +577,12 @@ class Carga:
                            sexo=self.enum("tipo_sexo", info.get("sexo")),
                            endereco_profissional=texto(info.get("endereco_profissional")))
 
+        maior = None  # formação concluída mais alta, para a titulação do pesquisador
         for f in cv.get("formacao_academica") or []:
+            nivel_f = texto((f.get("tipo") or "").partition(" em ")[0])
+            if nivel_f and ano(f.get("ano_conclusao")) and chave_enum(nivel_f) in self.ORDEM_TITULACAO:
+                if maior is None or self.ORDEM_TITULACAO.index(chave_enum(nivel_f)) < self.ORDEM_TITULACAO.index(chave_enum(maior)):
+                    maior = nivel_f
             inst = self.instituicao_lattes(f.get("nome_instituicao"))
             if inst is None:
                 self.aviso("formação sem instituição (NOT NULL; não gravada)", ident)
@@ -563,18 +597,25 @@ class Carga:
                       nome_orientador=achar("Orientador"), nome_coorientador=achar("Coorientador"),
                       id_pessoa_lattes=dono, id_instituicao=inst, id_curso=self.simples("curso", "nome", curso))
 
+        atual = None
         for a in cv.get("atuacao_profissional") or []:
             inst = self.instituicao_lattes(a.get("instituicao") or a.get("instituicao_nome"))
             if inst is None:
                 self.aviso("atuação sem instituição (NOT NULL; não gravada)", ident)
                 continue
+            if atual is None and forma(a.get("ano_fim")) == "atual":
+                atual = inst
             self.novo("atuacao_profissional", ano_inicio=ano(a.get("ano_inicio")), ano_fim=ano(a.get("ano_fim")),
                       atual=forma(a.get("ano_fim")) == "atual", vinculo=texto(a.get("vinculo")),
                       enquadramento=texto(a.get("enquadramento")), cargo_funcao=texto(a.get("cargo_funcao")),
                       regime_trabalho=texto(a.get("regime")), atividades=None, disciplinas=None,
                       id_pessoa_lattes=dono, id_instituicao=inst)
 
+        if atual is not None or maior:  # titular: organização da atuação atual e maior titulação concluída
+            self.sub("pesquisador", dono, id_organizacao=atual,
+                     id_titulacao=self.simples("titulacao", "nome", maior))
         for a in cv.get("areas_de_atuacao") or []:
+            self.par_area(a.get("area"), a.get("grande_area"))
             ga = self.grande_area(a.get("grande_area"))
             if ga is None:
                 continue
@@ -782,6 +823,8 @@ class Carga:
                     self.juncao("lideranca_grupo_pesquisa", id_grupo_pesquisa=gid,
                                 id_pesquisador=self.pesquisador(lider, "cnpq"))
             area = texto(idt.get("area_predominante"))
+            if area and ";" in area:
+                self.par_area(area.split(";", 1)[1], area.split(";")[0])
             if area:
                 self.juncao("grupo_pesquisa_grande_area", id_grupo_pesquisa_cnpq=gid,
                             id_grande_area=self.grande_area(area.split(";")[0]))
@@ -797,7 +840,12 @@ class Carga:
                                                        "estudantes", "tecnicos") if isinstance(it.get(c), str) and it.get(c).strip()), None)
                     if not nome or nome.strip().lower() == "ui-button":
                         continue
-                    pid = self.pessoa(nome, "cnpq")
+                    if tabela == "pesquisadores":
+                        pid = self.pesquisador(nome, "cnpq", titulacao=it.get("titulacao_maxima"))
+                    elif tabela == "estudantes":
+                        pid = self.estudante(nome, "cnpq", nivel=it.get("nivel_de_treinamento"))
+                    else:
+                        pid = self.pessoa(nome, "cnpq")
                     if pid is None:
                         continue
                     m = self.novo("membro_grupo", data_inicio=data(it.get("data_inicio")), data_fim=data(it.get("data_fim")),
@@ -887,6 +935,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     carga.sigpesq()
     carga.lattes()
     carga.cnpq()
+    carga.completar_areas()
     sql = carga.sql()
 
     saida = args.saida or etl / "saida" / "carga_banco.sql"
