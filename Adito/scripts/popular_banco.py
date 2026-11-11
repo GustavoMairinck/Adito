@@ -168,7 +168,7 @@ def ler_ddl() -> tuple[dict[str, list[str]], dict[str, set[str]]]:
 class Carga:
     # Ordem de inserção (respeita as chaves estrangeiras).
     ORDEM = [
-        "organizacao", "instituicao_lattes", "endereco", "grande_area", "area_conhecimento", "idioma",
+        "organizacao", "instituicao_lattes", "instituicao_parceira_cnpq", "endereco", "grande_area", "area_conhecimento", "subarea_conhecimento_lattes", "especialidade_lattes", "idioma",
         "titulacao", "curso", "pessoa", "pessoa_lattes", "pessoa_src", "pesquisador",
         "estudante", "area_atuacao", "grupo_pesquisa", "grupo_pesquisa_cnpq", "website",
         "grupo_pesquisa_externo", "linha_pesquisa", "papel", "membro_grupo", "membro_grupo_cnpq",
@@ -183,20 +183,21 @@ class Carga:
         "acao_campus", "parceiro_demandante_projeto", "participacao_estudante_projeto",
         "autoria_producao", "participacao_pesquisador_projeto", "membro_banca_examinadora",
         "grupo_pesquisa_projeto", "pesquisador_linha_pesquisa", "grupo_pesquisa_grande_area",
-        "grupo_pesquisa_linha_pesquisa",
+        "grupo_pesquisa_linha_pesquisa", "parceria_grupo", "equipamento_software", "grupo_pesquisa_equipamento",
+        "pessoa_lattes_titulacao",
     ]
     # Tabelas com id próprio (identity) que recebem id explícito; o resto usa o id da base.
     BASE = {"instituicao_lattes": "organizacao", "pessoa_lattes": "pessoa", "pessoa_src": "pessoa",
             "pesquisador": "pessoa", "estudante": "pessoa", "acao": "iniciativa",
             "projeto_pesquisa": "iniciativa", "projeto_lattes": "iniciativa",
             "membro_equipe_execucao_src": "membro_grupo", "grupo_pesquisa_cnpq": "grupo_pesquisa",
-            "membro_grupo_cnpq": "membro_grupo", "artigo_trabalho_evento": "producao",
+            "membro_grupo_cnpq": "membro_grupo", "instituicao_parceira_cnpq": "organizacao", "artigo_trabalho_evento": "producao",
             "livro_capitulo": "producao", "producao_tecnica_artistica_bibliografica": "producao"}
     JUNCAO = {"lideranca_grupo_pesquisa", "cooperacao_grupo_externo_projeto", "fomento_acao",
               "acao_campus", "parceiro_demandante_projeto", "participacao_estudante_projeto",
               "autoria_producao", "participacao_pesquisador_projeto", "membro_banca_examinadora",
               "grupo_pesquisa_projeto", "pesquisador_linha_pesquisa", "grupo_pesquisa_grande_area",
-              "grupo_pesquisa_linha_pesquisa"}
+              "grupo_pesquisa_linha_pesquisa", "grupo_pesquisa_equipamento", "pessoa_lattes_titulacao"}
 
     def __init__(self, etl: Path):
         self.etl = etl
@@ -262,31 +263,54 @@ class Carga:
         return None
 
     # ---------------------------------------------------------------- entidades
-    def org(self, nome: Any, tipo: str, pai: int | None = None) -> int | None:
+    def org(self, nome: Any, tipo: str, pai: int | None = None, direto: bool = False) -> int | None:
+        """Organização única por (tipo, nome). O Ifes e seus campi, em qualquer grafia e em
+        qualquer papel (instituição, financiador, parceira...), viram sempre a mesma linha."""
         nome = texto(nome)
         if not nome:
             return None
+        if not direto and (i := self.ifes_ou_campus(nome)) is not None:
+            return i
         return self.unico("organizacao", (tipo, forma(nome)), nome=nome,
                           id_tipo_organizacao=self.dominio("tipo_organizacao", tipo),
                           id_organizacao_pai=pai)
 
     def ifes(self) -> int:
-        return self.org("Instituto Federal do Espírito Santo", "Instituicao")
+        return self.org("Instituto Federal do Espírito Santo", "Instituicao", direto=True)
 
     def campus(self, nome: Any) -> int | None:
         nome = texto(nome)
         if not nome:
             return None
-        nome = re.sub(r"(?i)^campus\s+", "", nome).strip()
+        nome = re.sub(r"(?i)^(ifes\s*-\s*)?campus\s+(de\s+|do\s+|da\s+)?", "", nome).strip()
+        nome = re.sub(r"\s*[-/,]\s*(es|esp[ií]rito santo)$", "", nome, flags=re.I).strip()
         nome = nome.title() if nome.isupper() else nome
-        return self.org(nome, "Campus", self.ifes())
+        return self.org(nome, "Campus", self.ifes(), direto=True)
+
+    # Só quando o nome COMEÇA pelo Ifes ("Cooperativa dos Alunos do IFES", "PAEX-IFES" são outras organizações).
+    IFES = re.compile(r"^\s*(ifes|instituto federal do esp[ií]rito (do )?santo|instituto federal de educa[cç][aã]o,? "
+                      r"ci[eê]ncia e tecnologia do esp[ií]rito (do )?santo)\b", re.I)
+    PREFIXOS_LATTES = re.compile(r"^(orienta[cç][aã]o de outra natureza|inicia[cç][aã]o cient[ií]fica)\s*[-.]\s*", re.I)
+
+    def ifes_ou_campus(self, nome: str) -> int | None:
+        """'Ifes - Campus Serra', 'Instituto Federal do Espírito Santo-Campus Vitória' -> o campus;
+        'Instituto Federal do Espírito Santo - Serra' -> o campus Serra; 'Ifes' ou '... - IFES' -> o Ifes."""
+        if not self.IFES.search(nome):
+            return None
+        m = re.search(r"campus\s+(?:de\s+|do\s+|da\s+)?([^,.;/-]+)", nome, re.I) or \
+            re.search(r"santo\s*[-–]\s*(?!ifes\b)([A-Za-zÀ-ú][A-Za-zÀ-ú ]*)$", nome, re.I)
+        return self.campus(m.group(1).strip()) if m else self.ifes()
 
     def instituicao_lattes(self, bruto: Any) -> int | None:
-        """'Universidade Federal do Espírito Santo, UFES, Brasil' -> nome, sigla, país."""
+        """'Universidade Federal do Espírito Santo, UFES, Brasil' -> nome, sigla, país.
+        O Ifes e seus campi, em qualquer grafia, viram a organização única do Ifes/campus."""
         s = texto(bruto)
         if not s:
             return None
-        s = s.rstrip(". ")
+        s = self.PREFIXOS_LATTES.sub("", s.rstrip(". "))
+        if (i := self.ifes_ou_campus(s)) is not None:
+            self.sub("instituicao_lattes", i, sigla="IFES", pais="Brasil")
+            return i
         partes = [p.strip() for p in s.split(",")]
         sigla = pais = None
         if len(partes) >= 3 and len(partes[-2]) <= 15 and " " not in partes[-2] and len(partes[-1]) <= 30:
@@ -294,6 +318,15 @@ class Carga:
         i = self.org(s, "Instituicao")
         self.sub("instituicao_lattes", i, sigla=sigla, pais=pais)
         return i
+
+    @staticmethod
+    def inst_da_descricao(desc: Any) -> str | None:
+        """Última frase da descrição da banca quando é uma instituição ('... 2023. Universidade Federal do ES.')."""
+        partes = [p.strip() for p in re.split(r"\.\s+", str(desc or "").rstrip(". ")) if p.strip()]
+        if partes and re.search(r"universidade|instituto|faculdade|centro|escola|funda[cç][aã]o|ifes|ufes",
+                                partes[-1], re.I) and len(partes[-1]) <= 150:
+            return partes[-1]
+        return None
 
     def grande_area(self, nome: Any) -> int | None:
         nome = texto(nome)
@@ -369,6 +402,10 @@ class Carga:
         return pid
 
     NIVEL = {"ENSINO_PROFISSIONAL_DE_NIVEL_TECNICO": "ENSINO_PROFISSIONAL_TECNICO"}
+    # Programa de iniciação do SigPesq -> nível do bolsista (Jr/EM = ensino médio; os demais, graduação)
+    NIVEL_PROGRAMA = {"PIBIC": "Graduação", "PIBITI": "Graduação", "PIVIC": "Graduação", "PIVITI": "Graduação",
+                      "PIBIC_AF": "Graduação", "PIBIC_JR": "Ensino Médio (2o grau)",
+                      "PIBIC_EM": "Ensino Médio (2o grau)"}
 
     def estudante(self, nome: Any, fonte: str, campus: Any = None, curso: Any = None,
                   nivel: Any = None) -> int | None:
@@ -398,9 +435,8 @@ class Carga:
                      url_detalhe=texto(a.get("url_detalhe")),
                      id_natureza=self.dominio("natureza", a.get("Natureza")),
                      id_tipo_acao=self.dominio("tipo_acao", a.get("Tipo ação")),
-                     id_area_conhecimento=None, id_coordenador=coord, id_acao_pai=None)
-            if texto(a.get("Grande área conhecimento")):
-                self.sem_coluna["acao: grande área de conhecimento (sem área específica no SRC)"] += 1
+                     id_area_conhecimento=self.area(a.get("Grande área conhecimento"), a.get("Grande área conhecimento")),
+                     id_coordenador=coord, id_acao_pai=None)
             for c in {a.get("Campus"), a.get("campus")} - {None}:
                 self.juncao("acao_campus", id_organizacao=self.campus(c), id_acao=i)
             if forma(a.get("Fomento")) not in ("", "sem vinculo"):
@@ -474,7 +510,8 @@ class Carga:
             if texto(g.get("Sigla")):
                 grupos.setdefault(forma(g["Sigla"]), i)
             for n in nomes(g.get("Lideres"), r","):
-                self.juncao("lideranca_grupo_pesquisa", id_grupo_pesquisa=i, id_pesquisador=self.pesquisador(n, "sigpesq"))
+                self.juncao("lideranca_grupo_pesquisa", id_grupo_pesquisa=i,
+                            id_pesquisador=self.pesquisador(n, "sigpesq", campus))
             if texto(g.get("ParecerDiretoria")):
                 self.sem_coluna["grupo_pesquisa: parecer/situação no SigPesq (sem coluna)"] += 1
 
@@ -482,7 +519,7 @@ class Carga:
         for p in linhas("projetos"):
             coord = None
             for n in nomes(p.get("Coordenador"), r";"):
-                coord = coord or self.pesquisador(n, "sigpesq")
+                coord = coord or self.pesquisador(n, "sigpesq", self.campus(p.get("CampusExecucao")))
             i = self.novo("iniciativa", nome=texto(p.get("Titulo")) or f"Projeto {p.get('Id')}")
             self.sub("projeto_pesquisa", i, id_origem=inteiro(p.get("Id")), data_inicio=data(p.get("Inicio")),
                      data_fim=data(p.get("Fim")), palavras_chave=texto(p.get("PalavraChave")),
@@ -514,7 +551,8 @@ class Carga:
         minimos = 0
         for o in linhas("orientacoes"):
             orientador = self.pesquisador(o.get("Orientador"), "sigpesq", self.campus(o.get("CampusOrientador")))
-            orientado = self.estudante(o.get("Orientado"), "sigpesq", o.get("Campus"), o.get("Curso"))
+            orientado = self.estudante(o.get("Orientado"), "sigpesq", o.get("Campus") or o.get("CampusExecucao"),
+                                       o.get("Curso"), self.NIVEL_PROGRAMA.get(chave_enum(o.get("Programa"))))
             if orientador is None or orientado is None:
                 self.aviso("orientação SigPesq sem orientador ou orientado (NOT NULL; não gravada)", o.get("Id"))
                 continue
@@ -580,6 +618,9 @@ class Carga:
         maior = None  # formação concluída mais alta, para a titulação do pesquisador
         for f in cv.get("formacao_academica") or []:
             nivel_f = texto((f.get("tipo") or "").partition(" em ")[0])
+            if nivel_f and ano(f.get("ano_conclusao")):
+                self.juncao("pessoa_lattes_titulacao", id_pessoa_lattes=dono,
+                            id_titulacao=self.simples("titulacao", "nome", nivel_f))
             if nivel_f and ano(f.get("ano_conclusao")) and chave_enum(nivel_f) in self.ORDEM_TITULACAO:
                 if maior is None or self.ORDEM_TITULACAO.index(chave_enum(nivel_f)) < self.ORDEM_TITULACAO.index(chave_enum(maior)):
                     maior = nivel_f
@@ -616,6 +657,14 @@ class Carga:
                      id_titulacao=self.simples("titulacao", "nome", maior))
         for a in cv.get("areas_de_atuacao") or []:
             self.par_area(a.get("area"), a.get("grande_area"))
+            ac = self.area(a.get("area"), a.get("grande_area"))
+            sub = None
+            if ac and texto(a.get("subarea")):
+                sub = self.unico("subarea_conhecimento_lattes", (ac, forma(a["subarea"])), nome=texto(a["subarea"]),
+                                 id_area_conhecimento=ac)
+            if sub and texto(a.get("especialidade")):
+                self.unico("especialidade_lattes", (sub, forma(a["especialidade"])), nome=texto(a["especialidade"]),
+                           id_subarea_conhecimento=sub)
             ga = self.grande_area(a.get("grande_area"))
             if ga is None:
                 continue
@@ -700,7 +749,8 @@ class Carga:
                         "banca_examinadora", modalidade=self.enum("tipo_modalidade_banca", tipo),
                         titulo_trabalho=texto(b.get("titulo_trabalho")), ano=ano(b.get("ano")),
                         curso=texto(b.get("curso")), descricao=texto(b.get("descricao")),
-                        id_instituicao=self.instituicao_lattes(b.get("universidade")), id_candidato=cand)
+                        id_instituicao=self.instituicao_lattes(b.get("universidade") or self.inst_da_descricao(b.get("descricao"))),
+                        id_candidato=cand)
                 self.juncao("membro_banca_examinadora", id_banca_examinadora=self.cache[k], id_pessoa_lattes=dono)
 
         eventos = cv.get("eventos") or {}
@@ -784,6 +834,16 @@ class Carga:
                 "egressos_pesquisadores": ("Pesquisador", "EGRESSO"), "egressos_estudantes": ("Estudante", "EGRESSO"),
                 "egressos_tecnicos": ("Técnico", "EGRESSO"), "egressos": ("Egresso", "EGRESSO")}
 
+    @staticmethod
+    def itens(secao: Any) -> list[dict]:
+        """Linhas das tabelas genéricas do espelho: {"items": [[{...}, ...]]} ou {"outros_dados": [[...]]}."""
+        out: list[dict] = []
+        if isinstance(secao, dict):
+            for v in secao.values():
+                for bloco in v if isinstance(v, list) else []:
+                    out += [x for x in (bloco if isinstance(bloco, list) else [bloco]) if isinstance(x, dict)]
+        return out
+
     def cnpq(self) -> None:
         """Espelho DGP/CNPq: só para grupos que já vieram do SigPesq (o mesmo id de 16 dígitos)."""
         for arq in sorted((self.etl / "brutos" / "cnpq").glob("grupo_*.json")):
@@ -852,10 +912,25 @@ class Carga:
                                   id_papel=self.simples("papel", "nome", papel))
                     self.sub("membro_grupo_cnpq", m, status_participacao=status, id_pessoa=pid,
                              id_grupo_pesquisa_cnpq=gid)
-            for chave in ("instituicoes_parceiras_relatadas_pelo_grupo", "incts_parceiras_relatadas_pelo_grupo",
-                          "equipamentos_e_softwares_relevantes"):
-                if g.get(chave):
-                    self.sem_coluna[f"grupo CNPq: {chave} (formato ainda não mapeado)"] += 1
+            for chave, rotulo, campo in (("instituicoes_parceiras_relatadas_pelo_grupo", "Instituição parceira",
+                                          "nome_da_instituicao_parceira"),
+                                         ("incts_parceiras_relatadas_pelo_grupo", "INCT", "nome_da_inct_parceira")):
+                for it in self.itens(g.get(chave)):
+                    nome = texto(it.get(campo))
+                    if not nome:
+                        continue
+                    org = self.org(nome, "InstituicaoParceira")
+                    uf = texto(it.get("uf"))
+                    self.sub("instituicao_parceira_cnpq", org, sigla=texto(it.get("sigla")),
+                             uf=self.enum("tipo_uf", uf) if uf else None)
+                    self.unico("parceria_grupo", (gid, org), id_grupo_pesquisa_cnpq=gid,
+                               id_instituicao_parceira=org, tipo=rotulo)
+            for it in self.itens(g.get("equipamentos_e_softwares_relevantes")):
+                for k, tipo in (("softwares", "SOFTWARE"), ("software", "SOFTWARE"),
+                                ("equipamentos", "EQUIPAMENTO"), ("equipamento", "EQUIPAMENTO")):
+                    if texto(it.get(k)):
+                        eq = self.unico("equipamento_software", (tipo, forma(it[k])), nome=texto(it[k]), tipo=tipo)
+                        self.juncao("grupo_pesquisa_equipamento", id_grupo_pesquisa_cnpq=gid, id_equipamento_software=eq)
 
     # ================================================================ SQL
     def tabelas_com_dados(self) -> list[str]:
