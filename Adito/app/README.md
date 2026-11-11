@@ -60,11 +60,11 @@ A chave da Mistral fica no **Gerenciador de Credenciais** do Windows.
 
 ## 2. Instalar as dependências (uma vez)
 
-Todos os comandos partem desta pasta (`Oraculo/app`).
+Todos os comandos partem desta pasta (`Adito/app`).
 
 ### Backend Python
 
-O app procura o Python em `.venv/` dentro de `Oraculo/app` — o nome e o lugar importam.
+O app procura o Python em `.venv/` dentro de `Adito/app` — o nome e o lugar importam.
 
 Linux:
 
@@ -142,7 +142,7 @@ Copy-Item -Recurse contexts\exemplo-vendas "$D\contexts\"
 
 ## 4. Rodar
 
-São dois terminais, ambos a partir de `Oraculo/app`.
+São dois terminais, ambos a partir de `Adito/app`.
 
 **Terminal 1 — front (deixe aberto):**
 
