@@ -817,7 +817,7 @@ class Carga:
                     continue
                 k = ("producao", secao, sub, forma(titulo), ano(it.get("ano")))
                 if k not in self.cache:
-                    pid = self.cache[k] = self.novo("producao", titulo=titulo, descricao=None, ano=ano(it.get("ano")))
+                    pid = self.cache[k] = self.novo("producao", titulo=titulo, ano=ano(it.get("ano")))
                     if tipo == "artigo":
                         self.sub("artigo_trabalho_evento", pid,
                                  id_tipo_publicacao=self.dominio("tipo_artigo_evento", cat),

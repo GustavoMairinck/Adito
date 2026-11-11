@@ -108,4 +108,5 @@ Removidas porque nenhuma fonte as preenche, ou por LGPD, conforme o levantamento
 | `livro_capitulo` | `titulo_livro`, `cidade`, `isbn`, `edicao`, `volume` | Decisão de manter só o registro da produção |
 | `producao_tecnica_artistica_bibliografica` | `natureza`, `finalidade`, `id_instituicao_executora` | Não vêm nas fontes |
 | `premio_titulo` | `id_producao` | O Lattes não liga prêmio a produção |
+| `producao` | `descricao` | Nenhuma seção de produção do Lattes traz descrição |
 
