@@ -183,7 +183,7 @@ def extrair_lattes(lista: Path | None = None, *, workers: int = 3, max_cv: int |
         _gerar_config(run / "lattes.config", run / "lattes.list", saida, cache)
         log(f"Lattes: gerando JSON de {len(ids)} currículos")
         executar_scriptLattes(str(run / "lattes.config"), somente_json=True)
-        converter_pasta(saida, exe, apagar=True)
+        converter_pasta(saida, exe, apagar=True, cache=cache)
     except Exception as e:
         exe.falha("download", e)
         raise

@@ -289,7 +289,7 @@ class Carga:
         return self.org(nome, "Campus", self.ifes(), direto=True)
 
     # Só quando o nome COMEÇA pelo Ifes ("Cooperativa dos Alunos do IFES", "PAEX-IFES" são outras organizações).
-    IFES = re.compile(r"^\s*(ifes|instituto federal do esp[ií]rito (do )?santo|instituto federal de educa[cç][aã]o,? "
+    IFES = re.compile(r"^\s*(ifes|ins?tituto federal do esp[ií]rito (do )?santo|ins?tituto federal de educa[cç][aã]o,? "
                       r"ci[eê]ncia e tecnologia do esp[ií]rito (do )?santo)\b", re.I)
     PREFIXOS_LATTES = re.compile(r"^(orienta[cç][aã]o de outra natureza|inicia[cç][aã]o cient[ií]fica)\s*[-.]\s*", re.I)
 
@@ -328,6 +328,13 @@ class Carga:
                                 partes[-1], re.I) and len(partes[-1]) <= 150:
             return partes[-1]
         return None
+
+    @staticmethod
+    def lista_texto(v: Any) -> str | None:
+        """Lista do Lattes (["Pesquisa e desenvolvimento, Ifes.", ...]) -> texto, um item por linha."""
+        if isinstance(v, list):
+            return "\n".join(t for t in (texto(x) for x in v) if t) or None
+        return texto(v)
 
     def grande_area(self, nome: Any) -> int | None:
         nome = texto(nome)
@@ -625,7 +632,6 @@ class Carga:
                            texto_resumo=texto(info.get("texto_resumo")),
                            bolsa_produtividade=texto(info.get("bolsa_produtividade")),
                            url_lattes=texto(info.get("url")), data_atualizacao_cv=data(info.get("atualizacao_cv")),
-                           sexo=self.enum("tipo_sexo", info.get("sexo")),
                            endereco_profissional=texto(info.get("endereco_profissional")))
 
         maior = None  # formação concluída mais alta, para a titulação do pesquisador
@@ -661,8 +667,8 @@ class Carga:
                 atual = inst
             self.novo("atuacao_profissional", ano_inicio=ano(a.get("ano_inicio")), ano_fim=ano(a.get("ano_fim")),
                       atual=forma(a.get("ano_fim")) == "atual", vinculo=texto(a.get("vinculo")),
-                      enquadramento=texto(a.get("enquadramento")), cargo_funcao=texto(a.get("cargo_funcao")),
-                      regime_trabalho=texto(a.get("regime")), atividades=None, disciplinas=None,
+                      enquadramento=texto(a.get("enquadramento")), regime_trabalho=texto(a.get("regime")),
+                      atividades=self.lista_texto(a.get("atividades")),
                       id_pessoa_lattes=dono, id_instituicao=inst)
 
         if atual is not None or maior:  # titular: organização da atuação atual e maior titulação concluída
@@ -700,7 +706,7 @@ class Carga:
         for p in cv.get("premios_titulos") or []:
             if texto(p.get("descricao")):
                 self.novo("premio_titulo", descricao_titulo=texto(p["descricao"]), ano=ano(p.get("ano")),
-                          id_pessoa_lattes=dono, id_producao=None)
+                          id_pessoa_lattes=dono)
 
         for secao in ("projetos_pesquisa", "projetos_extensao", "projetos_desenvolvimento"):
             for pr in cv.get(secao) or []:
@@ -749,7 +755,8 @@ class Carga:
                               ano_inicio=ano(o.get("ano_inicio")), ano_conclusao=ano(o.get("ano_conclusao")),
                               tipo_trabalho=texto(o.get("tipo_trabalho")), id_orientador=dono,
                               id_orientando=self.pessoa_lattes(self.pessoa(o.get("orientando"), "lattes")),
-                              id_instituicao=inst, id_financiador=None)
+                              id_instituicao=inst,
+                              id_financiador=self.org(o.get("financiador"), "AgenciaFinanciamento"))
 
         for tipo, lista in sorted((cv.get("bancas") or {}).items()):
             for b in lista or []:
@@ -817,19 +824,15 @@ class Carga:
                                  veiculo_revista_evento=texto(it.get("revista") or it.get("evento") or it.get("jornal")),
                                  doi=texto(it.get("doi")), issn_isbn=texto(it.get("issn") or it.get("isbn")),
                                  volume=texto(it.get("volume")), numero=texto(it.get("numero")),
-                                 paginas=texto(it.get("paginas")), cidade=texto(it.get("cidade")),
+                                 paginas=texto(it.get("paginas")),
                                  data_publicacao=texto(it.get("data")), natureza=natureza)
                     elif tipo == "livro":
                         self.sub("livro_capitulo", pid, id_tipo_livro_capitulo=self.dominio("tipo_livro_capitulo", cat),
-                                 titulo_livro=texto(it.get("titulo_livro")), editora=texto(it.get("editora")),
-                                 cidade=texto(it.get("cidade")), isbn=texto(it.get("isbn")), edicao=None,
-                                 volume=None, paginas=texto(it.get("paginas")))
+                                 editora=texto(it.get("editora")), paginas=texto(it.get("paginas")))
                     else:
                         self.sub("producao_tecnica_artistica_bibliografica", pid,
                                  id_categoria=self.dominio("categoria_producao_tecnica", cat),
-                                 subtipo=texto(it.get("tipo")) or (sub or secao).replace("_", " "),
-                                 natureza=None, finalidade=texto(it.get("finalidade")),
-                                 id_instituicao_executora=None)
+                                 subtipo=texto(it.get("tipo")) or (sub or secao).replace("_", " "))
                 self.juncao("autoria_producao", id_pessoa_lattes=dono, id_producao=self.cache[k])
         pats = cv.get("patentes_registros") or {}
         n = sum(len(v or []) for v in pats.values()) + len((cv.get("producao_tecnica") or {}).get("softwares_com_patente") or [])

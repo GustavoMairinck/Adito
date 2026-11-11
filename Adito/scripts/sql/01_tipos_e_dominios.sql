@@ -5,17 +5,13 @@
 SET search_path TO unificado, public;
 
 -- ----------------------------------------------------------------------------
--- 1. ENUMs Nativos (17 tipos)
+-- 1. ENUMs Nativos (16 tipos)
 -- ----------------------------------------------------------------------------
 
 CREATE TYPE unificado.tipo_uf AS ENUM (
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
     'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO', 'EXTERIOR'
-);
-
-CREATE TYPE unificado.tipo_sexo AS ENUM (
-    'MASCULINO', 'FEMININO'
 );
 
 CREATE TYPE unificado.tipo_status_ciclo AS ENUM (

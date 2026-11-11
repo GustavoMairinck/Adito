@@ -72,3 +72,17 @@ def test_ler_lista(tmp_path):
     validos, invalidos = ler_lista(csv)
     assert validos == [("Ana", "1234567890123456")]
     assert len(invalidos) == 2
+
+
+def test_agencia_da_orientacao():
+    from adito_etl.fontes.lattes.financiadores import agencia
+    base = "Ana. Título. 2026. Dissertação (Mestrado em X) - "
+    ifes = "Instituto Federal de Educação, Ciência e Tecnologia do Espírito Santo"
+    assert agencia(base + ifes + ", Fundação de Amparo à Pesquisa do Espírito Santo. Orientador: Bia.") == \
+        "Fundação de Amparo à Pesquisa do Espírito Santo"
+    assert agencia(base + ifes + ", . Orientador: Bia.") is None
+    assert agencia(base + ifes + ". Orientador: Bia.") is None
+    assert agencia(base + "Instituto Federal de Educação, Ciência e Tecnologia do. Orientador: Bia.") is None
+    assert agencia(base + "Universidade Federal do Espírito Santo. Orientador: Bia.") is None
+    assert agencia(base + ifes + ", Coordenação de Aperfeiçoamento de Pessoal de Nível Superior. Bia.") == \
+        "Coordenação de Aperfeiçoamento de Pessoal de Nível Superior"

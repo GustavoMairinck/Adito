@@ -16,6 +16,7 @@ from typing import Any
 from ... import pii
 from ...comum import Execucao, brutos_dir, gravar_json
 from .colunas import DESCARTADOS_CONHECIDOS, INFORMACOES_PESSOAIS, SECOES
+from .financiadores import enriquecer
 
 LATTES_ID = re.compile(r"(?<!\d)\d{16}(?!\d)")
 _CONTATO = re.compile(r"\s*\b(?:Telefone|Fax|Ramal|Celular)\s*:\s*[\d()\s.+/-]*(?:ramal\s*:?\s*[\d\s]*)?",
@@ -63,7 +64,8 @@ def id_do_curriculo(arq: Path, cv: dict[str, Any]) -> str | None:
     return m.group(0) if m else None
 
 
-def converter_pasta(origem: Path, exe: Execucao, *, apagar: bool = False) -> None:
+def converter_pasta(origem: Path, exe: Execucao, *, apagar: bool = False, cache: Path | None = None) -> None:
+    """`cache`: pasta com o HTML de cada currículo (`<id>`), para ler a agência das orientações."""
     destino = brutos_dir("lattes")
     arquivos = sorted(origem.glob("*.json")) if origem.exists() else []
     if not arquivos:
@@ -78,6 +80,9 @@ def converter_pasta(origem: Path, exe: Execucao, *, apagar: bool = False) -> Non
             nome = str((cv.get("informacoes_pessoais") or {}).get("nome_completo") or "")
             if not nome or nome.startswith("[Nome-nao-identificado"):
                 raise ValueError(f"currículo {ident} vazio: o scriptLattes não leu o HTML (baixe de novo)")
+            if cache is not None and (cache / ident).exists():
+                n = enriquecer(cv, (cache / ident).read_text(encoding="utf-8", errors="ignore"))
+                exe.conta("orientacoes_com_financiador", n)
             filtrado, descartados = filtrar_curriculo(cv)
             for d in sorted(descartados - avisados):
                 exe.aviso(f"campo descartado (fora da lista de permitidas): {d}")

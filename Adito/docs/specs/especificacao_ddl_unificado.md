@@ -15,7 +15,7 @@
    * As subclasses possuem a chave primária `id BIGINT PRIMARY KEY REFERENCES superclasse(id) ON DELETE CASCADE`.
    * Permite que a mesma entidade base (ex: `Pessoa`) possua múltiplos papéis/extensões (`PessoaLattes`, `Pesquisador`, `Estudante`).
 3. **Estratégia Híbrida de Tipos e Domínios:**
-   * **17 ENUMs Nativos:** Usados para estados, siglas e tipos com ciclo de vida fixo (`tipo_uf`, `tipo_sexo`, `tipo_status_ciclo`, `tipo_modalidade_banca`, etc.).
+   * **16 ENUMs Nativos:** Usados para estados, siglas e tipos com ciclo de vida fixo (`tipo_uf`, `tipo_status_ciclo`, `tipo_modalidade_banca`, etc.). `tipo_sexo` foi removido em 11/11/2026.
    * **14 Tabelas de Domínio:** Usadas para taxonomias acadêmicas e operacionais que podem expandir (`tipo_formacao`, `nivel_treinamento`, `tipo_acao`, `programa`, etc.).
 4. **Tipos de Dados:**
    * Textos: `TEXT` para todos os atributos textuais, prevenindo quebras no ETL.
@@ -38,7 +38,7 @@
 | `instituicao_parceira_cnpq` | `organizacao` | Subclasse com `sigla` e `uf` |
 | `pessoa` | — | Superclasse de indivíduos (`nome`; sem CPF, removido em 11/11/2026 por LGPD) |
 | `pessoa_lattes` | `pessoa` | Perfil Lattes (`id_lattes`, `url_lattes`, etc.) |
-| `pessoa_src` | `pessoa` | Dados do SRC (`dt_nasc DATE`) |
+| `pessoa_src` | `pessoa` | Papel de pessoa do SRC (sem `dt_nasc`, removido em 11/11/2026) |
 | `pesquisador` | `pessoa` | Papel de pesquisador (`id_titulacao`, `id_organizacao`) |
 | `estudante` | `pessoa` | Papel de discente (`id_campus`, `id_nivel_treinamento`, `id_curso`) |
 | `grupo_pesquisa` | — | Superclasse de grupos de pesquisa |
@@ -90,3 +90,22 @@
 3. **Múltiplos Avaliadores na Banca:** `banca_examinadora` referencia um único candidato (`id_candidato`), e os avaliadores foram modelados na tabela de junção `membro_banca_examinadora`.
 4. **Hierarquia de Áreas:** `area_atuacao` possui `id_grande_area NOT NULL REFERENCES grande_area(id)`.
 5. **Identificadores de Origem:** `acao.id_origem`, `projeto_pesquisa.id_origem` e `orientacao.id_origem` preservam os IDs das fontes legadas sem colidir com as novas PKs.
+
+---
+
+## 4. Colunas removidas em 11/11/2026
+
+Removidas porque nenhuma fonte as preenche, ou por LGPD, conforme o levantamento de colunas 100% nulas após a carga do ETL do Adito:
+
+| Tabela | Colunas removidas | Motivo |
+| :--- | :--- | :--- |
+| `pessoa` | `cpf` | LGPD |
+| `email` | `id_pessoa` (e a restrição `chk_email_dono`) | LGPD; a tabela fica só para o e-mail do grupo CNPq |
+| `pessoa_lattes` | `sexo` (e o ENUM `tipo_sexo`) | O Lattes público não mostra o sexo |
+| `pessoa_src` | `dt_nasc` | LGPD |
+| `atuacao_profissional` | `cargo_funcao`, `disciplinas` | Quase sem registros (2 e 4 de 3.854) |
+| `artigo_trabalho_evento` | `cidade` | Não vem nas fontes |
+| `livro_capitulo` | `titulo_livro`, `cidade`, `isbn`, `edicao`, `volume` | Decisão de manter só o registro da produção |
+| `producao_tecnica_artistica_bibliografica` | `natureza`, `finalidade`, `id_instituicao_executora` | Não vêm nas fontes |
+| `premio_titulo` | `id_producao` | O Lattes não liga prêmio a produção |
+
