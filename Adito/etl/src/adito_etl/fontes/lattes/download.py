@@ -3,7 +3,7 @@
 Adaptado do horizon_etl (`src/flows/lattes/download.py` e
 `src/core/logic/lattes_generators.py`, commit 13a1cec), sem Prefect, Telegram
 nem banco:
-- a lista sai de `etl/entradas/lattes.csv` (`nome,lattes_id`), não de uma lista fixa no código;
+- a lista sai de `etl/entradas/lattes.csv` (`nome,lattes_id`, fora do git), não de uma lista fixa no código;
 - mesma correção do horizon para o `baixaCVLattes`, que tenta para sempre em
   timeout: aqui são `LATTES_TENTATIVAS` tentativas por currículo (padrão 2);
 - o HTML baixado (`trabalho/lattes_cache/`) e o JSON completo do scriptLattes

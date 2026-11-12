@@ -31,11 +31,15 @@ cp .env.example .env                     # ADITO_CREDENCIAIS=infisical + INFISIC
 .venv/bin/adito-etl src-participacoes             # brutos/src/participacoes/ (credencial do SRC)
 .venv/bin/adito-etl sigpesq                       # brutos/sigpesq/ (credencial do SigPesq)
 .venv/bin/adito-etl cnpq                          # brutos/cnpq/ (precisa do bruto do SigPesq)
-.venv/bin/adito-etl lattes                        # brutos/lattes/ (lista em entradas/lattes.csv)
+.venv/bin/adito-etl lattes                        # brutos/lattes/ (lista em entradas/lattes.csv, ver abaixo)
 .venv/bin/adito-etl cruzar                        # trabalho/pessoas.json + relatorio_cruzamento.md
 .venv/bin/adito-etl verificar-pii                 # confere brutos/ e trabalho/
 .venv/bin/python -m pytest                        # testes (inclui a varredura de PII sobre os dados reais)
 ```
+
+A lista do Lattes (`entradas/lattes.csv`, colunas `nome,lattes_id`) é dado pessoal e não vai para o
+repositório (`entradas/` está no `.gitignore`). Peça o arquivo à equipe ou monte o seu com o
+cabeçalho `nome,lattes_id` e uma linha por pesquisador; `--lista <arquivo>` aponta para outro caminho.
 
 Outros comandos:
 - `adito-etl src-acoes --max 3` grava só 3 ações (teste). A listagem ordena por Processo nº, é sempre em série e confere o "Total" da consulta (sem ordem fixa, a consulta repete e omite ações: 159 de 207 em paralelo, 196-197 em série, em 2026-11-10).
