@@ -1,10 +1,10 @@
 # Discovery — Adito (painel do Campus Serra com oráculo local)
 
-**Status:** PROBLEM_READY (rev. 5 aprovada em 2026-11-13)
-**Classificacao de Processo:** NORMAL PROCESS (rev. 5: banco DuckDB OLAP com 6 tabelas fato + adaptação do Adito)
+**Status:** PROBLEM_READY (rev. 5 aprovada em 2026-11-12; rev. 6 aprovada em 2026-11-13)
+**Classificacao de Processo:** NORMAL PROCESS (rev. 5: exportação JSON; rev. 6: banco DuckDB OLAP com 6 tabelas fato + adaptação do Adito)
 **Origem:** hibrido (usuario + codigo + `Adito/docs/PORTE_DESKTOP_DECISOES.md` + `Docs/Fatos/PropostaFatos.md`)
-**Data:** 2026-11-06 (rev. 3); 2026-11-10 (rev. 4); 2026-11-13 (rev. 5: geração do `dados.duckdb` OLAP a partir dos 41 JSONs com as 6 tabelas fato materializadas `vfact_*_resolved` e adaptação do `Adito/app`)
-**Repositório:** Adito, sobre o porte desktop em `Adito/app` (entrou no `development` pelo PR #33); ETL em `Adito/etl/` e scripts em `Adito/scripts/`
+**Data:** 2026-11-06 (rev. 3); 2026-11-10 (rev. 4); 2026-11-12 (rev. 5: exportação JSON das 41 tabelas); 2026-11-13 (rev. 6: geração do `dados.duckdb` OLAP a partir dos 41 JSONs com as 6 tabelas fato materializadas `vfact_*_resolved` e adaptação do `Adito/app`)
+**Repositório:** Adito, sobre o porte desktop em `Adito/app` (entrou no `development` pelo PR #33); ETL em `Adito/etl/`; banco e scripts em `Adito/scripts/`
 
 > "Adito" (do grego *ádyton*, o recinto interno onde o oráculo falava) é o produto desktop derivado do Oráculo-ESX. A versão web continua em `leds-agentes-Oraculo-ESX-main` e não muda.
 
@@ -35,7 +35,8 @@ Dar ao Campus Serra um painel generalista de documentos e informações de pesqu
 - *(rev. 4)* **SRCEtl** (`~/Área de trabalho/SRCEtl/src`) já extrai o SRC: lista as ações do campus (Playwright na consulta pública), baixa o detalhe de cada ação (httpx) e grava `data/serra/acao_<id>.json` (194 ações hoje); `gerenciar.py` entra logado e lê o HTML de público-alvo e equipe de execução de cada atividade (nome, CPF, e-mail…). O resto do pacote (`dashboard/`, `site/`, `enriquecer.py` com a Mistral, `consolidar.py`) é painel e relatório.
 - *(rev. 4)* **horizon_etl** (`~/Área de trabalho/HorizonETL/horizon_etl`) já extrai SigPesq (`adapters/sources/sigpesq`, `flows/sigpesq`), Lattes (`flows/lattes/download.py`, `lattes_parser.py`) e CNPq/DGP (`cnpq_crawler.py`, `flows/cnpq`), mas mistura a extração com carga em banco (`eo_lib`, Prefect), consolidação de pessoas e relatórios.
 - *(rev. 4)* `etl/` já existe no Adito, com README e `.gitignore` que bloqueia `brutos/`, `trabalho/` e `saida/`.
-- *(rev. 5)* As 41 tabelas base das 6 views/fatos consolidadas (`Docs/Fatos/PropostaFatos.md`) já foram exportadas do banco `oraculo_postgres_unificado` para `Adito/etl/saida/json/` (41 arquivos `<tabela>.json` + `manifesto.json`). O backend `Adito/app/backend/` ainda aponta para `dados.db` (SQLite) e contexto fictício `exemplo-vendas`.
+- *(rev. 5)* O schema PostgreSQL `unificado` (3FN, 85 tabelas em `Adito/scripts/sql/`) já existe e é populado por `Adito/scripts/popular_banco.py`. `Adito/scripts/exportar_json.py` extrai as 41 tabelas usadas pelas 6 views analíticas desnormalizadas (`Docs/Fatos/PropostaFatos.md`) em JSON + `manifesto.json` em `Adito/etl/saida/json/`.
+- *(rev. 6)* A partir dos 41 JSONs + `manifesto.json`, `Adito/scripts/gerar_duckdb.py` constrói o banco colunar `dados.duckdb` e materializa as 6 tabelas fato (`vfact_*_resolved`) em `main`. O backend do Adito (`Adito/app/backend/`) conecta ao DuckDB somente-leitura e opera no contexto `pesquisa-extensao-ifes`.
 
 ## Desired Outcome
 
@@ -49,6 +50,7 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - *(rev. 4)* Cada fonte se extrai sozinha, com um comando por fonte, e grava seu bruto em `etl/brutos/<fonte>/` sem depender de banco nem das outras fontes.
 - *(rev. 4)* O bruto do SRC sai sem CPF e sem e-mail; um teste da extração falha se aparecer algum dos dois.
 - *(rev. 4)* O script de cruzamento gera as ligações e um relatório por montagem com: pares ligados por fonte, nomes sem par e nomes ambíguos (homônimos) que não foram ligados.
+- *(rev. 5)* O script `Adito/scripts/exportar_json.py` exporta do PostgreSQL (`schema unificado`) exatamente as 41 tabelas usadas pelas 6 views de fatos (`Docs/Fatos/PropostaFatos.md`) para `Adito/etl/saida/json/<tabela>.json` mais `manifesto.json` (com tipos do catálogo, PKs e FKs), em transação `REPEATABLE READ READ ONLY` encerrada com `ROLLBACK`, com ordem determinística (dois exports seguidos geram `<tabela>.json` idênticos), checagem de `.gitignore`, varredura anti-PII (CPF/e-mail) e validação de integridade referencial entre os arquivos gerados.
 - Nenhum nome de pessoa é enviado à Mistral pelo app ou pela montagem (embeddings, prévias de resultado, histórico); só o que o usuário digitar na pergunta.
 - O SQL do oráculo não consegue gravar: conexão só leitura, só SELECT e só nas views da lista.
 - Todos os pares do `exemples.json` e o SQL do painel rodam no DuckDB sem erro.
@@ -68,6 +70,7 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
      - **Depois, SigPesq, Lattes e CNPq/DGP:** o código de extração copiado do horizon_etl, removendo tudo que não seja baixar o bruto.
   2. **Cruzamento:** um script separado lê os brutos e liga as pessoas entre as bases por **nome normalizado**.
   3. **Montagem:** Parquet por fonte + ligações + `abrir.sql` + `manifesto.json` (como na rev. 3).
+  4. *(rev. 5)* **Ponte PostgreSQL `unificado` → JSON para as Views de Fatos:** o banco relacional em 3FN (`schema unificado`, populado por `Adito/scripts/popular_banco.py`) continua sendo a base oficial da equipe. O script `Adito/scripts/exportar_json.py` (somente leitura, só biblioteca padrão do Python, via `psql` em modo `docker` ou `conexao`) tira uma fotografia consistente das 41 tabelas usadas pelas 6 views analíticas (`vfact_*_resolved` de `Docs/Fatos/PropostaFatos.md`), gravando `<saida>/<tabela>.json` e `<saida>/manifesto.json` (com metadados de colunas, PKs e FKs lidos de `pg_catalog`), além de testes unitários em `Adito/etl/tests/test_exportar_json.py` e documentação em `Adito/scripts/README.md`.
 - Parquet por fonte: os tipos de cada campo vêm do modelo da fonte, e as listas ficam como lista de verdade, não como texto.
 - Ligações entre fontes calculadas uma vez, na montagem, e entregues em Parquet:
   - grupo SigPesq ↔ CNPq pelo número do espelho;
@@ -99,7 +102,8 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - *(rev. 4)* CPF e e-mail em qualquer fase do ETL, inclusive no bruto
 - *(rev. 4)* Mudar SRCEtl ou horizon_etl nos repositórios originais
 - Outras bases: Egressos, Editais e Diretoria
-- PostgreSQL, MongoDB e qualquer servidor de banco
+- PostgreSQL, MongoDB e qualquer servidor de banco *(rev. 5: no app final do usuário; na máquina da equipe o PostgreSQL `unificado` continua sendo a base relacional oficial de onde `exportar_json.py` só lê, sem criar, alterar ou apagar tabelas, views ou dados)*
+- *(rev. 5)* No corte de `exportar_json.py`: popular ou recriar o banco PostgreSQL, criar views permanentes no banco (as 6 `vfact_*_resolved` são testadas apenas dentro de `BEGIN; ...; ROLLBACK;`), exportar as 44 tabelas do `unificado` que não são usadas pela proposta de fatos, montar o pacote final do DuckDB ou alterar `Adito/app`.
 - Usuário rodar o ETL
 - Usuário editar ou acrescentar dados
 - Histórico de cargas e consultas a versões antigas
@@ -121,6 +125,7 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - O oráculo lê os dados só por views, e o validador confere o nome da view.
 - *(rev. 4)* O SRC mantém uma sessão por usuário: a coleta autenticada é sequencial e usa a credencial da equipe (`.env`, nunca versionado).
 - *(rev. 4)* Dependências que os extratores trazem (Playwright, httpx, pydantic do SRCEtl; o que sobrar do horizon_etl) precisam ser propostas e aprovadas antes de entrar no Adito; o `etl/` tem ambiente próprio, separado do sidecar do app.
+- *(rev. 5)* `Adito/scripts/exportar_json.py` usa exclusivamente a biblioteca padrão do Python (3.10+) e fala com o PostgreSQL via `psql` (modo `docker` lendo `Adito/scripts/docker-compose.yml` e `.env`/`.env.example`, ou modo `conexao` via variáveis da `libpq`), em uma única sessão com `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; ... ROLLBACK;`.
 
 ## Assumptions
 
@@ -137,6 +142,7 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - [ASSUMPTION — agente, rev. 4] As chaves que não são de pessoa continuam: grupo SigPesq ↔ CNPq pelo espelho e orientação SigPesq ↔ Lattes por título + orientador (com o orientador comparado pelo nome normalizado).
 - [ASSUMPTION — agente, rev. 4] O bruto do SRC é JSON (o que o SRCEtl já grava por ação, mais as participações por atividade); o HTML das páginas não é guardado.
 - [ASSUMPTION — agente, rev. 4] O cruzamento roda sobre os brutos JSON e grava as ligações em `etl/trabalho/`; a montagem do Parquet/pacote é uma fase seguinte, fora do primeiro corte.
+- [ASSUMPTION — agente, rev. 5] Na versão atual de `Docs/Fatos/PropostaFatos.md` (commit `c91761a`), a união das tabelas das 6 views analíticas (`vfact_*_resolved`) mais `parceiro_demandante_projeto` (citada na seção 3.3.3) soma 41 tabelas do schema `unificado`. Tabelas fora dessa lista (ex.: `endereco`, `instituicao_lattes` referenciadas por FKs de tabelas exportadas) têm `destino_exportado: false` no `manifesto.json` de `Adito/etl/saida/json/` e não têm integridade referencial validada nos JSONs exportados.
 
 ## Decisões anteriores que este escopo muda
 
@@ -163,6 +169,8 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - *(rev. 4)* **Ligação só por nome.** Homônimos geram ligação errada se não forem barrados, e grafias diferentes (abreviação, nome de casada, erro de digitação) geram ligação perdida. Sem CPF não há como desempatar automaticamente; o relatório de ambíguos e sem par é a única defesa.
 - *(rev. 4)* **Extração do horizon_etl acoplada ao banco.** Os flows de SigPesq, Lattes e CNPq gravam via `eo_lib`/Prefect; separar "baixar o bruto" pode exigir mais que apagar arquivos.
 - *(rev. 4)* **Scraping quebra quando a página muda** (SRC é JSF; Playwright depende da estrutura). Copiar o código para o Adito cria uma segunda cópia para manter.
+- *(rev. 5)* **Escape em `COPY ... TO STDOUT` do PostgreSQL.** O modo texto padrão do `COPY` escapa barras invertidas e quebras de linha, o que corromperia strings dentro de um JSON. Mitigado usando saída sem escape de texto do `COPY` (ex.: `psql -At` com marcador ou `COPY ... WITH (FORMAT csv)` tratado) e validando cada arquivo com `json.loads` logo após a escrita.
+- *(rev. 5)* **Vazamento de dados pessoais para o git.** Os JSONs exportados contêm nomes reais em `pessoa.json` e `orientacao.json`. Mitigado verificando `git check-ignore -q <saida>/x.json` antes de gravar qualquer arquivo e varrendo todos os JSONs gerados contra padrões de CPF e e-mail.
 - Riscos do porte que continuam: empacotar o sidecar Python, SmartScreen no Windows sem assinatura, Secret Service ausente em algumas distros, build do Windows ainda não feito.
 
 ## Open Questions
@@ -182,10 +190,10 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 
 ## Review & Adjust
 
-Rev. 4:
+Rev. 5:
 - [x] Usuario revisou a proposta completa
 - [x] Alteracoes solicitadas foram incorporadas
-- [x] Decisoes relevantes foram confirmadas (3 perguntas respondidas em 2026-11-10)
+- [x] Decisoes relevantes foram confirmadas
 - [x] Nao existem perguntas bloqueantes abertas
 
 ### User adjustments
@@ -193,10 +201,11 @@ Rev. 4:
 - Respostas às perguntas da rev. 1: v1 para poucos usuários com pacote entregue pela equipe; marco de pronto = critérios de sucesso acima. `identifier` continua em aberto.
 - 2026-11-06 (rev. 3): (1) pacote leva ids opacos, hashes de CPF/e-mail ficam com a equipe; (2) nomes de pessoas não vão para a Mistral — removidos os embeddings de nomes, e o app tira colunas de nome do que vai ao LLM; (3) trabalho no repositório do Adito, sobre `Adito/app`.
 - 2026-11-10 (rev. 4, via `/scope-idea`, NORMAL PROCESS aprovado): ETL em fases (extração por fonte → cruzamento por nome → montagem); SRC primeiro, reaproveitando o SRCEtl quase igual, depois os extratores do horizon_etl enxugados para só baixar o bruto. Respostas: (1) nome normalizado é a chave principal para pessoas; (2) código copiado para `Adito/etl/`; (3) CPF e e-mail descartados já na coleta do SRC.
-- 2026-11-13 (rev. 5, via `/scope-idea`, NORMAL PROCESS): Geração do banco analítico DuckDB OLAP (`Adito/scripts/gerar_duckdb.py`) a partir dos 41 JSONs + `manifesto.json`, materializando as 6 tabelas fato (`vfact_*_resolved`) no schema `main` para máxima velocidade OLAP; adaptação de `Adito/app/backend/` de SQLite `dados.db` para DuckDB `dados.duckdb` somente-leitura; criação do contexto `pesquisa-extensao-ifes` e desativação de `exemplo-vendas` (`"ativo": false`).
+- 2026-11-12 (rev. 5, via `/scope-idea`, NORMAL PROCESS escolhido pelo usuário): adicionada a ponte de exportação JSON (`Adito/scripts/exportar_json.py`) do banco PostgreSQL `unificado` para as 41 tabelas usadas pelas 6 views analíticas de `Docs/Fatos/PropostaFatos.md`. Aprovado sem ajustes.
+- 2026-11-13 (rev. 6, via `/scope-idea`, NORMAL PROCESS): Geração do banco analítico DuckDB OLAP (`Adito/scripts/gerar_duckdb.py`) a partir dos 41 JSONs + `manifesto.json`, materializando as 6 tabelas fato (`vfact_*_resolved`) no schema `main` para máxima velocidade OLAP; adaptação de `Adito/app/backend/` de SQLite `dados.db` para DuckDB `dados.duckdb` somente-leitura; criação do contexto `pesquisa-extensao-ifes` e desativação de `exemplo-vendas` (`"ativo": false`).
 
 ## Gate G0 — PROBLEM READY
 
-**Status:** APPROVED (rev. 5)
+**Status:** APPROVED (rev. 6)
 
-**Aprovado pelo usuario:** rev. 3 sim (2026-11-06); rev. 4 sim (2026-11-10); rev. 5 sim (2026-11-13)
+**Aprovado pelo usuario:** rev. 3 sim (2026-11-06); rev. 4 sim (2026-11-10); rev. 5 sim (2026-11-12); rev. 6 sim (2026-11-13)

@@ -5,8 +5,8 @@ Backlog do Adito no monorepo. As stories do porte desktop (US-001 a US-015) est�
 ## Epics
 
 ### EPIC-07: ETL do Adito
-Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes e cruzamento das bases por nome normalizado, em `Adito/etl/`, rodado só pela equipe de dados. Origem: `docs/discovery/adito.md` (rev. 4) e `docs/requirements/adito-etl.md`.
-- **Stories**: US-ETL-01 a US-ETL-07.
+Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por nome normalizado em `Adito/etl/` e exportação JSON das 41 tabelas do banco PostgreSQL `unificado` usadas pelas views de fatos (`Adito/scripts/exportar_json.py`), rodados só pela equipe de dados. Origem: `docs/discovery/adito.md` (rev. 4 e rev. 5) e `docs/requirements/adito-etl.md` (rev. 1 e rev. 2).
+- **Stories**: US-ETL-01 a US-ETL-08.
 
 ---
 
@@ -23,8 +23,9 @@ Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes e cruzamento das bases po
 | [US-ETL-04](stories/US-ETL-04_extrator-cnpq-dgp.md) | Extrator do CNPq/DGP | EPIC-07 | 3 | 🟡 Média | 03 | FR05, BR04 | Backlog |
 | [US-ETL-05](stories/US-ETL-05_extrator-lattes.md) | Extrator do Lattes | EPIC-07 | 5 | 🟡 Média | 01 | FR06, A02, A05 | Backlog |
 | [US-ETL-07](stories/US-ETL-07_ligacoes-grupo-orientacao.md) | Ligações de grupo e de orientação | EPIC-07 | 3 | 🟡 Média | 03, 04, 05, 06 | FR12 | Backlog |
-| [US-ADITO-DUCKDB-01](stories/US-ADITO-DUCKDB-01_banco-duckdb-olap-fatos.md) | Banco analítico DuckDB OLAP com as 6 tabelas fato e adaptação do Adito | EPIC-07 | 8 | 🔴 Alta | JSONs exportados | FR14–18, BR07–09, NFR07–09 | 🔍 Review |
+| [US-ETL-08](stories/US-ETL-08_exportar-json-fatos.md) | Exportar tabelas das views de fatos do PostgreSQL em JSON | EPIC-07 | 5 | 🔴 Alta (slice 3) | banco `unificado` populado | FR14–20, BR07–10, NFR07–10, A06–07 | 🔍 Review |
+| [US-ADITO-DUCKDB-01](stories/US-ADITO-DUCKDB-01_banco-duckdb-olap-fatos.md) | Banco analítico DuckDB OLAP com as 6 tabelas fato e adaptação do Adito | EPIC-07 | 8 | 🔴 Alta | JSONs exportados | FR21–25, BR11–13, NFR11–13 | 🔍 Review |
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
-> Total: 29 pts. Primeiro vertical slice: US-ETL-01 + US-ETL-02 (SRC completo até o bruto, 8 pts). Segundo: US-ETL-03 + US-ETL-06 (primeiro cruzamento SRC ↔ SigPesq, 10 pts). Todas Nível ScrumAIDev 1, sem Spec nem Contract governados.
+> Total: 34 pts. Primeiro vertical slice: US-ETL-01 + US-ETL-02 (SRC completo até o bruto, 8 pts). Segundo: US-ETL-03 + US-ETL-06 (primeiro cruzamento SRC ↔ SigPesq, 10 pts). Terceiro: US-ETL-08 (ponte PostgreSQL `unificado` → JSON para as 6 views de fatos, 5 pts). Todas Nível ScrumAIDev 1, sem Spec nem Contract governados.

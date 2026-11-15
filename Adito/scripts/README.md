@@ -74,9 +74,49 @@ python3 popular_banco.py --so-gerar                    # só gera o SQL e o rela
 
 ---
 
+## 📤 Exportar JSON para o DuckDB
+
+`exportar_json.py` (apenas biblioteca padrão do Python 3.10+) lê o schema `unificado` do PostgreSQL em modo estritamente somente leitura (`BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; ... ROLLBACK;`) e gera em `Adito/etl/saida/json/` um arquivo `<tabela>.json` por tabela usada pelas views analíticas de `Docs/Fatos/PropostaFatos.md`, além de `manifesto.json`.
+
+### Por que exporta tabelas e não as views
+O PostgreSQL continua sendo a base relacional oficial em 3ª Forma Normal (3FN). O aplicativo desktop ("Oráculo") consultará seis views analíticas desnormalizadas (`vfact_*_resolved`) em um **DuckDB embutido**, sem depender de servidor PostgreSQL. Por isso, `exportar_json.py` exporta uma fotografia consistente das **tabelas base** (com mesmas colunas, mesmos IDs e chaves estrangeiras coerentes entre si) e um manifesto de schema; as views serão recriadas diretamente no DuckDB de destino.
+
+### Pré-requisitos e modos de execução
+O banco `unificado` já deve estar criado (`./recriar_banco.sh`) e populado (`python3 popular_banco.py`). Se o banco estiver vazio ou faltar alguma tabela da lista, o script para e avisa sem criar nem alterar nada.
+
+1. **Modo `docker` (padrão):** executa `docker compose exec -T <servico> psql ...` lendo serviço, banco e usuário de `Adito/scripts/docker-compose.yml` (e `.env` / `.env.example`):
+   ```bash
+   python3 Adito/scripts/exportar_json.py
+   python3 Adito/scripts/exportar_json.py --forcar
+   python3 Adito/scripts/exportar_json.py --tabelas pessoa,organizacao,acao --saida /caminho/saida/json
+   ```
+2. **Modo `conexao`:** usa um cliente `psql` local apontando para qualquer PostgreSQL com o schema `unificado`, configurado pelas variáveis padrão da `libpq` (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` e `.pgpass` / variável de ambiente de sessão):
+   ```bash
+   PGHOST=localhost PGPORT=5435 PGDATABASE=oraculo_db PGUSER=oraculo \
+     python3 Adito/scripts/exportar_json.py --modo conexao --forcar
+   ```
+3. **Somente validação (`--so-validar`):** revalida uma pasta já exportada (JSON válido, contagens, ordem das colunas e integridade referencial das FKs) sem conectar ao PostgreSQL:
+   ```bash
+   python3 Adito/scripts/exportar_json.py --so-validar Adito/etl/saida/json
+   ```
+
+### Lista de tabelas (41 tabelas) e como atualizar
+A lista de tabelas vem de `Docs/Fatos/PropostaFatos.md` (commit `c91761a`), agrupada na constante `TABELAS_POR_VIEW` em `exportar_json.py` (40 tabelas referenciadas nos blocos `CREATE OR REPLACE VIEW` mais `parceiro_demandante_projeto`, citada no texto da seção 3.3.3):
+
+| View | Tabelas usadas |
+| :--- | :--- |
+| `vfact_extensao_acao_resolved` | `acao`, `acao_campus`, `area_conhecimento`, `atividade`, `fomento_acao`, `grande_area`, `iniciativa`, `natureza`, `organizacao`, `pessoa`, `tipo_acao` |
+| `vfact_extensao_participacao_resolved` | `acao`, `acao_campus`, `atividade`, `iniciativa`, `organizacao`, `pessoa`, `registro_participante`, `situacao_participante`, `tipo_acao`, `tipo_atividade` |
+| `vfact_projeto_pesquisa_resolved` | `area_conhecimento`, `grande_area`, `iniciativa`, `organizacao`, `parceiro_demandante_projeto`, `pesquisador`, `pessoa`, `plano_trabalho`, `projeto_pesquisa`, `titulacao` |
+| `vfact_orientacao_bolsa_resolved` | `area_conhecimento`, `curso`, `edital`, `estudante`, `grande_area`, `iniciativa`, `nivel_treinamento`, `organizacao`, `orientacao`, `pesquisador`, `pessoa`, `plano_trabalho`, `programa`, `projeto_pesquisa`, `titulacao` |
+| `vfact_producao_cientifica_resolved` | `artigo_trabalho_evento`, `autoria_producao`, `categoria_producao_tecnica`, `livro_capitulo`, `organizacao`, `patente_registro`, `pesquisador`, `pessoa`, `pessoa_lattes`, `producao`, `producao_tecnica_artistica_bibliografica`, `tipo_artigo_evento`, `tipo_livro_capitulo`, `tipo_patente_registro` |
+| `vfact_grupo_pesquisa_membro_resolved` | `area_conhecimento`, `grande_area`, `grupo_pesquisa`, `grupo_pesquisa_cnpq`, `membro_grupo`, `membro_grupo_cnpq`, `organizacao`, `papel`, `pesquisador`, `pessoa`, `titulacao` |
+
+---
+
 ## 🦆 Gerar o Banco Analítico DuckDB OLAP (`gerar_duckdb.py`)
 
-`gerar_duckdb.py` lê `Adito/etl/saida/json/manifesto.json` e os 41 arquivos `<tabela>.json`, recria o schema `unificado` com tipagem explícita no DuckDB e **materializa as 6 tabelas fato (`CREATE TABLE main.vfact_*_resolved AS SELECT ...`)** definidas em `Docs/Fatos/PropostaFatos.md` em formato colunar nativo para máxima velocidade OLAP no Adito.
+`gerar_duckdb.py` lê `Adito/etl/saida/json/manifesto.json` e os 41 arquivos `<tabela>.json`, recria o schema `unificado` com tipagem explícita no DuckDB e **materializa as 6 tabelas fato (`CREATE TABLE main.vfact_*_resolved AS SELECT ...`)** definidas em `Docs/Fatos/PropostaFatos.md` em formato colunar nativo `v1.2.0` para máxima velocidade OLAP no Adito.
 
 ```bash
 # Gera Adito/app/data/dados.duckdb e valida as contagens das 41 tabelas base e das 6 tabelas fato
