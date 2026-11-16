@@ -7,7 +7,6 @@ from ..config import REPORT_AGENT_PROMPT
 from ..state import MultiAgentState
 from .reflection import format_collected_data_for_reflection
 
-
 async def report_agent_node(state: MultiAgentState) -> dict:
     collected = state.get("collected_data", [])
     forced_advance = state.get("forced_advance", False)

@@ -9,7 +9,7 @@ from .contexts import sync_default_contexts
 from .models import Contexto
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-LLM_KEY_MISSING = "Configure a chave da API do Gemini em Configurações para usar o chat."
+LLM_KEY_MISSING = "Configure a chave do Gemini em Configurações para usar o chat."
 
 
 def llm_configured() -> bool:
@@ -37,23 +37,28 @@ def me(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def test_llm_key(request):
-    """Testa uma chave da API do Gemini antes de o Tauri guardá-la no cofre. A chave não é gravada aqui."""
+    """Testa uma chave do Gemini antes de o Tauri guardá-la no cofre. A chave não é gravada aqui."""
     key = (request.data.get('key') or '').strip()
     if not key:
         return Response({"ok": False, "reason": "Informe a chave."}, status=400)
     try:
-        resp = httpx.get(GEMINI_MODELS_URL, params={"key": key}, timeout=15)
+        from agents.config import GEMINI_MODEL
+        resp = httpx.get(
+            f"{GEMINI_MODELS_URL}/{GEMINI_MODEL}",
+            headers={"x-goog-api-key": key}, timeout=15,
+        )
     except httpx.HTTPError:
-        return Response({"ok": False, "reason": "Sem conexão com a API do Gemini. Verifique a internet e tente de novo."})
+        return Response({"ok": False, "reason": "Sem conexão com o Gemini. Verifique a internet e tente de novo."})
     if resp.status_code == 200:
         return Response({"ok": True})
     reasons = {
-        400: "Chave da API do Gemini inválida.",
+        400: "Chave inválida ou solicitação recusada pelo Gemini.",
         401: "Chave inválida.",
-        403: "Chave sem permissão para a API do Gemini.",
+        403: "Chave sem permissão para a API ou para o modelo configurado.",
+        404: "Modelo Gemini indisponível. Verifique GEMINI_MODEL no backend.",
         429: "Cota da chave esgotada ou limite de uso atingido.",
     }
-    return Response({"ok": False, "reason": reasons.get(resp.status_code, f"A API do Gemini respondeu com erro {resp.status_code}.")})
+    return Response({"ok": False, "reason": reasons.get(resp.status_code, f"O Gemini respondeu com erro {resp.status_code}.")})
 
 
 @api_view(['GET'])

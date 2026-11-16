@@ -1,7 +1,7 @@
 """Teste do núcleo SQLite e dos contextos do Oráculo desktop, sem LLM (embeddings e modelo falsos).
 
 Uso (de backend/api, com app.db já migrado):
-    ORACULO_DATA_DIR=/tmp/oraculo-teste JWT_SECRET=x MISTRAL_API_KEY=x \
+    ORACULO_DATA_DIR=/tmp/oraculo-teste JWT_SECRET=x GEMINI_API_KEY=x \
         ../../.venv/bin/python ../../scripts/teste_nucleo_sqlite.py "$PWD"
 """
 import asyncio
@@ -235,9 +235,9 @@ user.is_staff = True
 user.save()
 req = fac.post("/x")
 force_authenticate(req, user=user)
-chave_salva = os.environ.pop("MISTRAL_API_KEY")  # sem chave: só valida, não chama a Mistral
+chave_salva = os.environ.pop("GEMINI_API_KEY")  # sem chave: só valida, não chama a Gemini
 resp = dv.data_bootstrap(req)
-os.environ["MISTRAL_API_KEY"] = chave_salva
+os.environ["GEMINI_API_KEY"] = chave_salva
 check("recarga de contextos da pasta de dados", resp.status_code == 200 and resp.data["contextos"][0]["ativo"], resp.data)
 check("sem chave a recarga não indexa e avisa", resp.data["chave_configurada"] is False and resp.data["contextos"][0]["indexado"] is False, resp.data)
 
@@ -282,14 +282,14 @@ quebrada = Message.objects.create(conversation=conversa, role="assistant", conte
 check("SQL que não roda mais vira 409 com aviso", cli.get(f"/api/chat/messages/{quebrada.id}/rows", HTTP_X_ORACULO_TOKEN="token-de-teste").status_code == 409)
 tok = {"HTTP_X_ORACULO_TOKEN": "token-de-teste"}
 check("api/me informa que a chave está configurada", cli.get("/api/me", **tok).json()["llm_configured"] is True)
-chave = os.environ.pop("MISTRAL_API_KEY")
+chave = os.environ.pop("GEMINI_API_KEY")
 check("api/me informa chave ausente", cli.get("/api/me", **tok).json()["llm_configured"] is False)
 sem_chave = cli.post("/api/chat/stream", json.dumps({"question": "oi"}), content_type="application/json", **tok)
 check("chat sem chave responde 503 pedindo a configuração", sem_chave.status_code == 503 and "Configurações" in sem_chave.json()["error"], sem_chave.content[:200])
-os.environ["MISTRAL_API_KEY"] = chave
+os.environ["GEMINI_API_KEY"] = chave
 check("teste de chave vazia é recusado", cli.post("/api/config/test-llm-key", {"key": ""}, content_type="application/json", **tok).status_code == 400)
 falsa = cli.post("/api/config/test-llm-key", {"key": "chave-falsa"}, content_type="application/json", **tok).json()
-check("chave falsa é reprovada (ou sem rede)", falsa["ok"] is False and falsa["reason"] in {"Chave inválida.", "Sem conexão com a Mistral. Verifique a internet e tente de novo."}, falsa)
+check("chave falsa é reprovada (ou sem rede)", falsa["ok"] is False and falsa["reason"] in {"Chave inválida.", "Sem conexão com a Gemini. Verifique a internet e tente de novo."}, falsa)
 ferramenta = local_tools()[0]
 check("bi_agent local com o mesmo contrato do MCP",
       ferramenta.name == "bi_agent" and set(ferramenta.args) == {"instruction", "tenant_id", "contexto_id", "thread_id"},

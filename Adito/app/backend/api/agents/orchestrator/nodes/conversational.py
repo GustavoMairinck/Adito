@@ -6,7 +6,6 @@ from core.rich_logging import log_info, log_success
 from ..config import CONVERSATIONAL_SYSTEM_PROMPT
 from ..state import MultiAgentState
 
-
 async def conversational_node(state: MultiAgentState) -> dict:
     instruction = state.get("delegation_instruction") or state.get("user_input", "")
 

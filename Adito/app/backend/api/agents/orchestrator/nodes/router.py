@@ -8,7 +8,6 @@ from core.rich_logging import log_info, log_kv
 from ..config import MAX_LOOP_ITERATIONS, ORCHESTRATOR_SYSTEM_PROMPT, RouterDecision
 from ..state import _COLLECTED_RESET, MultiAgentState
 
-
 def _entry_value(entry: dict | Any, key: str) -> Any:
     if isinstance(entry, dict):
         return entry.get(key)

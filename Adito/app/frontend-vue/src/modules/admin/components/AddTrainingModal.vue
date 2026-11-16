@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Plus, X, Code2, FileText, Database } from 'lucide-vue-next'
+import { Plus, X, Code2, FileText, Database, Loader2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean

@@ -80,22 +80,23 @@ const handleKeydown = (event: KeyboardEvent) => {
 <template>
   <div class="px-4 py-4 bg-transparent">
     <div class="mx-auto flex max-w-3xl flex-col">
-      <div class="relative flex items-end rounded-3xl bg-white dark:bg-surface border border-border-subtle shadow-sm transition-all focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
+      <div class="relative flex items-end rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-card transition-all focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/20">
         <textarea
           ref="textareaRef"
           :value="modelValue"
           rows="1"
-          placeholder="Como posso ajudar em sua decisão estratégica hoje?"
-          class="min-h-[56px] w-full resize-none bg-transparent px-5 py-4 text-sm leading-relaxed text-text-primary outline-none placeholder:text-text-muted rounded-3xl"
+          aria-label="Pergunta sobre pesquisa e extensão"
+          placeholder="O que você quer consultar sobre pesquisa e extensão?"
+          class="min-h-[56px] w-full resize-none bg-transparent px-5 py-4 text-sm leading-relaxed text-[var(--neutral-dark)] outline-none placeholder:text-text-muted rounded-2xl"
           @input="handleInput"
           @keydown="handleKeydown"
         />
         <div class="flex items-center gap-2 pr-3 pb-2 pt-2">
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full text-text-muted hover:bg-surface hover:text-text-primary transition-colors disabled:opacity-50"
+            class="flex h-10 w-10 items-center justify-center rounded-full text-text-muted hover:bg-surface-elevated hover:text-[var(--neutral-dark)] transition-colors disabled:opacity-50"
             @click="toggleRecording"
-            :class="{ 'text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30': isRecording }"
+            :class="{ 'text-[var(--brand-accent-danger)] hover:bg-[var(--brand-accent-danger)]/10 hover:text-[var(--brand-accent-danger)]': isRecording }"
             title="Ditar por voz"
           >
             <MicOff v-if="isRecording" class="h-5 w-5 animate-pulse" />
@@ -104,9 +105,10 @@ const handleKeydown = (event: KeyboardEvent) => {
           <button
             id="btn-send-chat"
             :disabled="!modelValue.trim() || loading"
-            class="flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-surface disabled:text-text-muted bg-accent text-white hover:bg-accent-hover"
+            class="flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-surface-elevated disabled:text-text-muted bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-dark)]"
             @click="emit('send')"
             title="Enviar mensagem"
+            aria-label="Enviar mensagem"
           >
             <Loader2 v-if="loading" class="h-5 w-5 animate-spin" />
             <Send v-else class="h-4 w-4 ml-0.5" />

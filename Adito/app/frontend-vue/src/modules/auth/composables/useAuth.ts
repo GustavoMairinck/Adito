@@ -16,7 +16,7 @@ export interface User {
   email?: string
   avatar?: string
   tenant?: string | null
-  // A chave da Mistral está no cofre do SO e chegou ao backend.
+  // A chave do Gemini está no cofre do SO e chegou ao backend.
   llm_configured?: boolean
 }
 

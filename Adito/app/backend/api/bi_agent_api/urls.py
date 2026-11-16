@@ -5,6 +5,7 @@ from .views import health_check
 from dashboard import views as dashboard_views
 from chat.views import ask_question
 from core.views import contextos, me, test_llm_key
+from core import explorer
 
 # Desktop sem login: não há rotas de autenticação; toda chamada leva o token local do Tauri.
 urlpatterns = [
@@ -13,6 +14,8 @@ urlpatterns = [
     path('api/me', me),
     path('api/config/test-llm-key', test_llm_key),
     path('api/contextos', contextos),
+    path('api/explorer/tables', explorer.tables),
+    path('api/explorer/rows', explorer.rows),
     path('api/chat', ask_question),
     path('api/chat/', include('chat.urls')),
     path('api/dashboard/', include('dashboard.urls')),

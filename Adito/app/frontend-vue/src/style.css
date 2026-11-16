@@ -1,19 +1,25 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "@nuxt/ui";
 
 @theme {
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent-danger: var(--brand-accent-danger);
+  --color-neutral-dark: var(--neutral-dark);
+  --color-bg-app: var(--bg-app);
+
   --color-primary: var(--bg-primary);
   --color-surface: var(--bg-surface);
   --color-surface-elevated: var(--bg-surface-elevated);
-  /* Azul ORACULO-ESX — acento único, derivado das logos */
+  /* Verde Institucional IFES / ifeserralab */
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-light: var(--accent-light);
-  /* Status — baseados nas cores do LEDS */
-  --color-success: #2e7d32;
+  /* Status — baseados na paleta institucional */
+  --color-success: #23634A;
   --color-warning: #e65100;
-  --color-error: #b71c1c;
+  --color-error: #C50707;
   --color-border-subtle: var(--border-subtle);
   --color-border-standard: var(--border-standard);
   --color-text-primary: var(--text-primary);
@@ -28,61 +34,77 @@
   --radius-2xl: 16px;
   --radius-pill: 9999px;
 
-  /* Sombras funcionais — shadow-as-border (Vercel), sem decoração */
-  --shadow-card: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
-  --shadow-card-hover: rgba(0, 0, 0, 0.10) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px 4px 8px;
-  --shadow-float: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+  /* Sombras funcionais */
+  --shadow-card: rgba(22, 70, 43, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+  --shadow-card-hover: rgba(43, 122, 66, 0.12) 0px 0px 0px 1px, rgba(22, 70, 43, 0.05) 0px 4px 10px;
+  --shadow-float: rgba(22, 70, 43, 0.08) 0px 4px 12px, rgba(22, 70, 43, 0.06) 0px 0px 0px 1px;
   /* Mantidos como alias para não quebrar usos legacy */
-  --shadow-premium: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
-  --shadow-elevated: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+  --shadow-premium: rgba(22, 70, 43, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+  --shadow-elevated: rgba(22, 70, 43, 0.08) 0px 4px 12px, rgba(22, 70, 43, 0.06) 0px 0px 0px 1px;
 }
 
 @layer base {
   :root {
-    /* Fundo neutro frio — alinhado com vocabulário visual azul das logos */
-    --bg-primary:          #f5f6f8;
-    --bg-surface:          #ffffff;
-    --bg-surface-elevated: #eef0f3;
-    /* Bordas com toque sutil de azul marca */
-    --border-subtle:       rgba(30, 63, 189, 0.07);
-    --border-standard:     rgba(30, 63, 189, 0.14);
-    /* Textos — azul-preto, não cinza puro */
-    --text-primary:        #0f1923;
-    --text-secondary:      #4a5568;
-    --text-muted:          #8896a5;
+    /* Tokens de Cores — Identidade Institucional IFES / ifeserralab */
+    --brand-dark:          #173F35;
+    --brand-primary:       #23634A;
+    --brand-secondary:     #B98A3C;
+    --brand-accent-danger: #C50707;
+    --neutral-dark:        #1F302B;
+    --bg-app:              #F6F7F2;
+    --bg-surface:          #FFFFFF;
+    --border-subtle:       #DDE5DD;
+
+    /* Mapeamento semântico do app */
+    --bg-primary:          var(--bg-app);
+    --bg-surface-elevated: #EDF1E9;
+    --border-standard:     #BFCDBF;
+    /* Texto principal sobre as superfícies do tema. */
+    --text-primary:        var(--neutral-dark);
+    --text-secondary:      #465C51;
+    --text-muted:          #607366;
     /* Sombras funcionais */
-    --shadow-premium: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
-    --shadow-elevated: rgba(0, 0, 0, 0.08) 0px 4px 12px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+    --shadow-premium: rgba(22, 70, 43, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 3px;
+    --shadow-elevated: rgba(22, 70, 43, 0.08) 0px 4px 12px, rgba(22, 70, 43, 0.06) 0px 0px 0px 1px;
 
-    --accent:       #2248d4;
-    --accent-hover: #1a39b8;
-    --accent-light: #ebf0ff;
+    --accent:       var(--brand-primary);
+    --accent-hover: #194D38;
+    --accent-light: #E5EEE4;
 
-    --conv-selected: rgba(0, 0, 0, 0.07);
-    --conv-hover:    rgba(0, 0, 0, 0.04);
+    --conv-selected: rgba(43, 122, 66, 0.10);
+    --conv-hover:    rgba(43, 122, 66, 0.05);
   }
 
   .dark {
-    /* Azul-escuro profundo — tom de tinta */
-    --bg-primary:          #0d1117;
-    --bg-surface:          #161d27;
-    --bg-surface-elevated: #1e2736;
-    /* Bordas com toque sutil de azul claro */
-    --border-subtle:       rgba(99, 143, 255, 0.08);
-    --border-standard:     rgba(99, 143, 255, 0.15);
-    /* Textos frios e legíveis */
-    --text-primary:        #e8edf5;
-    --text-secondary:      #9baabf;
-    --text-muted:          #5f7291;
-    /* Sombras dark com borda sutil clara em vez de preta */
-    --shadow-premium: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.40) 0px 2px 5px;
-    --shadow-elevated: rgba(255, 255, 255, 0.12) 0px 0px 0px 1px, rgba(0, 0, 0, 0.50) 0px 6px 20px;
+    /* Tema escuro com superfícies neutras e ações em verde. */
+    --bg-dark-base:        #121416;
+    --bg-dark-surface:     #1C1F23;
 
-    --accent:       #638bff;
-    --accent-hover: #82a3ff;
-    --accent-light: rgba(99, 139, 255, 0.15);
+    --brand-dark:          #171B20;
+    --brand-primary:       #2B7A42;
+    --brand-secondary:     #88B63B;
+    --brand-accent-danger: #F04444;
+    --neutral-dark:        #F0F4F1;
+    --bg-app:              var(--bg-dark-base);
+    --bg-primary:          var(--bg-dark-base);
+    --bg-surface:          var(--bg-dark-surface);
+    --bg-surface-elevated: #262B31;
+    /* Bordas sutis nos cards e separadores */
+    --border-subtle:       rgba(255, 255, 255, 0.14);
+    --border-standard:     #46505B;
+    /* Textos claros com contraste WCAG AA */
+    --text-primary:        #F0F4F1;
+    --text-secondary:      rgba(255, 255, 255, 0.72);
+    --text-muted:          rgba(255, 255, 255, 0.54);
+    /* Sombras dark com borda sutil clara */
+    --shadow-premium: rgba(255, 255, 255, 0.14) 0px 0px 0px 1px, rgba(0, 0, 0, 0.40) 0px 2px 6px;
+    --shadow-elevated: rgba(54, 146, 81, 0.22) 0px 0px 0px 1px, rgba(0, 0, 0, 0.50) 0px 6px 20px;
 
-    --conv-selected: rgba(255, 255, 255, 0.08);
+    --accent:       #389653;
+    --accent-hover: #2B7A42;
+    --accent-light: rgba(43, 122, 66, 0.18);
+
+    --conv-selected: rgba(43, 122, 66, 0.22);
     --conv-hover:    rgba(255, 255, 255, 0.05);
   }
 
@@ -142,21 +164,23 @@
     color: var(--text-muted);
     font-size: 0.68rem;
     font-weight: 600;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
   }
 }
 
 @layer components {
-  /* Card — 8px radius, shadow-as-border funcional */
+  /* Card — 8px radius, elevação clara entre base e surface com borda sutil */
   .premium-card {
     background: var(--bg-surface);
-    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
     box-shadow: var(--shadow-premium);
-    transition: box-shadow 150ms ease;
+    transition: box-shadow 150ms ease, border-color 150ms ease;
   }
 
   .premium-card:hover {
+    border-color: var(--border-standard);
     box-shadow: var(--shadow-elevated);
   }
 
@@ -168,12 +192,12 @@
     border-radius: 12px;
   }
 
-  /* btn-primary — preciso, sem sombra decorativa (IBM Carbon / Vercel) */
+  /* btn-primary — verde institucional IFES (--brand-primary) com texto branco */
   .btn-primary {
-    background: #1d2529;
-    color: #f0f4f8;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
+    background: var(--brand-primary);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
     padding: 0.625rem 1rem;
     font-weight: 500;
     font-size: 0.875rem;
@@ -182,8 +206,8 @@
   }
 
   .btn-primary:hover {
-    background: #111820;
-    border-color: rgba(255, 255, 255, 0.13);
+    background: var(--brand-dark);
+    border-color: rgba(255, 255, 255, 0.18);
   }
 
   .btn-primary:active {
@@ -191,13 +215,13 @@
   }
 
   .dark .btn-primary {
-    background: #2248d4;
+    background: var(--brand-primary);
     color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
   .dark .btn-primary:hover {
-    background: #1a39b8;
+    background: #1E5E3A;
   }
 
   /* btn-secondary — limpo, sem cor de fundo */
@@ -205,7 +229,7 @@
     background: transparent;
     color: var(--text-primary);
     border: 1px solid var(--border-standard);
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 0.625rem 1rem;
     font-weight: 500;
     font-size: 0.875rem;
@@ -214,7 +238,7 @@
 
   .btn-secondary:hover {
     background: var(--bg-surface-elevated);
-    border-color: var(--text-muted);
+    border-color: var(--brand-primary);
   }
 
   .dark .btn-secondary {
@@ -224,15 +248,15 @@
 
   .dark .btn-secondary:hover {
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--brand-secondary);
   }
 
-  /* btn-accent — azul ORACULO-ESX, para ações primárias de marca */
+  /* btn-accent — verde institucional IFES, para ações primárias de marca */
   .btn-accent {
-    background: #2248d4;
+    background: var(--brand-primary);
     color: #ffffff;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 0.625rem 1rem;
     font-weight: 500;
     font-size: 0.875rem;
@@ -241,7 +265,7 @@
   }
 
   .btn-accent:hover {
-    background: #1a39b8;
+    background: var(--brand-dark);
   }
 }
 
@@ -262,4 +286,68 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+}
+
+/* Padrões de interação compartilhados do Adito. */
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+button:not(:disabled), summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+.adito-wordmark {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.055em;
+}
+
+.adito-topic {
+  min-height: 126px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.adito-topic:hover { border-color: var(--accent); background: var(--bg-surface-elevated); }
+.adito-topic[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); }
+
+/* Contraste dos cartões de áreas no tema escuro. */
+.dark .adito-topic {
+  background: #242930;
+  border-color: #56616D;
+  color: #F4F6F8;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+}
+
+.dark .adito-topic:hover {
+  background: #303740;
+  border-color: #9BA7B3;
+}
+
+.dark .adito-topic[aria-pressed="true"] {
+  background: #2D353E;
+  border-color: #68D388;
+  box-shadow: 0 0 0 1px #68D388;
+}
+
+.dark .adito-topic .text-text-muted { color: #C0CAD4; }
+
+.dark .adito-topic-icon {
+  background: #343C46;
+  border-color: #637080;
+  color: #E8EDF3;
+}
+
+.dark .adito-topic-icon svg { color: inherit; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

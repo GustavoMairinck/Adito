@@ -5,7 +5,6 @@ from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, get_chat_llm
 
 mcp_tools = []
 
-
 async def orchestrator_node(state: MultiAgentState):
     global mcp_tools
 

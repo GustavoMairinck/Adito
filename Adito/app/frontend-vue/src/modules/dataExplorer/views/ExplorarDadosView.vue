@@ -1,182 +1,484 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { BarChart2, Table2, Check, LayoutGrid } from 'lucide-vue-next'
-
-import FilterPanel from '@/modules/dataExplorer/components/FilterPanel.vue'
-import ProjectsTable from '@/modules/dataExplorer/components/ProjectsTable.vue'
-import ProjectsChart from '@/modules/dataExplorer/components/ProjectsChart.vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import axios from 'axios'
+import { AlertCircle, BarChart2, ChevronLeft, ChevronRight, Database, Layers, Loader2, RefreshCw, Table2 } from 'lucide-vue-next'
 import httpClient from '@/common/api/httpClient'
+import { useContextos } from '@/common/composables/useContextos'
+import FilterPanel from '../components/FilterPanel.vue'
+import DataTable from '../components/DataTable.vue'
+import DataChart from '../components/DataChart.vue'
+import type { DataRelation, ExplorerResult } from '../types'
 
-const viewMode = ref<'tabela' | 'grafico'>('tabela')
-const filtros = reactive({ ano: '', modalidade: '', status: '', area: '', instituicao: '' })
-const filtrosDisponiveis = reactive<{ anos: string[]; modalidades: string[]; status: string[]; areas: string[]; instituicoes: string[] }>({
-  anos: [],
-  modalidades: [],
-  status: [],
-  areas: [],
-  instituicoes: []
-})
-const projetos = ref<any[]>([])
-const total = ref(0)
+const { contextos, selectedId, selected, loadContextos, select } = useContextos()
+const ready = ref(false)
+const catalog = ref<DataRelation[]>([])
+const catalogLoading = ref(true)
+const catalogError = ref('')
+const rowsError = ref('')
 const loading = ref(false)
-const error = ref<string | null>(null)
-const debounceTimer = ref<number | undefined>(undefined)
+const tableName = ref('')
+const kind = ref('all')
+const search = ref('')
+const filterColumn = ref('')
+const filterValue = ref('')
+const sort = ref('')
+const direction = ref<'asc' | 'desc'>('asc')
+const page = ref(1)
+const pageSize = ref(25)
+const mode = ref<'table' | 'chart'>('table')
+const groupBy = ref('')
+const shownColumns = ref<string[]>([])
+const result = ref<ExplorerResult | null>(null)
+let catalogController: AbortController | undefined
+let rowsController: AbortController | undefined
+let timer: ReturnType<typeof setTimeout> | undefined
+let disposed = false
 
-const columns = ref([
-  { id: 'projeto', label: 'Produto', visible: true, locked: true },
-  { id: 'edital', label: 'Cliente', visible: true, locked: false },
-  { id: 'modalidade', label: 'Canal', visible: true, locked: false },
-  { id: 'valor', label: 'Receita', visible: true, locked: true },
-  { id: 'status', label: 'Porte', visible: true, locked: false },
-  { id: 'area', label: 'Categoria', visible: true, locked: false }
-])
+const categories = [
+  { key: 'all', label: 'Todas' },
+  { key: 'fact', label: 'Fatos' },
+  { key: 'dimension', label: 'Dimensões' },
+  { key: 'entity', label: 'Entidades' }
+]
+const kindLabels = { fact: 'Fato', dimension: 'Dimensão', entity: 'Entidade' }
+const filteredTables = computed(() => catalog.value.filter(table => kind.value === 'all' || table.kind === kind.value))
+const currentTable = computed(() => catalog.value.find(table => table.name === tableName.value))
+const visibleColumns = computed(() => currentTable.value?.columns.filter(column => shownColumns.value.includes(column.name)) ?? [])
+const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / pageSize.value)))
+const firstRecord = computed(() => result.value?.total ? (result.value.page - 1) * result.value.page_size + 1 : 0)
+const lastRecord = computed(() => firstRecord.value + (result.value?.rows.length ?? 0) - (firstRecord.value ? 1 : 0))
+const controlClass = 'rounded-lg border border-border-standard bg-surface px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent'
 
-const toggleColumn = (col: any) => {
-  if (!col.locked) col.visible = !col.visible
+function errorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string') return error.response.data.detail
+  return fallback
 }
 
-const fetchProjects = async () => {
-  loading.value = true
-  error.value = null
+async function fetchCatalog() {
+  catalogController?.abort()
+  rowsController?.abort()
+  const controller = new AbortController()
+  catalogController = controller
+  catalog.value = []
+  tableName.value = ''
+  kind.value = 'all'
+  catalogError.value = ''
+  catalogLoading.value = true
   try {
-    const params = new URLSearchParams()
-    Object.entries(filtros).forEach(([k, v]) => {
-      if (v) params.append(k, v)
+    if (!selectedId.value) return
+    const { data } = await httpClient.get<{ tables: DataRelation[] }>('/api/explorer/tables', {
+      params: { contexto_id: selectedId.value }, signal: controller.signal
     })
-    const { data } = await httpClient.get('/api/projects', { params })
-    projetos.value = data?.data || []
-    total.value = data?.total || 0
-    if (data?.filtros_disponiveis) {
-      Object.assign(filtrosDisponiveis, data.filtros_disponiveis)
-    }
-  } catch {
-    error.value = 'Não foi possível carregar os produtos. Verifique o backend.'
+    if (controller.signal.aborted) return
+    catalog.value = data.tables
+    tableName.value = data.tables.find(table => table.available)?.name ?? ''
+  } catch (error) {
+    if (!controller.signal.aborted) catalogError.value = errorMessage(error, 'Não foi possível carregar as tabelas. Verifique a conexão com o backend local.')
   } finally {
-    loading.value = false
+    if (!controller.signal.aborted) catalogLoading.value = false
   }
 }
 
-onMounted(fetchProjects)
-
-watch(
-  () => ({ ...filtros }),
-  () => {
-    if (debounceTimer.value) window.clearTimeout(debounceTimer.value)
-    debounceTimer.value = window.setTimeout(fetchProjects, 300)
-  },
-  { deep: true }
-)
-
-const handleClear = () => {
-  Object.assign(filtros, { ano: '', modalidade: '', status: '', area: '', instituicao: '' })
+async function initialize() {
+  catalogLoading.value = true
+  catalogError.value = ''
+  try {
+    await loadContextos()
+    if (disposed) return
+    ready.value = true
+    await fetchCatalog()
+  } catch (error) {
+    catalogError.value = errorMessage(error, 'Não foi possível carregar os contextos. Verifique a conexão com o backend local.')
+    catalogLoading.value = false
+  }
 }
 
-const totalLabel = computed(() =>
-  loading.value
-    ? 'Carregando...'
-    : `${total.value} Produto${total.value !== 1 ? 's' : ''} Encontrado${total.value !== 1 ? 's' : ''}`
-)
+async function fetchRows() {
+  if (!selectedId.value || !currentTable.value?.available) return
+  const controller = new AbortController()
+  rowsController = controller
+  loading.value = true
+  rowsError.value = ''
+  try {
+    const { data } = await httpClient.get<ExplorerResult>('/api/explorer/rows', {
+      params: {
+        contexto_id: selectedId.value, table: tableName.value,
+        search: search.value, filter_column: filterColumn.value, filter_value: filterValue.value,
+        sort: sort.value, direction: direction.value, page: page.value, page_size: pageSize.value,
+        group_by: mode.value === 'chart' ? groupBy.value : ''
+      },
+      signal: controller.signal
+    })
+    if (!controller.signal.aborted) {
+      result.value = data
+      page.value = data.page
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) rowsError.value = errorMessage(error, 'Não foi possível consultar os registros. Tente novamente.')
+  } finally {
+    if (!controller.signal.aborted) loading.value = false
+  }
+}
+
+function scheduleRows() {
+  clearTimeout(timer)
+  rowsController?.abort()
+  result.value = null
+  rowsError.value = ''
+  loading.value = !!currentTable.value?.available
+  if (loading.value) timer = setTimeout(fetchRows, 250)
+}
+
+function clearFilters() {
+  search.value = ''
+  filterColumn.value = ''
+  filterValue.value = ''
+}
+
+function toggleColumn(name: string) {
+  if (shownColumns.value.includes(name)) {
+    if (shownColumns.value.length > 1) shownColumns.value = shownColumns.value.filter(column => column !== name)
+  } else shownColumns.value = [...shownColumns.value, name]
+}
+
+function changeSort(column: string) {
+  direction.value = sort.value === column && direction.value === 'asc' ? 'desc' : 'asc'
+  sort.value = column
+}
+
+watch(selectedId, () => { if (ready.value) void fetchCatalog() }, { flush: 'sync' })
+watch(kind, () => {
+  if (!filteredTables.value.some(table => table.name === tableName.value)) {
+    tableName.value = filteredTables.value.find(table => table.available)?.name ?? ''
+  }
+})
+watch(currentTable, table => {
+  clearFilters()
+  sort.value = table?.columns[0]?.name ?? ''
+  direction.value = 'asc'
+  groupBy.value = table?.columns.find(column => /TEXT|CHAR/i.test(column.type))?.name ?? table?.columns[0]?.name ?? ''
+  shownColumns.value = table?.columns.map(column => column.name) ?? []
+  page.value = 1
+})
+watch(filterColumn, () => { filterValue.value = '' })
+watch([search, filterColumn, filterValue, sort, direction, pageSize], () => { page.value = 1 })
+watch([tableName, search, filterColumn, filterValue, sort, direction, page, pageSize, mode, groupBy], scheduleRows, { flush: 'post' })
+
+onMounted(initialize)
+onBeforeUnmount(() => {
+  disposed = true
+  clearTimeout(timer)
+  catalogController?.abort()
+  rowsController?.abort()
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-primary p-4 md:p-8 lg:p-10">
-    <div
-      v-motion
-      :initial="{ opacity: 0, y: 20 }"
-      :enter="{ opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }"
-      class="mx-auto w-full space-y-6"
-    >
-      <div class="flex flex-wrap items-center justify-between gap-4">
+  <div class="min-h-full bg-primary p-4 md:p-8 lg:p-10">
+    <div class="mx-auto max-w-[1600px] space-y-6">
+      <header class="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <h1 class="mb-2 text-3xl font-semibold tracking-[-0.04em] text-primary">Explorar Dados</h1>
-          <p class="mb-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
-            Utilize os filtros e controles interativos abaixo para realizar buscas aprofundadas ou refinar as análises nos atributos de produtos, clientes, canais e categorias.
-          </p>
-          <p class="text-sm font-medium text-accent">
-            {{ totalLabel }}
+          <h1 class="text-3xl font-semibold text-primary">
+            Explorar dados
+          </h1>
+          <p class="mt-2 max-w-2xl text-sm text-text-secondary">
+            Consulte fatos, dimensões e entidades de pesquisa e extensão do Campus Serra.
           </p>
         </div>
-
-        <div class="flex gap-1 rounded-lg border border-border-subtle bg-surface p-1 shadow-sm">
+        <div class="flex w-full items-end gap-2 sm:w-auto">
+          <div class="min-w-0 flex-1 sm:w-64">
+            <label for="explorer-context" class="mb-1.5 block text-xs font-medium text-text-secondary">
+              Contexto de dados
+            </label>
+            <select
+              id="explorer-context"
+              :value="selectedId ?? ''"
+              :class="[controlClass, 'w-full']"
+              @change="select(($event.target as HTMLSelectElement).value || null)"
+            >
+              <option value="">
+                Selecione um contexto
+              </option>
+              <option v-for="context in contextos" :key="context.id" :value="context.id">
+                {{ context.name }}
+              </option>
+            </select>
+          </div>
           <button
-            v-for="item in [
-              { key: 'tabela', icon: Table2, label: 'Tabela' },
-              { key: 'grafico', icon: BarChart2, label: 'Gráfico' }
-            ]"
-            :key="item.key"
-            :class="[
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all',
-              viewMode === item.key
-                ? 'bg-white text-accent shadow-sm border border-border-subtle dark:bg-white/[0.08] dark:border-white/[0.05]'
-                : 'text-text-secondary hover:bg-black/[0.03] hover:text-text-primary dark:hover:bg-white/[0.03]'
-            ]"
-            @click="viewMode = item.key as 'tabela' | 'grafico'"
+            class="btn-secondary p-2.5 disabled:opacity-50"
+            aria-label="Recarregar contextos e tabelas"
+            title="Recarregar contextos e tabelas"
+            :disabled="catalogLoading"
+            @click="initialize"
           >
-            <component :is="item.icon" :size="16" />
-            {{ item.label }}
+            <RefreshCw :size="18" :class="{ 'animate-spin': catalogLoading }" aria-hidden="true" />
           </button>
         </div>
+      </header>
+      <div
+        v-if="catalogError"
+        role="alert"
+        class="rounded-xl border border-red-300 bg-surface p-5 text-sm text-error"
+      >
+        <AlertCircle :size="18" class="mb-2" aria-hidden="true" />
+        <p>
+          {{ catalogError }}
+        </p>
+        <button class="btn-secondary mt-3" @click="initialize">
+          Tentar novamente
+        </button>
       </div>
-
-      <div v-if="viewMode === 'tabela'" class="relative w-full rounded-xl border border-border-subtle bg-surface p-4 shadow-sm">
-        <div class="flex flex-col gap-4">
-          <div class="flex items-center gap-2 text-text-secondary">
-            <LayoutGrid :size="16" />
-            <span class="eyebrow">Configurar colunas</span>
-          </div>
-
-          <div class="flex flex-wrap gap-2.5">
-            <button
-              v-for="col in columns"
-              :key="col.id"
-              :disabled="col.locked"
-              :class="[
-                'group flex select-none items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200',
-                col.visible
-                  ? col.locked
-                     ? 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-500'
-                     : 'cursor-pointer border-accent/30 bg-accent/10 text-accent hover:bg-accent/14'
-                  : 'cursor-pointer border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500 dark:hover:border-gray-600 dark:hover:text-gray-400'
-              ]"
-              @click="toggleColumn(col)"
-            >
-              <div
-                v-if="!col.locked"
-                :class="[
-                  'flex h-4 w-4 items-center justify-center rounded transition-colors',
-                  col.visible ? 'bg-accent text-white' : 'bg-gray-100 dark:bg-gray-800'
-                ]"
-              >
-                <Check v-if="col.visible" :size="12" stroke-width="3" />
-              </div>
-              {{ col.label }}
-            </button>
-          </div>
-        </div>
+      <div
+        v-else-if="catalogLoading"
+        role="status"
+        class="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface p-8 text-sm text-text-secondary"
+      >
+        <Loader2 :size="20" class="animate-spin" aria-hidden="true" />
+        Carregando tabelas…
       </div>
-
-      <div class="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        <div class="w-full self-start lg:w-fit">
-          <FilterPanel
-            :filters="filtros"
-            :filters-available="filtrosDisponiveis"
-            @update:filters="(val) => Object.assign(filtros, val)"
-            @clear="handleClear"
-          />
-        </div>
-
-        <div v-motion :initial="{ opacity: 0 }" :enter="{ opacity: 1, transition: { delay: 0.1 } }" class="min-w-0 flex-1 space-y-4">
-          <div
-            v-if="error"
-            class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+      <div v-else-if="!selectedId" class="rounded-xl border border-border-subtle bg-surface p-8">
+        <Database :size="32" class="mb-4 text-accent" aria-hidden="true" />
+        <h2 class="text-lg">
+          {{ contextos.length ? 'Selecione um contexto para consultar os dados' : 'Nenhum contexto carregado' }}
+        </h2>
+        <p class="mt-2 text-sm text-text-secondary">
+          {{ contextos.length ? 'Escolha o conjunto de dados no seletor acima.' : 'Carregue os contextos do modelo unificado em Administração para disponibilizar as tabelas.' }}
+        </p>
+        <RouterLink v-if="!contextos.length" to="/admin" class="btn-primary mt-5 inline-block">
+          Abrir Administração
+        </RouterLink>
+      </div>
+      <template v-else>
+        <p v-if="selected?.description" class="text-sm text-text-secondary">
+          {{ selected.description }}
+        </p>
+        <div class="grid items-start gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <aside
+            class="overflow-hidden rounded-xl border border-border-subtle bg-surface"
+            aria-label="Catálogo de tabelas"
           >
-            {{ error }}
+            <div class="border-b border-border-subtle p-4">
+              <h2 class="flex items-center gap-2 text-sm font-semibold">
+                <Layers :size="17" class="text-accent" aria-hidden="true" />
+                Tabelas do contexto
+              </h2>
+              <div class="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Tipo de tabela">
+                <button
+                  v-for="category in categories"
+                  :key="category.key"
+                  :aria-pressed="kind === category.key"
+                  :class="['rounded-md border px-2 py-1.5 text-xs transition-colors', kind === category.key ? 'border-accent bg-accent/10 text-accent' : 'border-border-subtle text-text-secondary hover:bg-surface-elevated']"
+                  @click="kind = category.key"
+                >
+                  {{ category.label }}
+                  <span class="ml-1 opacity-70">
+                    {{ catalog.filter(table => category.key === 'all' || table.kind === category.key).length }}
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div class="max-h-[520px] space-y-1 overflow-y-auto p-2">
+              <p v-if="!filteredTables.length" class="p-4 text-sm text-text-muted">
+                Nenhuma tabela deste tipo no contexto.
+              </p>
+              <button
+                v-for="table in filteredTables"
+                :key="table.name"
+                :disabled="!table.available"
+                :aria-pressed="tableName === table.name"
+                :class="['w-full rounded-lg border p-3 text-left transition-colors disabled:opacity-50', tableName === table.name ? 'border-accent/30 bg-accent/10' : 'border-transparent hover:bg-surface-elevated']"
+                @click="tableName = table.name"
+              >
+                <span class="block break-words text-sm font-medium text-primary">
+                  {{ table.label }}
+                </span>
+                <span class="mt-1 block text-xs text-text-muted">
+                  {{ kindLabels[table.kind] }}
+                  ·
+                  {{ table.columns.length }}
+                  colunas
+                </span>
+                <span v-if="!table.available" class="mt-1 block text-xs text-error">
+                  Indisponível. Recarregue o contexto.
+                </span>
+              </button>
+            </div>
+          </aside>
+          <section v-if="currentTable" class="min-w-0 space-y-4" aria-label="Consulta da tabela">
+            <div>
+              <h2 class="break-words text-xl font-semibold">
+                {{ currentTable.label }}
+              </h2>
+              <p v-if="currentTable.description" class="mt-1.5 text-sm text-text-secondary">
+                {{ currentTable.description }}
+              </p>
+              <p
+                v-if="currentTable.label !== currentTable.name"
+                class="mt-2 break-all font-mono text-xs text-text-muted"
+              >
+                {{ currentTable.name }}
+              </p>
+            </div>
+            <details class="rounded-xl border border-border-subtle bg-surface p-4">
+              <summary class="cursor-pointer text-sm font-medium text-text-secondary">
+                Estrutura e colunas visíveis
+              </summary>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <label
+                  v-for="column in currentTable.columns"
+                  :key="column.name"
+                  class="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border border-border-subtle px-3 py-2 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    class="accent-accent"
+                    :checked="shownColumns.includes(column.name)"
+                    :disabled="shownColumns.length === 1 && shownColumns.includes(column.name)"
+                    @change="toggleColumn(column.name)"
+                  />
+                  <span class="break-all text-primary">
+                    {{ column.name }}
+                    <span class="text-text-muted">
+                      {{ column.type || 'tipo não declarado' }}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </details>
+            <div class="overflow-hidden rounded-xl border border-border-subtle bg-surface shadow-sm">
+              <div
+                class="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle p-4"
+              >
+                <p class="text-sm text-text-secondary" role="status" aria-live="polite">
+                  {{ loading ? 'Consultando registros…' : result ? `${result.total.toLocaleString('pt-BR')} registros encontrados` : 'Consulta de registros' }}
+                </p>
+                <div
+                  class="flex gap-1 rounded-lg bg-surface-elevated p-1"
+                  role="group"
+                  aria-label="Visualização dos dados"
+                >
+                  <button
+                    :aria-pressed="mode === 'table'"
+                    :class="['flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs', mode === 'table' ? 'bg-surface text-accent shadow-sm' : 'text-text-secondary']"
+                    @click="mode = 'table'"
+                  >
+                    <Table2 :size="15" aria-hidden="true" />
+                    Tabela
+                  </button>
+                  <button
+                    :aria-pressed="mode === 'chart'"
+                    :class="['flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs', mode === 'chart' ? 'bg-surface text-accent shadow-sm' : 'text-text-secondary']"
+                    @click="mode = 'chart'"
+                  >
+                    <BarChart2 :size="15" aria-hidden="true" />
+                    Gráfico
+                  </button>
+                </div>
+              </div>
+              <FilterPanel
+                v-model:search="search"
+                v-model:column="filterColumn"
+                v-model:value="filterValue"
+                :columns="currentTable.columns"
+                @clear="clearFilters"
+              />
+              <div v-if="mode === 'chart'" class="border-b border-border-subtle p-4">
+                <label for="explorer-group" class="mr-3 text-sm text-text-secondary">
+                  Agrupar por
+                </label>
+                <select id="explorer-group" v-model="groupBy" :class="[controlClass, 'max-w-full']">
+                  <option v-for="column in currentTable.columns" :key="column.name" :value="column.name">
+                    {{ column.name }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="rowsError" role="alert" class="p-6 text-sm text-error">
+                <p>
+                  {{ rowsError }}
+                </p>
+                <button class="btn-secondary mt-3" @click="scheduleRows">
+                  Tentar novamente
+                </button>
+              </div>
+              <div
+                v-else-if="loading"
+                class="flex min-h-56 items-center justify-center gap-2 text-sm text-text-muted"
+                role="status"
+              >
+                <Loader2 :size="20" class="animate-spin" aria-hidden="true" />
+                Carregando dados…
+              </div>
+              <template v-else-if="result">
+                <DataTable
+                  v-if="mode === 'table'"
+                  :rows="result.rows"
+                  :columns="visibleColumns"
+                  :sort="sort"
+                  :direction="direction"
+                  @sort="changeSort"
+                />
+                <DataChart v-else :distribution="result.distribution" :total="result.total" />
+                <div
+                  v-if="mode === 'table'"
+                  class="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle p-4 text-xs text-text-secondary"
+                >
+                  <span>
+                    {{ firstRecord.toLocaleString('pt-BR') }}
+                    –
+                    {{ lastRecord.toLocaleString('pt-BR') }}
+                    de
+                    {{ result.total.toLocaleString('pt-BR') }}
+                  </span>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <label for="explorer-page-size">
+                      Por página
+                    </label>
+                    <select id="explorer-page-size" v-model.number="pageSize" :class="[controlClass, 'py-1']">
+                      <option :value="25">
+                        25
+                      </option>
+                      <option :value="50">
+                        50
+                      </option>
+                      <option :value="100">
+                        100
+                      </option>
+                    </select>
+                    <span>
+                      Página
+                      {{ result.page }}
+                      de
+                      {{ pages }}
+                    </span>
+                    <button
+                      class="rounded-md border border-border-subtle p-1.5 hover:bg-surface-elevated disabled:opacity-35"
+                      aria-label="Página anterior"
+                      :disabled="page <= 1"
+                      @click="page--"
+                    >
+                      <ChevronLeft :size="16" aria-hidden="true" />
+                    </button>
+                    <button
+                      class="rounded-md border border-border-subtle p-1.5 hover:bg-surface-elevated disabled:opacity-35"
+                      aria-label="Próxima página"
+                      :disabled="page >= pages"
+                      @click="page++"
+                    >
+                      <ChevronRight :size="16" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+          <div
+            v-else
+            class="rounded-xl border border-border-subtle bg-surface p-8 text-sm text-text-secondary"
+          >
+            Selecione uma tabela disponível no catálogo para iniciar a consulta.
           </div>
-
-          <ProjectsTable v-if="viewMode === 'tabela'" :projetos="projetos" :loading="loading" :columns="columns" />
-          <ProjectsChart v-else :projetos="projetos" :loading="loading" />
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>

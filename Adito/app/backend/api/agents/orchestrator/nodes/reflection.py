@@ -18,7 +18,6 @@ from ..config import (
 )
 from ..state import MultiAgentState
 
-
 def _as_entry(entry: CollectedDataEntry | dict) -> CollectedDataEntry:
     if isinstance(entry, CollectedDataEntry):
         return entry

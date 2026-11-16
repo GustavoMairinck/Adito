@@ -10,6 +10,7 @@ Pasta de um contexto:
 import json
 from pathlib import Path
 
+import duckdb
 from django.db import transaction
 
 from .datastore import REPO_APP_DIR, ReadPolicy, connect_dados, data_dir
@@ -75,7 +76,7 @@ def view_columns(view: str, dados_path=None) -> list[tuple[str, str]]:
         with connect_dados(path=dados_path) as conn:
             rows = conn.execute(f'DESCRIBE "{safe_view}"').fetchall()
         return [(str(row["column_name"]), str(row["column_type"] or "")) for row in rows]
-    except Exception:
+    except duckdb.CatalogException:
         return []
 
 
@@ -203,7 +204,10 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
 
     # Valida contextos já salvos no banco para desativar os que não existem mais no dados.duckdb
     for ctx in Contexto.objects.filter(tenant=tenant, is_active=True):
-        errors = validate_contexto(ctx, dados_path=dados_path)
+        try:
+            errors = validate_contexto(ctx, dados_path=dados_path)
+        except FileNotFoundError:
+            errors = ["dados.duckdb não encontrado."]
         if errors:
             ctx.is_active = False
             ctx.save(update_fields=["is_active"])

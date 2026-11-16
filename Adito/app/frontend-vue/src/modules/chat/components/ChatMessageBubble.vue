@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
 import { ArrowLeftRight, Code, Database, Lightbulb, Pin, Copy, Check, Minimize2 } from 'lucide-vue-next'
-import brandIcon from '@/common/assets/brand-icon.png'
+import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ApexOptions } from 'apexcharts'
 import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
@@ -370,7 +370,7 @@ const chartOptions = computed<ApexOptions>(() => {
     },
     dataLabels: { enabled: false },
     grid: {
-      borderColor: isDark.value ? 'rgba(99,143,255,0.08)' : 'rgba(30,63,189,0.08)',
+      borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(22,70,43,0.08)',
       strokeDashArray: 3,
       xaxis: { lines: { show: false } }
     },
@@ -383,7 +383,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '11px',
               fontWeight: 600,
-              colors: isDark.value ? '#9baabf' : '#4a5568'
+              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
             }
           },
           axisBorder: { show: false },
@@ -401,7 +401,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '10px',
               fontWeight: 600,
-              colors: isDark.value ? '#9baabf' : '#4a5568'
+              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
             }
           },
           axisBorder: { show: false },
@@ -414,7 +414,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '10px',
               fontWeight: 600,
-              colors: isDark.value ? '#9baabf' : '#4a5568'
+              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
             }
           }
         }
@@ -424,7 +424,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '11px',
               fontWeight: 600,
-              colors: isDark.value ? '#9baabf' : '#4a5568'
+              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
             }
           }
         },
@@ -435,11 +435,11 @@ const chartOptions = computed<ApexOptions>(() => {
       theme: isDark.value ? 'dark' : 'light',
       custom: ({ series, dataPointIndex, w }: any) => {
         const label = w.globals.labels[dataPointIndex]
-        const background = isDark.value ? '#161d27' : '#ffffff'
-        const border = isDark.value ? 'rgba(99,143,255,0.12)' : 'rgba(30,63,189,0.10)'
-        const textColor = isDark.value ? '#e8edf5' : '#0f1923'
-        const muted = isDark.value ? '#9baabf' : '#4a5568'
-        const seriesColors = ['#2248d4', '#2e7d32', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16']
+        const background = isDark.value ? '#1A221D' : '#ffffff'
+        const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
+        const textColor = isDark.value ? '#F0F4F1' : '#241920'
+        const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+        const seriesColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
 
         const seriesRows = series
           .map((serieData: number[], i: number) => {
@@ -459,7 +459,7 @@ const chartOptions = computed<ApexOptions>(() => {
           .join('')
 
         return `
-          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.12) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
+          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
             <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">Categoria</div>
             <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
             ${seriesRows}
@@ -483,10 +483,10 @@ const chartOptions = computed<ApexOptions>(() => {
       horizontalAlign: 'left',
       fontSize: '12px',
       labels: {
-        colors: isDark.value ? '#9baabf' : '#4a5568'
+        colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
       }
     },
-    colors: ['#2248d4', '#2e7d32', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16']
+    colors: ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
   }
 })
 // Filtra séries com escalas incompatíveis para evitar gráficos ilegíveis.
@@ -523,12 +523,12 @@ const chartSeries = computed(() => {
         <div class="flex items-center gap-2">
           <div class="w-10 h-10 flex items-center justify-center relative">
             <div v-if="message.isLoading" class="loading-brand-wrapper">
-              <img :src="brandIcon" class="w-8 h-8 relative z-10" />
+              <BrandIcon alt="" class="relative z-10 h-8 w-8" />
               <div class="loading-brand-ring" />
             </div>
-            <img v-else :src="brandIcon" class="w-9 h-9" />
+            <BrandIcon v-else alt="" class="h-9 w-9" />
           </div>
-          <span class="font-semibold tracking-[-0.03em] text-primary dark:text-white">ORACULO-ESX</span>
+          <span class="font-semibold tracking-[-0.03em] text-primary dark:text-white">Adito</span>
         </div>
 
         <!-- Botão Copiar para AI -->
@@ -549,20 +549,20 @@ const chartSeries = computed(() => {
 
       <div
         :class="[
-          'relative group rounded-xl p-5 transition-all',
+          'relative group rounded-2xl p-5 transition-all',
           message.type === 'user'
-            ? 'bg-[#0f1923] text-white border border-transparent dark:bg-[#1c2535] dark:border-white/[0.10]'
+            ? 'rounded-tr-sm bg-[var(--brand-dark)] text-white border border-transparent shadow-xs dark:bg-[#1E5E3A] dark:border-[rgba(54,146,81,0.35)]'
             : message.isFallback
-              ? 'bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20'
-              : 'border border-border-subtle bg-surface dark:border-white/[0.06] dark:bg-surface'
+              ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30'
+              : 'border border-border-subtle bg-surface shadow-premium'
         ]"
       >
         <template v-if="message.isFallback">
           <div class="flex items-start gap-2">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1.5">
-                <img :src="brandIcon" class="w-4 h-4" />
-                <span class="text-sm font-semibold text-amber-800 dark:text-amber-500">ORACULO-ESX Exploratorio</span>
+                <BrandIcon alt="" class="h-4 w-4" />
+                <span class="text-sm font-semibold text-amber-800 dark:text-amber-500">Adito · Exploração</span>
               </div>
               <p class="text-sm text-amber-700 dark:text-amber-400/90 mb-3 leading-relaxed">
                 {{ message.fallbackMessage || 'Nao encontrei os dados exatos para esta pergunta. Que tal tentar uma das opcoes abaixo?' }}
@@ -668,10 +668,10 @@ const chartSeries = computed(() => {
             :key="String(option)"
             type="button"
             :class="[
-              'rounded-full border px-3 py-1 font-semibold transition-colors',
+              'rounded-full border px-3 py-1 font-semibold transition-colors cursor-pointer',
               rowLimit === option
-                ? 'border-[#2248d4] bg-[#2248d4] text-white'
-                : 'border-border-subtle bg-surface-elevated hover:border-accent/50 dark:border-white/[0.08]'
+                ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white'
+                : 'border-border-subtle bg-surface-elevated hover:border-accent/50'
             ]"
             @click="rowLimit = option"
           >

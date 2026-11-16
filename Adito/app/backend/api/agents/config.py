@@ -3,9 +3,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── Gemini (LLM de chat, SQL e embeddings) ──────────────────────────────────
-GEMINI_MODEL           = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+GEMINI_MODEL           = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_API_KEY         = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001")
+GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
 
 
 def get_gemini_api_key() -> str | None:
@@ -28,8 +28,11 @@ def get_embeddings():
 
     model = os.environ.get("GEMINI_EMBEDDING_MODEL") or GEMINI_EMBEDDING_MODEL
     api_key = get_gemini_api_key()
-    return GoogleGenerativeAIEmbeddings(model=model, google_api_key=api_key)
-
+    return GoogleGenerativeAIEmbeddings(
+        output_dimensionality=1024,
+        model=model,
+        google_api_key=api_key,
+    )
 # ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
 # Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
 from core.datastore import app_db_path
