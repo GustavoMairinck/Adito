@@ -3,7 +3,8 @@ Bancos de dados locais do desktop.
 
 - app.db (SQLite): banco operacional do Django (usuários, conversas, dashboards, checkpoints, índices derivados).
 - dados.duckdb (DuckDB OLAP): banco analítico com as 6 tabelas fato (`vfact_*_resolved`). Sempre aberto
-  em modo somente-leitura (`read_only=True`) e protegido por `ReadPolicy` quando consultado pelo agente/usuário.
+  em modo somente-leitura (`read_only=True`), com acesso externo bloqueado nativamente (`enable_external_access=False`,
+  `lock_configuration=True`) e protegido por `ReadPolicy` quando consultado pelo agente/usuário.
 """
 from __future__ import annotations
 
@@ -172,11 +173,24 @@ def connect_dados(
     policy: ReadPolicy | None = None,
     path: Path | str | None = None,
 ) -> DadosConnection:
-    """Abre o `dados.duckdb` só para leitura. Com `policy`, bloqueia qualquer SQL fora das tabelas fato permitidas."""
+    """Abre o `dados.duckdb` só para leitura com defesa em profundidade.
+
+    - `read_only=True`: impede modificações nos dados e no esquema.
+    - `enable_external_access=False`: bloqueia no próprio DuckDB a leitura de arquivos locais ou URLs.
+    - `lock_configuration=True`: bloqueia comandos SQL (`SET`) de reativar configurações.
+    - `policy`: quando fornecida, valida via AST SQLGlot tabelas permitidas e colunas sensíveis.
+    """
     db_path = Path(path or dados_db_path()).resolve()
     if not db_path.exists():
         raise FileNotFoundError(
             f"dados.duckdb não encontrado em {db_path}. Gere o banco com Adito/scripts/gerar_duckdb.py antes de consultar."
         )
-    raw_conn = duckdb.connect(str(db_path), read_only=True)
+    raw_conn = duckdb.connect(
+        str(db_path),
+        read_only=True,
+        config={
+            "enable_external_access": False,  # banco não lê arquivos nem URLs fora dele
+            "lock_configuration": True,       # o SQL não consegue religar a opção
+        },
+    )
     return DadosConnection(raw_conn=raw_conn, policy=policy)

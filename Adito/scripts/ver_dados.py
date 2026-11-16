@@ -32,7 +32,14 @@ except ImportError:
 def conectar() -> duckdb.DuckDBPyConnection:
     if not DB_PATH.exists():
         sys.exit(f"Erro: banco não encontrado em {DB_PATH}.\nRode antes: python Adito/scripts/gerar_duckdb.py")
-    return duckdb.connect(str(DB_PATH), read_only=True)
+    return duckdb.connect(
+        str(DB_PATH),
+        read_only=True,
+        config={
+            "enable_external_access": False,
+            "lock_configuration": True,
+        },
+    )
 
 
 def listar_tabelas(conn: duckdb.DuckDBPyConnection):

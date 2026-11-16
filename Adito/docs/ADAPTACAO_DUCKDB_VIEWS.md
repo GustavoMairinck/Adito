@@ -67,7 +67,7 @@ Todas as camadas do backend foram convertidas de SQLite para DuckDB para o banco
 ### 4.1. Camada de Dados (`core/datastore.py`)
 
 - **`dados_db_path()`**: Atualizado para localizar `dados.duckdb` na pasta de dados do app (`XDG_DATA_HOME` / `%LOCALAPPDATA%`) ou no fallback do repositório (`Adito/app/data/dados.duckdb`).
-- **`connect_dados(policy)`**: Abre conexão DuckDB com flag `read_only=True`.
+- **`connect_dados(policy)`**: Abre conexão DuckDB com flag `read_only=True` e defesa em profundidade nativa do DuckDB: `enable_external_access=False` (bloqueia nativamente a leitura de arquivos locais e URLs pelo banco) e `lock_configuration=True` (impede comandos SQL de religarem a opção).
 - **Wrappers de Compatibilidade**: Implementadas as classes `DadosConnection`, `DadosCursor` e `DadosRow`, provendo acesso indexado por nome de coluna (`row["coluna"]`), conversão para dicionário (`dict(row)`) e compatibilidade total com o ecossistema Django/LangChain existente.
 
 ### 4.2. Segurança SQL e Proteção LGPD (`agents/bi_agent/sql_security.py`)

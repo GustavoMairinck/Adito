@@ -50,7 +50,8 @@ Esta story entrega em 1 etapa:
 - **DADO** que o contexto `pesquisa-extensao-ifes` define as 6 tabelas fato como `allowed_tables` e declara `sensitive_columns` (`*cpf*`, `*email*`)
 - **QUANDO** uma query SQL passa por `validate_read_only_sql` e `connect_dados(policy)`
 - **ENTÃO** consultas `SELECT` analíticas válidas no dialeto DuckDB (`ILIKE`, `EXTRACT`, `CAST`/`::`, `COUNT(DISTINCT ...)`) sobre as 6 tabelas fato são aprovadas e executadas em modo somente-leitura
-- **E** qualquer comando de escrita/sistema (`COPY`, `ATTACH`, `INSTALL`, `LOAD`, `PRAGMA`, `SET`, `CALL`), função de leitura de arquivos (`read_csv*`, `read_parquet*`, `read_json*`, `parquet_scan`), acesso às 41 tabelas base fora da whitelist ou referência a `sensitive_columns` é bloqueado com `SQLSecurityError`.
+- **E** qualquer comando de escrita/sistema (`COPY`, `ATTACH`, `INSTALL`, `LOAD`, `PRAGMA`, `SET`, `CALL`), função de leitura de arquivos (`read_csv*`, `read_parquet*`, `read_json*`, `parquet_scan`), acesso às 41 tabelas base fora da whitelist ou referência a `sensitive_columns` é bloqueado com `SQLSecurityError`
+- **E** a conexão DuckDB (`connect_dados`) aplica defesa em profundidade nativa no motor (`enable_external_access=False` e `lock_configuration=True`), bloqueando no banco qualquer leitura de arquivos do sistema operacional ou URLs e impedindo que o SQL reative a opção, inclusive em chamadas sem `ReadPolicy` (ex: painéis).
 
 ### Cenário 3: Ativação do contexto `pesquisa-extensao-ifes` e desativação de `exemplo-vendas`
 - **DADO** que `Adito/app/contexts/pesquisa-extensao-ifes/` possui `views.json`, `rules.md` e `examples.json` e `Adito/app/contexts/exemplo-vendas/views.json` possui `"ativo": false`

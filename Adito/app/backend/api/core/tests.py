@@ -161,6 +161,15 @@ class DuckDBSecurityAndContextTests(TestCase):
             with self.assertRaises(PermissionError):
                 conn.execute("SELECT id FROM vfact_projeto_pesquisa_resolved")
 
+    def test_connect_dados_bloqueia_acesso_externo_e_reconfiguracao_no_banco(self) -> None:
+        """Verifica a proteção em nível de banco (DuckDB config), mesmo sem ReadPolicy (segunda camada)."""
+        with connect_dados(path=self.synthetic_duckdb) as conn:
+            with self.assertRaises(duckdb.PermissionException):
+                conn.execute("SELECT * FROM '/tmp/qualquer_arquivo.csv'")
+
+            with self.assertRaises(duckdb.InvalidInputException):
+                conn.execute("SET enable_external_access = true")
+
     def test_load_context_dir_ativa_pesquisa_extensao_e_desativa_exemplo_vendas(self) -> None:
         pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
         pasta_vendas = RAIZ_REPO / "Adito" / "app" / "contexts" / "exemplo-vendas"
