@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("pasta", help="Pasta do contexto com views.json.")
-        parser.add_argument("--index", action="store_true", help="Gera o RAG e o índice de valores (usa a chave da Mistral).")
+        parser.add_argument("--index", action="store_true", help="Gera o RAG e o índice de valores (usa a chave do Gemini).")
 
     def handle(self, *args, **options):
         tenant, _ = Tenant.objects.get_or_create(name=os.environ.get("DEFAULT_TENANT_NAME", "padrao"))

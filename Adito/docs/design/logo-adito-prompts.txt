@@ -1,0 +1,15 @@
+Ferramenta usada: geração de imagens integrada (image_gen).
+
+Versão clara
+
+Use case: precise-object-edit.
+A imagem-alvo é a imagem enviada pelo usuário com um emblema quadrado de cantos muito arredondados, fundo quase branco, borda verde-sálvia, um círculo vermelho no canto superior esquerdo e uma grade de peças verdes. Ignore as outras imagens com globos azuis e o nome Oráculo.
+Prepare esse emblema como arquivo limpo de logo do Adito para o tema claro. Preserve fielmente a disposição, a contagem, a forma e as proporções das peças da imagem-alvo. Linha superior com círculo vermelho e dois quadrados verdes arredondados. Linha intermediária com três quadrados verdes arredondados. Linha inferior com quadrado verde à esquerda e uma barra horizontal verde-escura ocupando as duas posições da direita. Preserve o fundo claro e a borda verde-sálvia, com cantos grandes e arredondados. Paleta fiel à referência, vermelho #C50707, verdes médios #2B7A42 e #389653, verde-escuro #173F35, fundo #F6F8F4, borda #C8D5C9.
+Remova somente a moldura preta externa da captura e o botão de três pontos da interface no canto superior direito. A área exterior ao emblema deve ser realmente transparente. Centralize o emblema em canvas quadrado, preenchendo aproximadamente 94% da largura, com margem uniforme. Traços e contornos limpos, preenchimentos planos e cores sólidas. Sem texto, sombras, brilho, ruído ou efeitos 3D. Entregue somente um ícone de logo de alta resolução.
+
+Versão escura
+
+Use case: precise-object-edit.
+A imagem fornecida é a logo-alvo do Adito. Crie somente sua versão escura. Preserve rigorosamente a silhueta, dimensões, cantos, espessura da borda e a grade das oito peças, inclusive o círculo superior esquerdo e a barra inferior à direita.
+Altere a paleta para o modo escuro do site: área interna em grafite sólido #1C1F23, borda em cinza #46505B, círculo vermelho #F04444. Os quadrados verdes médios passam para #389653, os verdes mais claros para #68D388. O quadrado verde-escuro do meio à direita e a barra inferior passam para verde-sálvia #88B99B, para ficarem legíveis sobre o grafite.
+Mantenha a posição, forma, tamanho e espaçamento de todos os elementos. Preenchimentos planos e uniformes, contornos nítidos. A área EXTERIOR à silhueta arredondada deve ser totalmente transparente. Sem fundo retangular externo, texto, sombras, brilho, textura ou elementos adicionais. Mesma composição quadrada da referência.

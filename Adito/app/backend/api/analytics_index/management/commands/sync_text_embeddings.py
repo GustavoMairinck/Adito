@@ -1,10 +1,10 @@
 from django.core.management.base import BaseCommand, CommandError
-from langchain_mistralai import MistralAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from analytics_index.config import TEXT_EMBEDDING_BATCH_SIZE
 from analytics_index.services import sync_text_embeddings
 from core.models import Contexto
-from agents.config import MISTRAL_API_KEY, MISTRAL_EMBEDDING_MODEL
+from agents.config import GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL
 
 
 def resolve_contexto(slug: str | None) -> Contexto:
@@ -17,9 +17,9 @@ def resolve_contexto(slug: str | None) -> Contexto:
 
 
 def get_embedder():
-    if not MISTRAL_API_KEY:
-        raise CommandError("MISTRAL_API_KEY não configurada.")
-    return MistralAIEmbeddings(model=MISTRAL_EMBEDDING_MODEL, api_key=MISTRAL_API_KEY)
+    if not GEMINI_API_KEY:
+        raise CommandError("GEMINI_API_KEY não configurada.")
+    return GoogleGenerativeAIEmbeddings(output_dimensionality=1024, model=GEMINI_EMBEDDING_MODEL, google_api_key=GEMINI_API_KEY)
 
 
 class Command(BaseCommand):

@@ -37,9 +37,9 @@ import type { TrainingItem } from '@/modules/admin/components/TrainingItemCard.v
 const activeTab = ref<'governance' | 'etl' | 'audit' | 'system'>('governance')
 
 const tabs = [
-  { key: 'governance' as const, label: 'Governanca IA', icon: Brain },
+  { key: 'governance' as const, label: 'Base de conhecimento', icon: Brain },
   { key: 'audit' as const, label: 'Auditoria SQL', icon: Code2 },
-  { key: 'etl' as const, label: 'Preparar Dados', icon: RefreshCw },
+  { key: 'etl' as const, label: 'Contextos de dados', icon: RefreshCw },
   { key: 'system' as const, label: 'Sistema', icon: Server }
 ]
 
@@ -51,147 +51,178 @@ const trainingItems = ref<TrainingItem[]>([
   {
     id: 'ddl-001',
     type: 'ddl',
-    name: 'vfactvendasresolved',
-    content: `CREATE OR REPLACE VIEW public.vfactvendasresolved AS
-SELECT *
-FROM fapes.vfactvendasresolved`,
+    name: 'unificado.projeto_pesquisa',
+    content: `CREATE TABLE unificado.projeto_pesquisa (
+  id BIGINT PRIMARY KEY REFERENCES unificado.iniciativa(id),
+  id_origem INTEGER, -- ID original do SigPesq
+  data_inicio DATE,
+  data_fim DATE,
+  palavras_chave TEXT,
+  sigilo BOOLEAN,
+  id_natureza_projeto unificado.tipo_natureza_projeto,
+  parecer_diretoria unificado.tipo_parecer_diretoria,
+  id_campus BIGINT REFERENCES unificado.organizacao(id),
+  id_area_conhecimento BIGINT REFERENCES unificado.area_conhecimento(id),
+  id_coordenador BIGINT REFERENCES unificado.pesquisador(id)
+)`,
     created_at: '2026-01-15T10:05:00Z'
   },
   {
     id: 'ddl-002',
     type: 'ddl',
-    name: 'FactVendas',
-    content: `CREATE TABLE fact_vendas (
-id_venda INT PRIMARY KEY,
-id_tempo INT,
-id_produto INT,
-id_cliente INT,
-id_regiao INT,
-id_canal INT,
-id_vendedor INT,
-quantidade_vendida INT,
-valor_bruto DECIMAL(12,2),
-desconto DECIMAL(12,2),
-receita_liquida DECIMAL(12,2),
-custo DECIMAL(12,2),
-lucro DECIMAL(12,2)
+    name: 'unificado.acao (Extensão SRC)',
+    content: `CREATE TABLE unificado.acao (
+  id BIGINT PRIMARY KEY REFERENCES unificado.iniciativa(id),
+  id_origem INTEGER, -- ID original do SRC
+  processo TEXT,
+  data_cadastro DATE,
+  relatorio_aprovado BOOLEAN,
+  url_detalhe TEXT,
+  id_natureza BIGINT REFERENCES unificado.natureza(id),
+  id_tipo_acao BIGINT REFERENCES unificado.tipo_acao(id),
+  id_area_conhecimento BIGINT REFERENCES unificado.area_conhecimento(id),
+  id_coordenador BIGINT REFERENCES unificado.pessoa(id)
 )`,
     created_at: '2026-01-15T10:05:00Z'
   },
   {
+    id: 'ddl-003',
+    type: 'ddl',
+    name: 'unificado.grupo_pesquisa_cnpq',
+    content: `CREATE TABLE unificado.grupo_pesquisa_cnpq (
+  id BIGINT PRIMARY KEY REFERENCES unificado.grupo_pesquisa(id),
+  situacao_grupo unificado.tipo_situacao_grupo,
+  ano_formacao INTEGER,
+  data_situacao DATE,
+  data_ultimo_envio DATE,
+  repercussoes TEXT,
+  id_instituicao BIGINT NOT NULL REFERENCES unificado.organizacao(id),
+  id_campus BIGINT NOT NULL REFERENCES unificado.organizacao(id)
+)`,
+    created_at: '2026-01-16T11:10:00Z'
+  },
+  {
     id: 'sql-001',
     type: 'sql',
-    name: 'Receita liquida por ano',
-    question: 'Qual a receita liquida total por ano?',
-    content: `SELECT ano, SUM(receita_liquida) AS receita_liquida_total
-FROM vfactvendasresolved
-GROUP BY ano
-ORDER BY ano`,
+    name: 'Projetos de pesquisa por área de conhecimento',
+    question: 'Quantos projetos de pesquisa estão cadastrados por área de conhecimento?',
+    content: `SELECT ac.nome AS area_conhecimento, COUNT(pp.id) AS total_projetos
+FROM unificado.projeto_pesquisa pp
+JOIN unificado.area_conhecimento ac ON ac.id = pp.id_area_conhecimento
+GROUP BY ac.nome
+ORDER BY total_projetos DESC`,
     created_at: '2026-02-01T14:30:00Z'
   },
   {
     id: 'sql-002',
     type: 'sql',
-    name: 'Top produtos por receita',
-    question: 'Quais sao os 10 produtos com maior receita liquida?',
-    content: `SELECT produto, SUM(receita_liquida) AS receita_liquida_total
-FROM vfactvendasresolved
-GROUP BY produto
-ORDER BY receita_liquida_total DESC
-LIMIT 10`,
+    name: 'Ações de extensão e participantes por área',
+    question: 'Quantas ações e atividades de extensão foram registradas por área?',
+    content: `SELECT ac.nome AS area_conhecimento,
+       COUNT(DISTINCT a.id) AS total_acoes,
+       COUNT(DISTINCT atv.id) AS total_atividades
+FROM unificado.acao a
+LEFT JOIN unificado.area_conhecimento ac ON ac.id = a.id_area_conhecimento
+LEFT JOIN unificado.atividade atv ON atv.id_acao = a.id
+GROUP BY ac.nome
+ORDER BY total_acoes DESC`,
     created_at: '2026-02-01T14:35:00Z'
   },
   {
     id: 'sql-003',
     type: 'sql',
-    name: 'Lucro por categoria',
-    question: 'Qual o lucro por categoria de produto?',
-    content: `SELECT categoria_produto, SUM(lucro) AS lucro_total
-FROM vfactvendasresolved
-GROUP BY categoria_produto
-ORDER BY lucro_total DESC`,
+    name: 'Grupos de pesquisa CNPq por situação e ano',
+    question: 'Quais grupos de pesquisa estão certificados no diretório do CNPq?',
+    content: `SELECT gp.nome, gp.sigla, gpc.situacao_grupo, gpc.ano_formacao
+FROM unificado.grupo_pesquisa gp
+JOIN unificado.grupo_pesquisa_cnpq gpc ON gpc.id = gp.id
+ORDER BY gpc.ano_formacao DESC`,
     created_at: '2026-02-05T09:00:00Z'
   },
   {
     id: 'sql-004',
     type: 'sql',
-    name: 'Receita por canal',
-    question: 'Qual a receita liquida por canal de venda?',
-    content: `SELECT canal, SUM(receita_liquida) AS receita_liquida_total, COUNT(id_venda) AS qtd_vendas
-FROM vfactvendasresolved
-GROUP BY canal
-ORDER BY receita_liquida_total DESC`,
+    name: 'Produção científica anual (Lattes)',
+    question: 'Qual a evolução anual de artigos publicados e trabalhos em eventos?',
+    content: `SELECT p.ano, COUNT(ate.id) AS total_publicacoes
+FROM unificado.producao p
+JOIN unificado.artigo_trabalho_evento ate ON ate.id = p.id
+WHERE p.ano IS NOT NULL
+GROUP BY p.ano
+ORDER BY p.ano DESC`,
     created_at: '2026-02-10T11:20:00Z'
   },
   {
     id: 'sql-005',
     type: 'sql',
-    name: 'Evolucao mensal de receita',
-    question: 'Como foi a evolucao mensal da receita em 2025?',
-    content: `SELECT mes, SUM(receita_liquida) AS receita_liquida_total
-FROM vfactvendasresolved
-WHERE ano = 2025
-GROUP BY mes
-ORDER BY mes`,
+    name: 'Bolsas e orientações por edital',
+    question: 'Quantos planos de trabalho e orientações estão vinculados a cada edital?',
+    content: `SELECT e.titulo AS edital,
+       COUNT(DISTINCT pt.id) AS planos_trabalho,
+       COUNT(DISTINCT o.id) AS orientacoes,
+       COALESCE(SUM(o.valor_bolsa), 0) AS total_bolsas
+FROM unificado.edital e
+LEFT JOIN unificado.plano_trabalho pt ON pt.id_edital = e.id
+LEFT JOIN unificado.orientacao o ON o.id_plano_trabalho = pt.id
+GROUP BY e.titulo
+ORDER BY orientacoes DESC`,
     created_at: '2026-02-12T16:45:00Z'
   },
   {
     id: 'sql-006',
     type: 'sql',
-    name: 'Clientes por porte',
-    question: 'Quantos clientes existem em cada porte?',
-    content: `SELECT porte_cliente, COUNT(DISTINCT cliente) AS qtd_clientes
-FROM vfactvendasresolved
-GROUP BY porte_cliente
-ORDER BY qtd_clientes DESC`,
+    name: 'Pesquisadores por titulação acadêmica',
+    question: 'Qual a distribuição de pesquisadores por titulação acadêmica?',
+    content: `SELECT t.nome AS titulacao, COUNT(pesq.id) AS total_pesquisadores
+FROM unificado.pesquisador pesq
+JOIN unificado.titulacao t ON t.id = pesq.id_titulacao
+GROUP BY t.nome
+ORDER BY total_pesquisadores DESC`,
     created_at: '2026-02-15T08:00:00Z'
   },
   {
     id: 'doc-001',
     type: 'documentation',
-    name: 'Glossario - Receita',
-    content: `GLOSSARIO COMERCIAL - Receita
-Sinonimos: receita liquida, vendas liquidas, faturamento liquido
-Coluna: receita_liquida
-Regra: SUM(receita_liquida)
-Cuidado: nao usar valor_bruto quando a pergunta pedir receita`,
+    name: 'Glossário Institucional - Iniciativas (Pesquisa & Extensão)',
+    content: `GLOSSÁRIO IFES / ADITO - Iniciativas
+Superclasse: unificado.iniciativa (id, nome)
+- Projetos de Pesquisa (SigPesq): unificado.projeto_pesquisa
+- Projetos Lattes: unificado.projeto_lattes
+- Ações de Extensão (SRC): unificado.acao e unificado.atividade`,
     created_at: '2026-02-20T10:00:00Z'
   },
   {
     id: 'doc-002',
     type: 'documentation',
-    name: 'Glossario - Produto',
-    content: `GLOSSARIO COMERCIAL - Produto
-Sinonimos: item, SKU, solucao, oferta
-Coluna: produto
-Use categoria_produto e segmento_produto para agrupamentos comerciais`,
+    name: 'Glossário Institucional - Produção Científica (Lattes)',
+    content: `GLOSSÁRIO IFES / ADITO - Produção Científica
+Superclasse: unificado.producao (id, titulo, descricao, ano)
+Especializações:
+- unificado.artigo_trabalho_evento (artigos e anais com DOI/ISSN)
+- unificado.livro_capitulo (livros e capítulos com ISBN/editora)
+- unificado.patente_registro (patentes e registros no INPI)
+- unificado.producao_tecnica_artistica_bibliografica`,
     created_at: '2026-02-20T10:05:00Z'
   },
   {
     id: 'doc-003',
     type: 'documentation',
-    name: 'Ontologia - Margem',
-    content: `CONCEITO DERIVADO - Margem
-Definicao: percentual de lucro sobre a receita liquida
-Regra: (SUM(lucro) / NULLIF(SUM(receita_liquida), 0)) * 100
-Uso: analises de rentabilidade por produto, cliente, canal ou vendedor`,
+    name: 'Ontologia - Editais, Planos de Trabalho e Orientações',
+    content: `CONCEITO INSTITUCIONAL - Fomento e Iniciação Científica
+Fluxo relacional:
+unificado.edital -> unificado.plano_trabalho -> unificado.orientacao
+- orientacao contém: ano, valor_bolsa, modalidade, id_orientador (pesquisador), id_orientado (estudante) e id_financiador (organizacao).`,
     created_at: '2026-02-22T14:00:00Z'
   },
   {
     id: 'doc-004',
     type: 'documentation',
-    name: 'Sinonimos do SemanticDictionary',
-    content: `SINONIMOS (Term -> TargetRef)
-- produto -> produto
-- categoria -> categoria_produto
-- segmento -> segmento_produto
-- cliente -> cliente
-- porte -> porte_cliente
-- setor -> setor_cliente
-- canal -> canal
-- vendedor -> vendedor
-- receita -> receita_liquida
-- margem -> lucro / receita_liquida`,
+    name: 'Dicionário Semântico - Fontes Adito (IFES Campus Serra)',
+    content: `MAPEAMENTO DE FONTES INTEGRADAS (Adito)
+- SRC -> unificado.acao, unificado.atividade, unificado.registro_participante
+- SigPesq / Horizon -> unificado.projeto_pesquisa, unificado.plano_trabalho, unificado.orientacao
+- Diretório CNPq (DGP) -> unificado.grupo_pesquisa, unificado.grupo_pesquisa_cnpq, unificado.linha_pesquisa
+- Currículo Lattes -> unificado.pessoa_lattes, unificado.formacao_academica, unificado.producao`,
     created_at: '2026-02-25T09:30:00Z'
   }
 ])
@@ -458,23 +489,25 @@ async function handleSync() {
     const stages: EtlTriggeredRun[] = contextos.map((ctx) => ({
       dagId: ctx.slug || ctx.pasta,
       label: ctx.nome || ctx.pasta,
-      dagRunId: !ctx.ativo
+      dagRunId: !ctx.ativo || ctx.erros?.length
         ? (ctx.erros || []).join(' ')
         : ctx.indexado
           ? `${ctx.rag_itens} itens de RAG, ${ctx.valores} valores`
-          : 'válido; sem indexação (falta a chave da Mistral)',
-      state: ctx.ativo && ctx.indexado ? 'success' : ctx.ativo ? 'pending' : 'failed',
+          : 'válido; sem indexação (falta a chave do Gemini)',
+      state: ctx.erros?.length || !ctx.ativo ? 'failed' : ctx.indexado ? 'success' : 'pending',
       triggeredAt
     }))
     const validos = contextos.filter((ctx) => ctx.ativo).length
+    const indexados = contextos.filter((ctx) => ctx.ativo && ctx.indexado).length
+    const falhou = contextos.some((ctx) => !ctx.ativo || ctx.erros?.length)
 
     etlLogs.value.unshift({
       id: Date.now(),
       timestamp: triggeredAt,
       message: data.chave_configurada
-        ? `${validos} de ${contextos.length} contexto(s) válidos e indexados.`
-        : `${validos} de ${contextos.length} contexto(s) válidos. Configure a chave da Mistral para indexar o RAG.`,
-      status: validos === contextos.length ? 'success' : 'error',
+        ? `${validos} de ${contextos.length} contexto(s) válidos; ${indexados} indexado(s).`
+        : `${validos} de ${contextos.length} contexto(s) válidos. Configure a chave do Gemini para indexar o RAG.`,
+      status: falhou ? 'error' : 'success',
       totalRecords: contextos.length,
       changedRecords: validos,
       rows: [],
@@ -651,7 +684,7 @@ onBeforeUnmount(() => {
             Administração
           </h1>
           <p class="max-w-2xl text-base text-text-secondary">
-            Gerencie o modelo de inteligência artificial, prepare dados analíticos e monitore a integridade do ecossistema ORACULO-ESX.
+            Carregue os contextos de pesquisa e extensão, gerencie o modelo de inteligência artificial e acompanhe os dados locais do Adito.
           </p>
         </div>
       </div>
@@ -687,8 +720,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Total de Itens</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ stats.total }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <Brain class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <Brain class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -699,8 +732,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Estruturas DDL</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ stats.ddl }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <Database class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <Database class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -711,8 +744,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Queries SQL</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ stats.sql }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <Code2 class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <Code2 class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -723,8 +756,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Documentação</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ stats.doc }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <FileText class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <FileText class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -740,12 +773,12 @@ onBeforeUnmount(() => {
                 v-model="searchQuery"
                 type="text"
                 placeholder="Pesquisar em treinamentos..."
-                class="w-full rounded-lg border border-border-subtle bg-surface/30 py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder-text-muted transition-all focus:border-accent/50 focus:bg-surface/50 focus:outline-none focus:ring-4 focus:ring-accent/5"
+                class="w-full rounded-lg border border-border-subtle bg-surface py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder-text-muted transition-all focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
               />
             </div>
 
             <!-- Filter -->
-            <div class="flex items-center gap-1 rounded-lg bg-surface/30 p-1 border border-border-subtle">
+            <div class="flex items-center gap-1 rounded-lg bg-surface p-1 border border-border-subtle">
               <button
                 v-for="f in [
                   { key: 'all' as const, label: 'Todos' },
@@ -758,7 +791,7 @@ onBeforeUnmount(() => {
                   'rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-200',
                   filterType === f.key
                     ? 'bg-surface-elevated text-text-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-surface/20'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated/50'
                 ]"
                 @click="filterType = f.key"
               >
@@ -777,7 +810,7 @@ onBeforeUnmount(() => {
             </button>
             <button
               :disabled="wipingInProgress"
-              class="btn-secondary flex items-center gap-2 text-red-400 border-red-900/30 hover:border-red-500/50 hover:bg-red-500/5"
+              class="btn-secondary flex items-center gap-2 text-[#C50707] border-[#C50707]/30 hover:border-[#C50707]/60 hover:bg-[#C50707]/8 dark:text-red-300 dark:border-red-400/40 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:hover:border-red-400/60"
               @click="confirmWipe = true"
             >
               <Zap class="h-4 w-4" />
@@ -818,7 +851,7 @@ onBeforeUnmount(() => {
         <ConfirmModal
           :is-open="confirmWipe"
           title="Atenção Crítica: Wipe & Retrain"
-          message="Esta ação irá reconstruir os dados vetoriais no pgvector a partir dos arquivos base. Treinamentos manuais não persistidos serão perdidos. Deseja continuar?"
+          message="Esta ação irá reconstruir os vetores RAG no SQLite local (app.db) a partir dos arquivos de contexto. Treinamentos manuais não persistidos serão perdidos. Deseja continuar?"
           confirm-text="Wipe & Retrain"
           @confirm="handleWipeRetrain"
           @close="confirmWipe = false"
@@ -848,8 +881,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Total de Consultas</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ auditStats.total }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <Code2 class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <Code2 class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -860,8 +893,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Consultas Válidas</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ auditStats.valid }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <CheckCircle2 class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+                <CheckCircle2 class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -872,8 +905,8 @@ onBeforeUnmount(() => {
                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Consultas Inválidas</p>
                 <p class="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary">{{ auditStats.invalid }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard">
-                <XCircle class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+              <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[#C50707]/10 border border-[#C50707]/20 dark:bg-red-500/15 dark:border-red-400/25">
+                <XCircle class="h-6 w-6 text-[#C50707] dark:text-red-300" stroke-width="1.75" />
               </div>
             </div>
           </div>
@@ -889,12 +922,12 @@ onBeforeUnmount(() => {
                 v-model="auditSearchQuery"
                 type="text"
                 placeholder="Pesquisar por pergunta..."
-                class="w-full rounded-lg border border-border-subtle bg-surface/30 py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder-text-muted transition-all focus:border-accent/50 focus:bg-surface/50 focus:outline-none focus:ring-4 focus:ring-accent/5"
+                class="w-full rounded-lg border border-border-subtle bg-surface py-2.5 pl-10 pr-4 text-sm text-text-primary placeholder-text-muted transition-all focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
               />
             </div>
 
             <!-- Filter -->
-            <div class="flex items-center gap-1 rounded-lg bg-surface/30 p-1 border border-border-subtle">
+            <div class="flex items-center gap-1 rounded-lg bg-surface p-1 border border-border-subtle">
               <button
                 v-for="f in [
                   { key: 'all' as const, label: 'Todos' },
@@ -906,7 +939,7 @@ onBeforeUnmount(() => {
                   'rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-200',
                   auditFilter === f.key
                     ? 'bg-surface-elevated text-text-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-surface/20'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated/50'
                 ]"
                 @click="auditFilter = f.key"
               >
@@ -1052,9 +1085,9 @@ onBeforeUnmount(() => {
                 <Database class="h-8 w-8 text-accent" stroke-width="1.5" />
               </div>
               <div class="space-y-1">
-                <h2 class="text-xl font-semibold text-text-primary">Carregar Contextos</h2>
+                <h2 class="text-xl font-semibold text-text-primary">Contextos de dados</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
-                  Valida os contextos da pasta de dados contra o dados.db e, com a chave da Mistral configurada,
+                  Valida os contextos da pasta de dados contra o dados.db e, com a chave do Gemini configurada,
                   gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
                 </p>
               </div>
@@ -1062,14 +1095,14 @@ onBeforeUnmount(() => {
             <button
               :disabled="hasRunningEtl"
               :class="[
-                'btn-primary flex shrink-0 items-center gap-3 px-10 py-4 text-base shadow-xl active:scale-95',
+                'btn-primary flex shrink-0 items-center gap-3 px-5 py-3 text-sm',
                 hasRunningEtl ? 'opacity-50 cursor-not-allowed' : ''
               ]"
               @click="handleSync"
             >
               <Loader2 v-if="hasRunningEtl" class="h-5 w-5 animate-spin" />
               <RefreshCw v-else class="h-5 w-5" stroke-width="2.5" />
-              {{ hasRunningEtl ? 'Preparando...' : 'Preparar Dados' }}
+              {{ hasRunningEtl ? 'Indexando contextos…' : 'Carregar e indexar contextos' }}
             </button>
           </div>
         </div>
@@ -1081,7 +1114,7 @@ onBeforeUnmount(() => {
               <div class="p-2 bg-accent/10 rounded-lg">
                 <Clock class="h-5 w-5 text-accent" stroke-width="2" />
               </div>
-              <h2 class="text-lg font-semibold text-text-primary">Logs de Preparação</h2>
+              <h2 class="text-lg font-semibold text-text-primary">Histórico de carregamento</h2>
             </div>
 
             <!-- Filtro de Busca -->
@@ -1144,7 +1177,12 @@ onBeforeUnmount(() => {
                     v-if="log.status === 'error'"
                     class="rounded border border-red-100 bg-white px-4 py-3 text-sm text-red-600 dark:border-red-900/40 dark:bg-slate-900 dark:text-red-400"
                   >
-                    A preparação falhou. Verifique a conectividade com o PostgreSQL e a configuração do Gemini.
+                    {{ log.message }}
+                    <ul v-if="log.runs.length" class="mt-2 space-y-1">
+                      <li v-for="run in log.runs.filter(item => item.state === 'failed')" :key="run.dagId">
+                        {{ run.label }} — {{ run.dagRunId }}
+                      </li>
+                    </ul>
                   </div>
 
                   <!-- Sucesso -->
@@ -1422,8 +1460,8 @@ onBeforeUnmount(() => {
         <!-- System Info Cards -->
         <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <div class="premium-card p-6">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard mb-6">
-              <Server class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 mb-6">
+              <Server class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
             </div>
             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted mb-2">Versão do Sistema</p>
             <p class="text-2xl font-semibold text-text-primary mb-6">v{{ systemStats.version }}</p>
@@ -1445,10 +1483,10 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="premium-card p-6">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard mb-6">
-              <HardDrive class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 mb-6">
+              <HardDrive class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
             </div>
-            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted mb-2">pgvector</p>
+            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted mb-2">SQLite Vec (RAG)</p>
             <p class="text-2xl font-semibold text-text-primary mb-6">{{ systemStats.vectorRows.toLocaleString('pt-BR') }} <span class="text-sm font-normal text-text-secondary">vetores</span></p>
 
             <div class="space-y-2.5 pt-4 border-t border-border-subtle">
@@ -1468,8 +1506,8 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="premium-card p-6">
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-elevated border border-border-standard mb-6">
-              <Brain class="h-6 w-6 text-text-muted" stroke-width="1.5" />
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 mb-6">
+              <Brain class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" stroke-width="1.75" />
             </div>
             <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted mb-2">Inteligência Artificial</p>
             <p class="text-2xl font-semibold text-text-primary mb-6">Operacional</p>
@@ -1481,11 +1519,11 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex items-center justify-between text-xs">
                 <span class="text-text-secondary">Motor LLM</span>
-                <span class="text-text-primary">Gemini 3.5 Flash-Lite</span>
+                <span class="text-text-primary">Gemini AI</span>
               </div>
               <div class="flex items-center justify-between text-xs">
                 <span class="text-text-secondary">Vector Store</span>
-                <span class="text-text-primary">pgvector</span>
+                <span class="text-text-primary">SQLite BLOB (numpy)</span>
               </div>
             </div>
           </div>

@@ -7,11 +7,6 @@ GEMINI_MODEL           = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_API_KEY         = os.getenv("GEMINI_API_KEY")
 GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
 
-# ─── Mistral (LLM de chat e embeddings) ──────────────────────────────────────
-MISTRAL_MODEL           = os.getenv("MISTRAL_MODEL", "ministral-14b-latest")
-MISTRAL_API_KEY         = os.getenv("MISTRAL_API_KEY")
-MISTRAL_EMBEDDING_MODEL = os.getenv("MISTRAL_EMBEDDING_MODEL", "mistral-embed")
-
 # ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
 # Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
 from core.datastore import app_db_path

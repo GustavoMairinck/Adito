@@ -2,7 +2,7 @@ import httpClient from './httpClient'
 import { initBackend, isTauri } from './config'
 
 /**
- * Chave da Mistral: o Tauri guarda no cofre do SO (Secret Service / Credential Manager)
+ * Chave do Gemini: o Tauri guarda no cofre do SO (Secret Service / Credential Manager)
  * e reinicia o backend com ela. O front nunca guarda a chave.
  */
 
@@ -22,7 +22,7 @@ export async function keyStatus(): Promise<KeyStatus | null> {
   return invoke<KeyStatus>('llm_key_status')
 }
 
-/** Testa a chave na Mistral; só guarda se ela funcionar. Devolve o motivo quando falha. */
+/** Testa a chave no Gemini; só guarda se ela funcionar. Devolve o motivo quando falha. */
 export async function testAndSaveKey(key: string): Promise<{ ok: boolean; reason?: string }> {
   const { data } = await httpClient.post('/api/config/test-llm-key', { key })
   if (!data.ok) return data

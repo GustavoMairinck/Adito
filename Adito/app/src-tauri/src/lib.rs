@@ -4,7 +4,7 @@
 //! backend Python (`desktop_server.py`) com esse token. O front pede `backend_info`,
 //! que espera o `/health` responder e devolve a URL e o token. Ao fechar, encerra o backend.
 //!
-//! A chave da Mistral fica no cofre do SO e só chega ao backend por variável de ambiente
+//! A chave do Gemini fica no cofre do SO e só chega ao backend por variável de ambiente
 //! ao subir o processo; trocar a chave reinicia o backend na mesma porta e com o mesmo token.
 
 use std::fs::{self, File};
@@ -20,7 +20,7 @@ use tauri::{Manager, RunEvent, State};
 
 const BACKEND_START_TIMEOUT: Duration = Duration::from_secs(90);
 const KEYRING_SERVICE: &str = "br.edu.ifes.leds.oraculo-esx";
-const KEYRING_USER: &str = "mistral-api-key";
+const KEYRING_USER: &str = "gemini-api-key";
 
 struct Backend {
     port: u16,
@@ -119,14 +119,14 @@ fn spawn_backend(backend: &Backend) -> Result<Child, String> {
         .stdout(Stdio::from(log.try_clone().map_err(|e| e.to_string())?))
         .stderr(Stdio::from(log));
     // Chave do cofre; sem ela o backend sobe e o chat avisa que falta configurar.
-    // Em desenvolvimento, uma MISTRAL_API_KEY no ambiente vale se o cofre estiver vazio.
+    // Em desenvolvimento, uma GEMINI_API_KEY no ambiente vale se o cofre estiver vazio.
     match read_key() {
         Ok(Some(key)) => {
-            cmd.env("MISTRAL_API_KEY", key);
+            cmd.env("GEMINI_API_KEY", key);
         }
         _ if cfg!(debug_assertions) => {}
         _ => {
-            cmd.env_remove("MISTRAL_API_KEY");
+            cmd.env_remove("GEMINI_API_KEY");
         }
     }
     cmd.spawn().map_err(|e| e.to_string())

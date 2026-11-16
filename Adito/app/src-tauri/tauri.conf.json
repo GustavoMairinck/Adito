@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Oraculo ESX",
+  "productName": "Adito",
   "version": "0.1.0",
   "identifier": "br.edu.ifes.leds.oraculo-esx",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Oráculo ESX",
+        "title": "Adito · IFES Campus Serra",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

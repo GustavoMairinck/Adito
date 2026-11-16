@@ -1,6 +1,6 @@
 import os
 
-from langchain_mistralai import MistralAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -16,10 +16,11 @@ TYPE_TO_ITEM_TYPE = {
 }
 
 
-def _get_embedder() -> MistralAIEmbeddings:
-    return MistralAIEmbeddings(
-        model=os.environ.get("MISTRAL_EMBEDDING_MODEL", "mistral-embed"),
-        api_key=os.environ.get("MISTRAL_API_KEY"),
+def _get_embedder() -> GoogleGenerativeAIEmbeddings:
+    return GoogleGenerativeAIEmbeddings(
+        output_dimensionality=1024,
+        model=os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2"),
+        google_api_key=os.environ.get("GEMINI_API_KEY"),
     )
 
 

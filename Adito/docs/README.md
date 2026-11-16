@@ -5,6 +5,13 @@ Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo 
 - **[stories/](stories/)**: user stories no template do Oráculo, uma por decisão ou entrega.
 - **[PORTE_DESKTOP_DECISOES.md](PORTE_DESKTOP_DECISOES.md)**: registro completo, com datas, consequências, achados no código e o que não foi verificado.
 
+## Documentação da interface do Adito
+
+- [Guia de identidade visual](design/Identidade-visual-Adito.md) com fontes,
+  paletas, componentes e registro dos ajustes solicitados.
+- [Resultados da tarefa #48](resultados/issue-48-interface-adito.md) com a
+  adaptação da interface, alterações do chat e validações realizadas.
+
 ## User stories
 
 | US | Título | Status |

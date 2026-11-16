@@ -835,10 +835,10 @@ const buildChartTooltip = (
   label: string,
   rows: Array<{ name: string; value: number; color: string }>
 ) => {
-  const bg = isDark.value ? '#161d27' : '#ffffff'
-  const border = isDark.value ? 'rgba(99,143,255,0.12)' : 'rgba(30,63,189,0.10)'
-  const text = isDark.value ? '#e8edf5' : '#0f1923'
-  const muted = isDark.value ? '#9baabf' : '#4a5568'
+  const bg = isDark.value ? '#1A221D' : '#ffffff'
+  const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
+  const text = isDark.value ? '#F0F4F1' : '#241920'
+  const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
   const content = rows.map((row: any) => `
       <div class="flex items-center justify-between gap-4 mt-1.5">
         <div class="flex items-center gap-1.5">
@@ -849,7 +849,7 @@ const buildChartTooltip = (
       </div>
     `).join('')
   return `
-    <div style="background:${bg}; border:1px solid ${border}; color:${text}; box-shadow:rgba(0,0,0,0.12) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
+    <div style="background:${bg}; border:1px solid ${border}; color:${text}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
       <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">${dimensionLabel}</div>
       <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
       ${content}
@@ -863,7 +863,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
   const chartType = widget.chart_type
   const model = getChartModel(widget)
   const categories = model.categories
-  const seriesColors = ['#2248d4', '#2e7d32', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16']
+  const seriesColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
 
   // === PIZZA: config completamente separada ===
   if (chartType === 'pie') {
@@ -945,7 +945,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
     },
     dataLabels: { enabled: false },
     grid: {
-      borderColor: isDark.value ? 'rgba(99,143,255,0.08)' : 'rgba(30,63,189,0.08)',
+      borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(22,70,43,0.08)',
       strokeDashArray: 3
     },
     xaxis: {
@@ -957,7 +957,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
         style: {
           fontSize: '11px',
           fontWeight: 600,
-          color: isDark.value ? '#9baabf' : '#4a5568'
+          color: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         }
       },
       labels: {
@@ -970,7 +970,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
         style: {
           fontSize: isHorizontalBar ? '10px' : fontSize,
           fontWeight: 600,
-          colors: isDark.value ? '#9baabf' : '#4a5568'
+          colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         },
         formatter: (value: any) => isHorizontalBar ? formatAxisCurrency(value) : truncateLabel(String(value), labelLimit)
       },
@@ -983,7 +983,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
         style: {
           fontSize: '11px',
           fontWeight: 600,
-          color: isDark.value ? '#9baabf' : '#4a5568'
+          color: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         }
       },
       labels: {
@@ -991,7 +991,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
         style: {
           fontSize: '11px',
           fontWeight: 600,
-          colors: isDark.value ? '#9baabf' : '#4a5568'
+          colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         },
         formatter: (value: any) => isHorizontalBar ? truncateLabel(String(value), 25) : formatAxisCurrency(value)
       }
@@ -1092,28 +1092,28 @@ const getChartPixelHeight = (item: any): number => {
     <div class="mb-8 flex flex-col items-start justify-between gap-6 border-b border-border-subtle pb-8 dark:border-white/5 sm:flex-row sm:items-center">
       <div>
         <h1 class="text-3xl font-semibold tracking-[-0.04em] text-primary dark:text-white md:text-4xl">
-          Meu Dashboard Pessoal
+          Meu painel
         </h1>
         <p class="mt-3 max-w-lg text-sm font-medium leading-relaxed text-text-secondary dark:text-gray-400 md:text-base">
-          Análises estratégicas fixadas a partir do <span class="text-accent font-bold">Chat</span> para acompanhamento em tempo real.
+          Acompanhe as análises de pesquisa e extensão salvas no <span class="text-accent font-semibold">chat</span>.
         </p>
 
         <!-- Presets de Layout -->
         <div class="mt-4 flex flex-wrap items-center gap-2">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">Padrões de Layout:</span>
-          <button @click="applyLayoutPreset('metrics_top')" class="rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-sm transition-colors hover:border-accent/40 hover:bg-surface-elevated/50 hover:text-accent dark:bg-slate-800" title="1. Métricas/KPIs no Topo">
+          <span class="text-[10px] font-bold text-text-muted uppercase tracking-wider mr-1">Padrões de Layout:</span>
+          <button @click="applyLayoutPreset('metrics_top')" class="cursor-pointer rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-xs transition-all hover:border-[var(--brand-primary)]/45 hover:bg-surface-elevated hover:text-[var(--brand-primary)] dark:hover:text-[#68d388]" title="1. Métricas/KPIs no Topo">
             <PanelTop class="w-4 h-4" />
           </button>
-          <button @click="applyLayoutPreset('charts_top')" class="rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-sm transition-colors hover:border-accent/40 hover:bg-surface-elevated/50 hover:text-accent dark:bg-slate-800" title="2. Gráficos Visuais no Topo">
+          <button @click="applyLayoutPreset('charts_top')" class="cursor-pointer rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-xs transition-all hover:border-[var(--brand-primary)]/45 hover:bg-surface-elevated hover:text-[var(--brand-primary)] dark:hover:text-[#68d388]" title="2. Gráficos Visuais no Topo">
             <PanelBottom class="w-4 h-4" />
           </button>
-          <button @click="applyLayoutPreset('metrics_left')" class="rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-sm transition-colors hover:border-accent/40 hover:bg-surface-elevated/50 hover:text-accent dark:bg-slate-800" title="3. Consolidar Métricas à Esquerda">
+          <button @click="applyLayoutPreset('metrics_left')" class="cursor-pointer rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-xs transition-all hover:border-[var(--brand-primary)]/45 hover:bg-surface-elevated hover:text-[var(--brand-primary)] dark:hover:text-[#68d388]" title="3. Consolidar Métricas à Esquerda">
             <PanelLeft class="w-4 h-4" />
           </button>
-          <button @click="applyLayoutPreset('metrics_right')" class="rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-sm transition-colors hover:border-accent/40 hover:bg-surface-elevated/50 hover:text-accent dark:bg-slate-800" title="4. Consolidar Métricas à Direita">
+          <button @click="applyLayoutPreset('metrics_right')" class="cursor-pointer rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-xs transition-all hover:border-[var(--brand-primary)]/45 hover:bg-surface-elevated hover:text-[var(--brand-primary)] dark:hover:text-[#68d388]" title="4. Consolidar Métricas à Direita">
             <PanelRight class="w-4 h-4" />
           </button>
-          <button @click="applyLayoutPreset('tables_top')" class="rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-sm transition-colors hover:border-accent/40 hover:bg-surface-elevated/50 hover:text-accent dark:bg-slate-800" title="5. Destaque para Tabelas de Dados">
+          <button @click="applyLayoutPreset('tables_top')" class="cursor-pointer rounded-lg border border-border-subtle bg-surface p-2 text-text-secondary shadow-xs transition-all hover:border-[var(--brand-primary)]/45 hover:bg-surface-elevated hover:text-[var(--brand-primary)] dark:hover:text-[#68d388]" title="5. Destaque para Tabelas de Dados">
             <LayoutGrid class="w-4 h-4" />
           </button>
         </div>
@@ -1123,7 +1123,7 @@ const getChartPixelHeight = (item: any): number => {
         <button
           v-if="isEditingLayout"
           @click="cancelEdit"
-          class="btn-secondary flex items-center gap-2 border-red-200 px-5 py-3.5 text-sm text-red-600 hover:border-red-300 hover:bg-red-50 dark:border-red-900/40 dark:text-red-300 dark:hover:bg-red-500/10"
+          class="btn-secondary flex items-center gap-2 border-[#C50707]/30 px-5 py-3.5 text-sm text-[#C50707] hover:border-[#C50707]/60 hover:bg-[#C50707]/8 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/15"
         >
           <X class="w-4 h-4" />
           <span class="hidden sm:inline">Cancelar</span>
@@ -1132,10 +1132,10 @@ const getChartPixelHeight = (item: any): number => {
         <button
           @click="toggleEditMode"
           :class="[
-            'flex w-full items-center justify-center gap-2.5 rounded-md px-7 py-3.5 text-sm font-medium transition-colors sm:w-auto',
+            'flex w-full items-center justify-center gap-2.5 rounded-md px-7 py-3.5 text-sm font-medium transition-colors sm:w-auto cursor-pointer',
             isEditingLayout
-              ? 'border border-[#2e7d32]/80 bg-[#2e7d32] text-white hover:bg-[#256329] dark:border-[#2e7d32]/50 dark:bg-[#2e7d32] dark:hover:bg-[#1b5e20]'
-              : 'btn-secondary bg-surface dark:bg-slate-800'
+              ? 'border border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-dark)]'
+              : 'btn-secondary bg-surface'
           ]"
         >
           <Pencil v-if="!isEditingLayout" class="w-4 h-4" />
@@ -1146,7 +1146,7 @@ const getChartPixelHeight = (item: any): number => {
         <button
           :disabled="isSyncingAll"
           @click="handleSyncAll"
-          class="btn-primary flex w-full items-center justify-center gap-2.5 overflow-hidden px-6 py-3.5 text-sm sm:w-auto sm:justify-start"
+          class="btn-primary flex w-full items-center justify-center gap-2.5 overflow-hidden px-6 py-3.5 text-sm sm:w-auto sm:justify-start cursor-pointer"
         >
           <RefreshCw
             class="w-4 h-4"
@@ -1161,10 +1161,14 @@ const getChartPixelHeight = (item: any): number => {
       <Loader2 class="h-8 w-8 animate-spin text-accent" />
     </div>
 
-    <div v-else-if="widgets.length === 0" class="premium-card border-dashed p-12 text-center">
-      <BarChart2 class="w-12 h-12 text-gray-400 mx-auto mb-3" />
-      <h3 class="text-lg font-medium text-gray-700 dark:text-gray-200">Nenhum Card Fixado</h3>
-      <p class="text-gray-500 text-sm mt-1">Pergunte algo no Chat Estrategico e clique em "Fixar no Dashboard".</p>
+    <div v-else-if="widgets.length === 0" class="rounded-xl border-2 border-dashed border-[var(--border-standard)] bg-surface/80 p-12 text-center shadow-xs transition-colors">
+      <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20">
+        <BarChart2 class="h-6 w-6 text-[var(--brand-primary)] dark:text-[#68d388]" />
+      </div>
+      <h3 class="text-lg font-semibold text-text-primary">Nenhum Card Fixado</h3>
+      <p class="mt-1.5 text-sm text-text-secondary">
+        Pergunte algo no Chat Estrategico e clique em "Fixar no Dashboard".
+      </p>
     </div>
 
     <GridLayout
@@ -1200,13 +1204,20 @@ const getChartPixelHeight = (item: any): number => {
         />
 
         <!-- Header -->
-        <div :class="['group/header flex shrink-0 items-start justify-between border-b border-border-subtle bg-surface/40 p-5 dark:border-white/5', isEditingLayout ? 'cursor-move' : '']">
+        <div :class="[
+          'group/header flex shrink-0 items-start justify-between border-b border-border-subtle bg-surface/40 dark:border-white/5',
+          item.widget.chart_type === 'metric_card' ? 'px-4 py-3' : 'p-5',
+          isEditingLayout ? 'cursor-move' : ''
+        ]">
           <div class="pr-4 overflow-hidden flex-1 flex items-start gap-2">
             <div v-if="isEditingLayout" class="mt-1 opacity-40 hover:opacity-100 transition-opacity">
               <GripVertical class="h-4 w-4 text-text-muted" />
             </div>
             <div class="overflow-hidden">
-              <h3 class="mb-1.5 flex items-center gap-2 text-base font-semibold leading-tight text-primary dark:text-white md:text-lg">
+              <h3
+                class="mb-1.5 flex items-center gap-2 font-semibold leading-tight text-primary dark:text-white"
+                :class="item.widget.chart_type === 'metric_card' ? 'text-sm' : 'text-base md:text-lg'"
+              >
                 <span class="truncate">{{ item.widget.title }}</span>
                 <CheckCircle2 v-if="item.widget.status === 'OK'" class="w-4 h-4 text-green-500 shrink-0" title="Sincronizado" />
                 <RefreshCw v-if="item.widget.status === 'STALE'" class="w-4 h-4 text-amber-500 shrink-0" title="Frio (No Cache)" />
@@ -1247,10 +1258,10 @@ const getChartPixelHeight = (item: any): number => {
 
           <div
             v-else-if="item.widget.chart_type === 'metric_card'"
-            class="flex flex-col items-center justify-center p-6 h-full w-full"
+            class="dashboard-metric flex h-full w-full flex-col items-center justify-center gap-1.5 px-3 py-2 text-center"
           >
-            <p class="eyebrow mb-2">Metrica</p>
-            <h3 class="text-3xl font-semibold tracking-tight text-primary dark:text-white md:text-4xl">
+            <p class="text-[10px] font-medium tracking-wide text-text-muted">Métrica</p>
+            <h3 class="dashboard-metric-value font-semibold tracking-tight text-text-primary tabular-nums">
               {{ Object.values(widgetData[item.widget.id][0])[0] }}
             </h3>
           </div>
@@ -1404,6 +1415,18 @@ const getChartPixelHeight = (item: any): number => {
 </template>
 
 <style scoped>
+.dashboard-metric {
+  container-type: inline-size;
+}
+
+.dashboard-metric-value {
+  max-width: 100%;
+  font-size: 1.5rem;
+  font-size: clamp(1.125rem, 7cqi, 1.5rem);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);

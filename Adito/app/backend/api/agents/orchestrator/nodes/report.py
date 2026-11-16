@@ -1,14 +1,14 @@
 from langchain_core.messages import HumanMessage
-from langchain_mistralai import ChatMistralAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.config import MISTRAL_API_KEY, MISTRAL_MODEL
+from agents.config import GEMINI_API_KEY, GEMINI_MODEL
 from core.rich_logging import log_error, log_info, log_success
 
 from ..config import REPORT_AGENT_PROMPT
 from ..state import MultiAgentState
 from .reflection import format_collected_data_for_reflection
 
-llm = ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY, temperature=0.0)
+llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
 
 
 async def report_agent_node(state: MultiAgentState) -> dict:

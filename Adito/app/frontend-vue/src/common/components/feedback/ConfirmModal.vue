@@ -46,8 +46,8 @@ const emit = defineEmits(['confirm', 'close'])
 
         <!-- Header -->
         <div class="border-b border-border-subtle p-5 pr-12 dark:border-white/[0.06]">
-          <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-500/10">
-            <AlertTriangle class="h-5 w-5 text-red-600 dark:text-red-400" />
+          <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-[#C50707]/25 bg-[#C50707]/10 dark:border-red-400/30 dark:bg-red-500/15">
+            <AlertTriangle class="h-5 w-5 text-[#C50707] dark:text-red-300" />
           </div>
           <h3 class="text-base font-semibold tracking-tight text-primary">
             {{ title }}
@@ -60,13 +60,13 @@ const emit = defineEmits(['confirm', 'close'])
         <!-- Actions -->
         <div class="flex gap-2 p-4">
           <button
-            class="btn-secondary flex-1 py-2 text-sm font-medium"
+            class="btn-secondary flex-1 py-2 text-sm font-medium cursor-pointer"
             @click="emit('close')"
           >
             {{ cancelText || 'Cancelar' }}
           </button>
           <button
-            class="flex flex-1 items-center justify-center rounded-lg bg-red-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+            class="flex flex-1 items-center justify-center rounded-lg bg-[#C50707] py-2 text-sm font-semibold text-white transition-colors hover:bg-[#9E0505] dark:bg-red-600 dark:hover:bg-red-500 cursor-pointer"
             @click="emit('confirm')"
           >
             {{ confirmText || 'Excluir' }}

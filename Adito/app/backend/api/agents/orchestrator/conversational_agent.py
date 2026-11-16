@@ -1,9 +1,9 @@
-from langchain_mistralai import ChatMistralAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import MultiAgentState
-from agents.config import MISTRAL_MODEL, MISTRAL_API_KEY, CONVERSATIONAL_SYSTEM_PROMPT
+from agents.config import GEMINI_MODEL, GEMINI_API_KEY, CONVERSATIONAL_SYSTEM_PROMPT
 
-llm = ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY, temperature=0.0)
+llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
 
 
 async def conversational_node(state: MultiAgentState):

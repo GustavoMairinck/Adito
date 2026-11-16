@@ -7,13 +7,13 @@ from rest_framework.response import Response
 
 from .models import Contexto
 
-MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
-LLM_KEY_MISSING = "Configure a chave da Mistral em Configurações para usar o chat."
+GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+LLM_KEY_MISSING = "Configure a chave do Gemini em Configurações para usar o chat."
 
 
 def llm_configured() -> bool:
     """A chave chega do cofre do SO via ambiente quando o Tauri sobe o backend."""
-    return bool(os.environ.get("MISTRAL_API_KEY"))
+    return bool(os.environ.get("GEMINI_API_KEY"))
 
 
 @api_view(['GET'])
@@ -36,22 +36,28 @@ def me(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def test_llm_key(request):
-    """Testa uma chave da Mistral antes de o Tauri guardá-la no cofre. A chave não é gravada aqui."""
+    """Testa uma chave do Gemini antes de o Tauri guardá-la no cofre. A chave não é gravada aqui."""
     key = (request.data.get('key') or '').strip()
     if not key:
         return Response({"ok": False, "reason": "Informe a chave."}, status=400)
     try:
-        resp = httpx.get(MISTRAL_MODELS_URL, headers={"Authorization": f"Bearer {key}"}, timeout=15)
+        from agents.config import GEMINI_MODEL
+        resp = httpx.get(
+            f"{GEMINI_MODELS_URL}/{GEMINI_MODEL}",
+            headers={"x-goog-api-key": key}, timeout=15,
+        )
     except httpx.HTTPError:
-        return Response({"ok": False, "reason": "Sem conexão com a Mistral. Verifique a internet e tente de novo."})
+        return Response({"ok": False, "reason": "Sem conexão com o Gemini. Verifique a internet e tente de novo."})
     if resp.status_code == 200:
         return Response({"ok": True})
     reasons = {
+        400: "Chave inválida ou solicitação recusada pelo Gemini.",
         401: "Chave inválida.",
-        403: "Chave sem permissão para a API.",
+        403: "Chave sem permissão para a API ou para o modelo configurado.",
+        404: "Modelo Gemini indisponível. Verifique GEMINI_MODEL no backend.",
         429: "Cota da chave esgotada ou limite de uso atingido.",
     }
-    return Response({"ok": False, "reason": reasons.get(resp.status_code, f"A Mistral respondeu com erro {resp.status_code}.")})
+    return Response({"ok": False, "reason": reasons.get(resp.status_code, f"O Gemini respondeu com erro {resp.status_code}.")})
 
 
 @api_view(['GET'])

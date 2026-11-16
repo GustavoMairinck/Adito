@@ -8,9 +8,9 @@ import asyncio
 import json
 
 from langchain_core.tools import StructuredTool
-from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
-from agents.config import MISTRAL_API_KEY, MISTRAL_EMBEDDING_MODEL, MISTRAL_MODEL, langfuse_callbacks
+from agents.config import GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL, GEMINI_MODEL, langfuse_callbacks
 
 from .agent import BIAgent
 
@@ -24,8 +24,8 @@ def get_bi_agent() -> BIAgent:
     global _bi_agent
     if _bi_agent is None:
         _bi_agent = BIAgent(
-            llm_model=ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY),
-            embedder=MistralAIEmbeddings(model=MISTRAL_EMBEDDING_MODEL, api_key=MISTRAL_API_KEY),
+            llm_model=ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured"),
+            embedder=GoogleGenerativeAIEmbeddings(output_dimensionality=1024, model=GEMINI_EMBEDDING_MODEL, google_api_key=GEMINI_API_KEY or "not-configured"),
         )
     return _bi_agent
 

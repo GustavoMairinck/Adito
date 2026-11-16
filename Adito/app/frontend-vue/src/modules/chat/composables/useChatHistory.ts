@@ -9,7 +9,7 @@ function createWelcomeMessage(): ChatMessage {
   return {
     id: "welcome",
     type: "ai",
-    text: "Olá! Sou o ORACULO-ESX, seu assistente de inteligência estratégica. Como posso ajudar você hoje?",
+    text: "Olá! Sou o Adito, seu assistente para consultar os dados de pesquisa e extensão do IFES Campus Serra. Como posso ajudar você hoje?",
     timestamp: new Date().toISOString(),
   };
 }

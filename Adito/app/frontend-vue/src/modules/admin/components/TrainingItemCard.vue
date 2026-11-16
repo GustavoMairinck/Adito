@@ -64,10 +64,10 @@ const copyToClipboard = async () => {
 <template>
   <div
     :class="[
-      'overflow-hidden rounded-xl border transition-all duration-300 backdrop-blur-md',
+      'overflow-hidden rounded-xl border transition-all duration-300',
       expanded
-        ? 'border-accent/30 bg-surface-elevated/40 shadow-elevated'
-        : 'border-border-subtle bg-surface/30 hover:border-border-standard hover:bg-surface/50 shadow-premium'
+        ? 'border-border-standard bg-surface-elevated shadow-elevated'
+        : 'border-border-subtle bg-surface hover:border-border-standard hover:bg-surface-elevated/60 shadow-premium'
     ]"
   >
     <!-- Header Row -->
@@ -150,7 +150,7 @@ const copyToClipboard = async () => {
               </button>
             </div>
             <div class="relative overflow-hidden rounded-xl border border-border-subtle bg-primary shadow-inner dark:bg-black/20">
-              <pre class="font-mono text-sm leading-relaxed text-sky-700 dark:text-sky-400 overflow-x-auto p-6 whitespace-pre-wrap">{{ item.content }}</pre>
+              <pre class="font-mono text-sm leading-relaxed text-[#1E5E3A] dark:text-[#68d388] overflow-x-auto p-6 whitespace-pre-wrap">{{ item.content }}</pre>
             </div>
           </div>
         </div>

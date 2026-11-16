@@ -2,9 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useRoute } from 'vue-router'
-import brandIcon from '@/common/assets/brand-icon.png'
+import BrandIcon from '@/common/components/BrandIcon.vue'
 import {
   AreaChart,
+  Database,
   MessageSquare,
   Settings,
   KeyRound,
@@ -53,9 +54,9 @@ function closeSidebar() {
 
 const menuItems = [
   { icon: MessageSquare, label: 'Chat', path: '/chat' },
-  { icon: AreaChart, label: 'Meu Dashboard', path: '/meu-dashboard' },
-  // "Explorar Dados" fica fora do menu até ser refeita por contexto (filters.json); a rota /explorar continua.
-  { icon: Settings, label: 'Administracao', path: '/admin', adminOnly: true },
+  { icon: AreaChart, label: 'Meu painel', path: '/meu-dashboard' },
+  { icon: Database, label: 'Explorar dados', path: '/explorar' },
+  { icon: Settings, label: 'Administração', path: '/admin', adminOnly: true },
   { icon: KeyRound, label: 'Configurações', path: '/configuracoes' }
 ]
 
@@ -88,7 +89,7 @@ function toggleTheme() {
 <template>
   <aside
     :class="[
-      'fixed left-0 top-0 z-[60] flex h-screen flex-col overflow-hidden border-r border-white/[0.07] bg-[#0f1923] text-[#e8edf5] shadow-[rgba(0,0,0,0.3)_0px_0px_0px_1px] transition-all duration-300 md:relative dark:bg-[#0d1117]',
+      'fixed left-0 top-0 z-[60] flex h-screen flex-col overflow-hidden border-r border-white/[0.08] bg-[var(--brand-dark)] text-white shadow-[rgba(0,0,0,0.3)_0px_0px_0px_1px] transition-all duration-300 md:relative',
       !isOpen ? '-translate-x-full md:translate-x-0' : 'translate-x-0',
       'w-64',
       isEffectivelyCollapsed ? 'md:w-20' : 'md:w-64'
@@ -96,14 +97,11 @@ function toggleTheme() {
   >
     <div class="border-b border-white/10 px-5 py-6">
       <div :class="['flex items-center', isEffectivelyCollapsed ? 'flex-col gap-5 justify-center' : 'justify-between']">
-        <div class="flex items-center gap-3">
-          <img :src="brandIcon" alt="Logo" class="h-[34px] w-[34px] shrink-0 object-contain" />
+        <div class="flex items-center gap-2">
+          <BrandIcon class="h-[34px] w-[34px]" />
           <div v-if="!isEffectivelyCollapsed" class="relative animate-in fade-in duration-300">
-            <span class="absolute -top-[16px] left-0 flex items-center justify-center rounded-full border border-blue-400/50 bg-[#0f1923] px-[5px] py-[2px] text-[8px] font-bold uppercase tracking-[0.1em] text-blue-400/70 leading-none select-none whitespace-nowrap">
-              beta
-            </span>
-            <h1 class="text-[18px] font-semibold tracking-[-0.04em] text-white">
-              ORACULO-ESX
+            <h1 class="adito-wordmark text-[26px] leading-none text-white">
+              Adito
             </h1>
           </div>
         </div>
@@ -112,7 +110,7 @@ function toggleTheme() {
           <button
             v-if="!isMobile"
             :title="isCollapsed ? 'Expandir' : 'Recolher'"
-            class="hidden rounded-lg border border-transparent p-2 text-white/45 transition-colors hover:bg-white/[0.04] hover:text-white/70 md:flex"
+            class="hidden rounded-lg border border-transparent p-2 text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white md:flex"
             @click="isCollapsed = !isCollapsed"
           >
             <PanelLeftOpen v-if="isCollapsed" class="h-5 w-5" />
@@ -121,7 +119,8 @@ function toggleTheme() {
 
           <button
             v-if="isMobile"
-            class="rounded-lg bg-white/[0.04] p-2 text-white/60 transition-colors hover:bg-white/[0.08] md:hidden"
+            aria-label="Fechar menu de navegação"
+            class="rounded-lg bg-white/[0.06] p-2 text-white/75 transition-colors hover:bg-white/[0.12] md:hidden"
             @click="closeSidebar"
           >
             <X class="h-5 w-5" />
@@ -130,73 +129,82 @@ function toggleTheme() {
       </div>
 
       <div v-if="!isEffectivelyCollapsed" class="mt-2.5 animate-in fade-in slide-in-from-left-4 duration-500">
-        <p class="text-[9px] font-bold uppercase tracking-[0.22em] text-white/35 whitespace-nowrap">
-          Inteligência Estratégica
+        <p class="text-[11px] font-medium tracking-[0.04em] text-white/60 whitespace-nowrap">
+          Pesquisa e extensão
         </p>
       </div>
     </div>
 
-    <nav :class="['no-scrollbar flex-1 overflow-y-auto py-6', isCollapsed ? 'px-2' : 'px-4']">
+    <nav aria-label="Navegação principal" :class="['no-scrollbar flex-1 overflow-y-auto py-6', isCollapsed ? 'px-2' : 'px-4']">
       <RouterLink
         v-for="item in visibleMenuItems"
         :key="item.path"
         :class="[
-          'group relative mb-1.5 flex items-center gap-3 rounded-md border px-3.5 py-2.5 transition-all duration-150',
+          'group relative mb-1.5 flex items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-all duration-150',
           route.path === item.path
-            ? 'border-white/[0.09] bg-white/[0.07] text-white'
-            : 'border-transparent text-white/55 hover:bg-white/[0.04] hover:text-white/90',
+            ? 'border-white/[0.12] bg-white/[0.12] text-white dark:border-[rgba(54,146,81,0.28)] dark:bg-[rgba(43,122,66,0.25)]'
+            : 'border-transparent text-white/75 hover:bg-white/[0.06] hover:text-white',
           isCollapsed ? 'justify-center px-0' : ''
         ]"
         :title="isCollapsed ? item.label : ''"
         :to="item.path"
         @click="closeSidebar"
       >
+        <span
+          v-if="route.path === item.path"
+          class="h-4 w-[3px] shrink-0 rounded-full bg-white/90 dark:bg-[#68d388]"
+        />
         <component
           :is="item.icon"
-          :class="['h-5 w-5 transition-colors duration-150', route.path === item.path ? 'text-blue-400' : 'text-white/90 group-hover:text-white']"
+          :class="[
+            'h-5 w-5 shrink-0 transition-colors duration-150',
+            route.path === item.path
+              ? 'text-white dark:text-[#68d388]'
+              : 'text-white/80 group-hover:text-white'
+          ]"
         />
         <span
           v-if="!isEffectivelyCollapsed"
-          :class="['flex-1 text-sm font-medium tracking-[0.005em]', route.path === item.path ? 'text-white' : 'text-white/70 group-hover:text-white/90']"
+          :class="[
+            'flex-1 text-sm tracking-[0.005em]',
+            route.path === item.path
+              ? 'font-semibold text-white'
+              : 'font-medium text-white/80 group-hover:text-white'
+          ]"
         >
           {{ item.label }}
         </span>
-        <div
-          v-if="route.path === item.path"
-          class="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-sm bg-blue-400"
-
-        />
       </RouterLink>
     </nav>
 
-    <div class="border-t border-white/10 bg-black/10 p-4">
+    <div class="border-t border-white/10 bg-black/15 p-4">
       <div :class="['mb-5 flex items-center gap-3', isEffectivelyCollapsed ? 'justify-center' : '']">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.08] text-sm font-medium text-[#f3ede4]">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[var(--brand-primary)] text-sm font-semibold text-white">
           <span v-if="!user?.avatar">{{ initials }}</span>
           <img v-else :src="user.avatar" alt="Avatar" class="h-full w-full object-cover">
         </div>
         <div v-if="!isEffectivelyCollapsed" class="animate-in fade-in min-w-0 flex-1 duration-300">
-          <p class="truncate text-sm font-medium text-white">{{ user?.name || user?.username || 'Usuario' }}</p>
-          <p class="truncate text-[10px] font-medium tracking-[0.03em] text-white/50">{{ user?.email || 'gestor@ifes.edu.br' }}</p>
+          <p class="truncate text-sm font-medium text-white">{{ user?.name || user?.username || 'Usuário local' }}</p>
+          <p class="truncate text-[10px] font-medium tracking-[0.03em] text-white/65">{{ user?.email || 'Consulta local de dados' }}</p>
         </div>
       </div>
 
       <div class="space-y-2">
 
         <button
-          :class="['flex w-full items-center gap-2.5 rounded-md border border-white/[0.07] bg-white/[0.03] text-[10px] font-medium uppercase tracking-[0.1em] text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white/80', isEffectivelyCollapsed ? 'justify-center p-3' : 'px-4 py-2.5']"
+          :class="['flex w-full items-center gap-2.5 rounded-md border border-white/[0.12] bg-white/[0.06] text-[10px] font-medium uppercase tracking-[0.1em] text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white', isEffectivelyCollapsed ? 'justify-center p-3' : 'px-4 py-2.5']"
           :title="isDark ? 'Modo Claro' : 'Modo Escuro'"
           @click="toggleTheme"
         >
-          <Sun v-if="isDark" class="h-4 w-4 text-white/70" />
-          <Moon v-else class="h-4 w-4 text-white/70" />
+          <Sun v-if="isDark" class="h-4 w-4 text-white/85" />
+          <Moon v-else class="h-4 w-4 text-white/85" />
           <span v-if="!isEffectivelyCollapsed">{{ isDark ? 'Modo Claro' : 'Modo Escuro' }}</span>
         </button>
       </div>
     </div>
 
-    <div v-if="!isEffectivelyCollapsed" class="bg-black/10 px-4 py-3 text-center text-[9px] font-medium uppercase tracking-[0.08em] text-white/20">
-      FAPES • IFES • LEDS
+    <div v-if="!isEffectivelyCollapsed" class="border-t border-white/[0.06] bg-black/20 px-4 py-3 text-center text-[9px] font-semibold uppercase tracking-[0.1em] text-white/65">
+      IFES · Campus Serra
     </div>
   </aside>
 </template>

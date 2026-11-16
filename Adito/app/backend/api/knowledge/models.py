@@ -17,7 +17,7 @@ class KnowledgeItem(models.Model):
     item_type = models.CharField(max_length=50, choices=ITEM_TYPES)
     content = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = EmbeddingField(dimensions=1024, null=True, blank=True) # mistral-embed dimensions
+    embedding = EmbeddingField(dimensions=1024, null=True, blank=True) # Dimensão de saída configurada nos embeddings.
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

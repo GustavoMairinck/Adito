@@ -38,7 +38,7 @@ const { selectedId: selectedContextoId, loadContextos } = useContextos()
 // Conversa ainda não salva no backend: o contexto pode ser escolhido.
 const isNewConversation = computed(() => !!currentConvId.value?.startsWith('local-'))
 
-// Sem chave da Mistral o app abre, mas o chat fica desativado com o motivo à vista.
+// Sem chave do Gemini o app abre, mas o chat fica desativado com o motivo à vista.
 const { user } = useAuth()
 const llmConfigured = computed(() => !!user.value?.llm_configured)
 
@@ -59,55 +59,53 @@ const conversationToDelete = ref<{ id: string; title: string } | null>(null)
 const messages = computed(() => currentConversation.value?.messages || [])
 const starterCategories = [
   {
-    key: 'receita',
-    label: 'Receita',
+    key: 'pesquisa',
+    label: 'Pesquisa',
+    subtitle: 'Projetos & SigPesq',
     questions: [
-      'Qual a receita líquida total em 2025?',
-      'Como foi a evolução mensal da receita em 2025?',
-      'Qual o crescimento de receita comparado ao ano anterior?'
+      'Quantos projetos de pesquisa estão cadastrados por área de conhecimento?',
+      'Quais pesquisadores coordenam mais projetos de pesquisa ativos?',
+      'Qual a distribuição de projetos de pesquisa por campus e natureza?'
     ]
   },
   {
-    key: 'produtos',
-    label: 'Produtos',
+    key: 'extensao',
+    label: 'Extensão',
+    subtitle: 'Ações & SRC',
     questions: [
-      'Mostre os top 5 produtos por receita.',
-      'Qual a receita por categoria de produto?',
-      'Quais produtos têm maior margem de lucro?'
+      'Quantas ações e atividades de extensão foram registradas por área?',
+      'Qual o total de participantes certificados nas atividades de extensão?',
+      'Quais ações de extensão possuem maior carga horária acumulada?'
     ]
   },
   {
-    key: 'clientes',
-    label: 'Clientes',
+    key: 'grupos',
+    label: 'Grupos CNPq',
+    subtitle: 'Diretório & Linhas',
     questions: [
-      'Quantos clientes existem em cada porte?',
-      'Quais são os 10 clientes com maior receita?',
-      'Qual a receita por setor de cliente?'
+      'Quais grupos de pesquisa estão certificados no diretório do CNPq?',
+      'Quantas linhas de pesquisa e membros ativos existem por grupo?',
+      'Qual a evolução de criação dos grupos de pesquisa por ano?'
     ]
   },
   {
-    key: 'canais',
-    label: 'Canais',
+    key: 'producao',
+    label: 'Produção Lattes',
+    subtitle: 'Artigos, Livros & Patentes',
     questions: [
-      'Qual a receita líquida por canal de venda?',
-      'Qual canal tem o maior volume de vendas?'
+      'Qual a evolução anual de artigos publicados e trabalhos em eventos?',
+      'Quantos livros, capítulos e patentes foram registrados pelos pesquisadores?',
+      'Quais grandes áreas concentram o maior volume de produção científica?'
     ]
   },
   {
-    key: 'vendedores',
-    label: 'Vendedores',
+    key: 'pesquisadores',
+    label: 'Pesquisadores',
+    subtitle: 'Docentes & Orientações',
     questions: [
-      'Quais são os vendedores com maior receita?',
-      'Qual a média de receita por vendedor em 2025?'
-    ]
-  },
-  {
-    key: 'margens',
-    label: 'Margens',
-    questions: [
-      'Qual o lucro total por categoria de produto?',
-      'Qual a margem de lucro média em 2025?',
-      'Quais produtos têm margem abaixo de 10%?'
+      'Qual a distribuição de pesquisadores por titulação acadêmica?',
+      'Quantas orientações concluídas e em andamento constam nos currículos?',
+      'Quais pesquisadores possuem bolsa de produtividade ou mais orientações?'
     ]
   }
 ]
@@ -139,7 +137,7 @@ const sendQuestion = async (questionText?: string) => {
   const userInput = (questionText ?? input.value).trim()
   if (!userInput || isLoading.value) return
   if (!llmConfigured.value) {
-    showToast('Configure a chave da Mistral em Configurações para usar o chat.', 'error')
+    showToast('Configure a chave do Gemini em Configurações para usar o chat.', 'error')
     return
   }
 
@@ -404,7 +402,7 @@ const confirmDeleteConversation = async () => {
           class="mx-4 mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
         >
           <AlertCircle class="h-4 w-4 shrink-0" />
-          O chat está desativado: falta a chave da Mistral. Clique para configurar.
+          O chat está desativado: falta a chave do Gemini. Clique para configurar.
         </RouterLink>
         <ContextoSelector
           :is-new-conversation="isNewConversation"

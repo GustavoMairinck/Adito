@@ -1,12 +1,12 @@
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_mistralai import ChatMistralAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from .state import MultiAgentState
 from .models import RouterDecision
-from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, MISTRAL_MODEL, MISTRAL_API_KEY
+from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, GEMINI_MODEL, GEMINI_API_KEY
 
 mcp_tools = []
 
-llm = ChatMistralAI(model=MISTRAL_MODEL, api_key=MISTRAL_API_KEY, temperature=0.0)
+llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
 
 
 async def orchestrator_node(state: MultiAgentState):
