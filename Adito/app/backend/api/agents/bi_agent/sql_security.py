@@ -70,6 +70,7 @@ DISALLOWED_FUNCTIONS = frozenset({
     "glob",
     "getenv",
     "current_setting",
+    "columns",
 })
 
 _DISALLOWED_LEADING_KEYWORDS = re.compile(
@@ -179,14 +180,14 @@ def validate_read_only_sql(
 
     blocked_cols = _normalize_sensitive_columns(sensitive_columns, tables)
 
-    # Verifica projeção SELECT * quando a tabela possui sensitive_columns declaradas
-    if blocked_cols:
-        for star in parsed.find_all(exp.Star):
-            if not isinstance(star.parent, exp.Count):
-                return (
-                    False,
-                    "SELECT * não é permitido em tabelas com colunas sensíveis. Liste as colunas explicitamente.",
-                )
+    # Bloqueia SELECT * (e variantes como t.*, * EXCLUDE/REPLACE) incondicionalmente para evitar
+    # vazamento caso uma tabela/view contenha coluna sensível não declarada em sensitive_columns.
+    for star in parsed.find_all(exp.Star):
+        if not isinstance(star.parent, exp.Count):
+            return (
+                False,
+                "SELECT * não é permitido para proteger colunas sensíveis (LGPD). Liste as colunas explicitamente.",
+            )
 
     for col in parsed.find_all(exp.Column):
         col_name = (col.name or "").lower()

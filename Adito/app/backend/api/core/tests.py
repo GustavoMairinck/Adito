@@ -117,6 +117,19 @@ class DuckDBSecurityAndContextTests(TestCase):
             self.assertFalse(ok, f"Deveria bloquear SQL inseguro: {sql}")
             self.assertIsNotNone(err)
 
+        # Bloqueio incondicional de SELECT * (e variantes DuckDB) mesmo sem sensitive_columns declaradas
+        for star_sql in (
+            "SELECT * FROM vfact_extensao_acao_resolved",
+            "SELECT a.* FROM vfact_extensao_acao_resolved AS a",
+            "SELECT * EXCLUDE (campus) FROM vfact_extensao_acao_resolved",
+            "SELECT COLUMNS('.*') FROM vfact_extensao_acao_resolved",
+        ):
+            ok_star_sem_sens, err_star = validate_read_only_sql(
+                star_sql, FATOS_NOMES, dialect="duckdb", sensitive_columns=None
+            )
+            self.assertFalse(ok_star_sem_sens, f"Deveria bloquear '{star_sql}' mesmo sem sensitive_columns")
+            self.assertIsNotNone(err_star)
+
         # Verifica bloqueio de sensitive_columns declaradas no contexto e de SELECT *
         sens = {("vfact_extensao_acao_resolved", "documento_secreto")}
         ok_col, _ = validate_read_only_sql(
@@ -142,6 +155,14 @@ class DuckDBSecurityAndContextTests(TestCase):
             sensitive_columns=sens,
         )
         self.assertTrue(ok_count_star, err_count)
+
+        ok_count_sem_sens, err_count_sem_sens = validate_read_only_sql(
+            "SELECT COUNT(*) AS total FROM vfact_extensao_acao_resolved",
+            FATOS_NOMES,
+            dialect="duckdb",
+            sensitive_columns=None,
+        )
+        self.assertTrue(ok_count_sem_sens, err_count_sem_sens)
 
     def test_connect_dados_e_read_policy_no_duckdb(self) -> None:
         policy = ReadPolicy(
