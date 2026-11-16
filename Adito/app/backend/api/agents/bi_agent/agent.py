@@ -14,7 +14,7 @@ class BIAgent:
         llm_model: BaseChatModel,
         embedder: Embeddings,
         dados_path: str | None = None,
-        dialect: str = "sqlite",
+        dialect: str = "duckdb",
         validate_sql: bool = True,
         max_attempts: int = 2,
         system_prompt: str = "",
@@ -32,13 +32,13 @@ class BIAgent:
             self.app = self.app.with_config({"callbacks": callbacks})
 
     def execute_query(self, sql: str, contexto_id: str | None, max_rows: int | None = None) -> List[dict]:
-        """Executa a query no dados.db (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas."""
+        """Executa a query no dados.duckdb (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas."""
         try:
             clean_sql = sql.strip().rstrip(';')
-            if max_rows is not None:
-                clean_sql = f"SELECT * FROM ({clean_sql}) AS sub LIMIT {int(max_rows)}"
             with connect_dados(read_policy_for(contexto_id), self.dados_path) as conn:
-                rows = [dict(r) for r in conn.execute(clean_sql).fetchall()]
+                cur = conn.execute(clean_sql)
+                fetched = cur.fetchmany(int(max_rows)) if max_rows is not None else cur.fetchall()
+                rows = [dict(r) for r in fetched]
 
             if rows and all(v is None for r in rows for v in r.values()):
                 return []

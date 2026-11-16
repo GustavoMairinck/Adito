@@ -25,10 +25,13 @@ def main() -> None:
 
     from django.core.management import call_command
 
+    from core.contexts import sync_default_contexts
     from core.local_auth import get_local_user
 
     call_command("migrate", interactive=False, verbosity=0)
-    get_local_user()
+    user = get_local_user()
+    if user.tenant:
+        sync_default_contexts(user.tenant)
 
     from daphne.cli import CommandLineInterface
 

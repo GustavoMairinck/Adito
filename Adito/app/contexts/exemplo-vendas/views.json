@@ -1,5 +1,6 @@
 {
   "contexto": "exemplo-vendas",
+  "ativo": false,
   "nome": "Vendas (demonstração)",
   "descricao": "Demonstração de vendas que vinha com o Oráculo web: 1.200 vendas de 2023 a 2026. Gere o dados.db com scripts/gerar_dados_demo.py.",
   "views": [

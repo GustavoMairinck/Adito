@@ -1,0 +1,66 @@
+[
+  {
+    "question": "Qual o panorama geral consolidado das 4 bases (SRC, SigPesq, Lattes e CNPq) com o total de registros em cada uma das 6 tabelas fato?",
+    "sql": "SELECT '1. SRC - Ações de Extensão' AS base_e_fato, COUNT(DISTINCT id_acao) AS total_registros FROM vfact_extensao_acao_resolved UNION ALL SELECT '1. SRC - Participações em Extensão' AS base_e_fato, COUNT(DISTINCT id_participacao) AS total_registros FROM vfact_extensao_participacao_resolved UNION ALL SELECT '2. SigPesq - Projetos de Pesquisa' AS base_e_fato, COUNT(DISTINCT id_projeto) AS total_registros FROM vfact_projeto_pesquisa_resolved UNION ALL SELECT '2. SigPesq - Bolsas e Orientações' AS base_e_fato, COUNT(DISTINCT id_orientacao) AS total_registros FROM vfact_orientacao_bolsa_resolved UNION ALL SELECT '3. Lattes - Produções Científicas (Obras)' AS base_e_fato, COUNT(DISTINCT id_producao) AS total_registros FROM vfact_producao_cientifica_resolved UNION ALL SELECT '4. CNPq DGP - Grupos de Pesquisa (Membros)' AS base_e_fato, COUNT(DISTINCT id_membro_grupo) AS total_registros FROM vfact_grupo_pesquisa_membro_resolved"
+  },
+  {
+    "question": "Quais pesquisadores atuam simultaneamente nas 4 bases (SRC, SigPesq, Lattes e CNPq) e quantas ações/participações de extensão, projetos/orientações de pesquisa, produções científicas e grupos de pesquisa cada um possui?",
+    "sql": "WITH src_acao AS (SELECT coordenador_nome AS pesquisador, COUNT(DISTINCT id_acao) AS acoes_coord FROM vfact_extensao_acao_resolved WHERE coordenador_nome IS NOT NULL GROUP BY coordenador_nome), src_part AS (SELECT nome_participante AS pesquisador, COUNT(DISTINCT id_participacao) AS participacoes_ext FROM vfact_extensao_participacao_resolved WHERE nome_participante IS NOT NULL GROUP BY nome_participante), sig_proj AS (SELECT coordenador_nome AS pesquisador, COUNT(DISTINCT id_projeto) AS projetos_pesq FROM vfact_projeto_pesquisa_resolved WHERE coordenador_nome IS NOT NULL GROUP BY coordenador_nome), sig_bolsa AS (SELECT nome_orientador AS pesquisador, COUNT(DISTINCT id_orientacao) AS orientacoes_bolsa FROM vfact_orientacao_bolsa_resolved WHERE nome_orientador IS NOT NULL GROUP BY nome_orientador), lattes AS (SELECT nome_autor AS pesquisador, COUNT(DISTINCT id_producao) AS producoes_lattes FROM vfact_producao_cientifica_resolved WHERE nome_autor IS NOT NULL GROUP BY nome_autor), cnpq AS (SELECT nome_membro AS pesquisador, COUNT(DISTINCT id_grupo_pesquisa) AS grupos_cnpq FROM vfact_grupo_pesquisa_membro_resolved WHERE nome_membro IS NOT NULL GROUP BY nome_membro) SELECT lattes.pesquisador, COALESCE(src_acao.acoes_coord, 0) AS acoes_coordenadas_src, COALESCE(src_part.participacoes_ext, 0) AS participacoes_src, COALESCE(sig_proj.projetos_pesq, 0) AS projetos_sigpesq, COALESCE(sig_bolsa.orientacoes_bolsa, 0) AS orientacoes_sigpesq, lattes.producoes_lattes, cnpq.grupos_cnpq FROM lattes INNER JOIN cnpq ON lattes.pesquisador = cnpq.pesquisador LEFT JOIN src_acao ON lattes.pesquisador = src_acao.pesquisador LEFT JOIN src_part ON lattes.pesquisador = src_part.pesquisador LEFT JOIN sig_proj ON lattes.pesquisador = sig_proj.pesquisador LEFT JOIN sig_bolsa ON lattes.pesquisador = sig_bolsa.pesquisador WHERE (src_acao.acoes_coord IS NOT NULL OR src_part.participacoes_ext IS NOT NULL) AND (sig_proj.projetos_pesq IS NOT NULL OR sig_bolsa.orientacoes_bolsa IS NOT NULL) ORDER BY lattes.producoes_lattes DESC"
+  },
+  {
+    "question": "Qual o comparativo por grande área do conhecimento cruzando ações de extensão (SRC), projetos e bolsas de pesquisa (SigPesq) e grupos de pesquisa (CNPq)?",
+    "sql": "WITH ext AS (SELECT grande_area, COUNT(DISTINCT id_acao) AS acoes_src FROM vfact_extensao_acao_resolved WHERE grande_area IS NOT NULL GROUP BY grande_area), proj AS (SELECT grande_area, COUNT(DISTINCT id_projeto) AS projetos_sigpesq FROM vfact_projeto_pesquisa_resolved WHERE grande_area IS NOT NULL GROUP BY grande_area), bolsa AS (SELECT grande_area, COUNT(DISTINCT id_orientacao) AS bolsas_sigpesq, ROUND(SUM(investimento_total_estimado), 2) AS investimento_bolsas FROM vfact_orientacao_bolsa_resolved WHERE grande_area IS NOT NULL GROUP BY grande_area), cnpq AS (SELECT grande_area, COUNT(DISTINCT id_grupo_pesquisa) AS grupos_cnpq FROM vfact_grupo_pesquisa_membro_resolved WHERE grande_area IS NOT NULL GROUP BY grande_area) SELECT COALESCE(proj.grande_area, ext.grande_area, bolsa.grande_area, cnpq.grande_area) AS grande_area, COALESCE(ext.acoes_src, 0) AS acoes_extensao_src, COALESCE(proj.projetos_sigpesq, 0) AS projetos_pesquisa_sigpesq, COALESCE(bolsa.bolsas_sigpesq, 0) AS bolsas_sigpesq, COALESCE(bolsa.investimento_bolsas, 0.0) AS investimento_bolsas_rs, COALESCE(cnpq.grupos_cnpq, 0) AS grupos_pesquisa_cnpq FROM proj FULL OUTER JOIN ext ON proj.grande_area = ext.grande_area FULL OUTER JOIN bolsa ON COALESCE(proj.grande_area, ext.grande_area) = bolsa.grande_area FULL OUTER JOIN cnpq ON COALESCE(proj.grande_area, ext.grande_area, bolsa.grande_area) = cnpq.grande_area ORDER BY projetos_pesquisa_sigpesq DESC, acoes_extensao_src DESC"
+  },
+  {
+    "question": "Qual a evolução anual comparada entre ações de extensão (SRC), projetos de pesquisa (SigPesq), bolsas concedidas (SigPesq) e produções científicas (Lattes) a partir de 2018?",
+    "sql": "WITH anos AS (SELECT DISTINCT ano_cadastro AS ano FROM vfact_extensao_acao_resolved WHERE ano_cadastro >= 2018 UNION SELECT DISTINCT ano_inicio AS ano FROM vfact_projeto_pesquisa_resolved WHERE ano_inicio >= 2018 UNION SELECT DISTINCT ano FROM vfact_orientacao_bolsa_resolved WHERE ano >= 2018 UNION SELECT DISTINCT ano FROM vfact_producao_cientifica_resolved WHERE ano >= 2018), ext AS (SELECT ano_cadastro AS ano, COUNT(DISTINCT id_acao) AS acoes_src FROM vfact_extensao_acao_resolved GROUP BY ano_cadastro), proj AS (SELECT ano_inicio AS ano, COUNT(DISTINCT id_projeto) AS projetos_sigpesq FROM vfact_projeto_pesquisa_resolved GROUP BY ano_inicio), bolsa AS (SELECT ano, COUNT(DISTINCT id_orientacao) AS bolsas_sigpesq FROM vfact_orientacao_bolsa_resolved GROUP BY ano), lattes AS (SELECT ano, COUNT(DISTINCT id_producao) AS producoes_lattes FROM vfact_producao_cientifica_resolved GROUP BY ano) SELECT a.ano, COALESCE(ext.acoes_src, 0) AS acoes_src, COALESCE(proj.projetos_sigpesq, 0) AS projetos_sigpesq, COALESCE(bolsa.bolsas_sigpesq, 0) AS bolsas_sigpesq, COALESCE(lattes.producoes_lattes, 0) AS producoes_lattes FROM anos a LEFT JOIN ext ON a.ano = ext.ano LEFT JOIN proj ON a.ano = proj.ano LEFT JOIN bolsa ON a.ano = bolsa.ano LEFT JOIN lattes ON a.ano = lattes.ano ORDER BY a.ano DESC"
+  },
+  {
+    "question": "[Base SRC - Ações] Quantas ações de extensão foram cadastradas por tipo de ação no campus Serra?",
+    "sql": "SELECT tipo_acao, COUNT(DISTINCT id_acao) AS total_acoes FROM vfact_extensao_acao_resolved WHERE campus ILIKE '%Serra%' GROUP BY tipo_acao ORDER BY total_acoes DESC"
+  },
+  {
+    "question": "[Base SRC - Ações] Qual o percentual de ações de extensão com relatório aprovado por ano de cadastro?",
+    "sql": "SELECT ano_cadastro, COUNT(DISTINCT id_acao) AS total_acoes, SUM(flag_relatorio_aprovado) AS aprovadas, ROUND(100.0 * SUM(flag_relatorio_aprovado) / NULLIF(COUNT(id_acao), 0), 2) AS percentual_aprovado FROM vfact_extensao_acao_resolved WHERE ano_cadastro IS NOT NULL GROUP BY ano_cadastro ORDER BY ano_cadastro DESC"
+  },
+  {
+    "question": "[Base SRC - Participações] Quantas participações e certificados foram emitidos em atividades de extensão por tipo de atividade?",
+    "sql": "SELECT tipo_atividade, SUM(qtd_participacoes) AS total_participacoes, SUM(flag_certificado) AS total_certificados, ROUND(SUM(carga_horaria), 2) AS total_horas FROM vfact_extensao_participacao_resolved GROUP BY tipo_atividade ORDER BY total_participacoes DESC LIMIT 10"
+  },
+  {
+    "question": "[Base SRC - Participações] Qual a taxa de aprovação dos participantes por situação nas atividades de extensão?",
+    "sql": "SELECT situacao_participante, COUNT(*) AS quantidade_participacoes, ROUND(100.0 * COUNT(*) / NULLIF(SUM(COUNT(*)) OVER (), 0), 2) AS percentual FROM vfact_extensao_participacao_resolved GROUP BY situacao_participante ORDER BY quantidade_participacoes DESC"
+  },
+  {
+    "question": "[Base SigPesq - Projetos] Quantos projetos de pesquisa foram aprovados por grande área do conhecimento?",
+    "sql": "SELECT grande_area, COUNT(DISTINCT id_projeto) AS projetos_aprovados, SUM(qtd_planos_trabalho) AS total_planos FROM vfact_projeto_pesquisa_resolved WHERE parecer_diretoria = 'APROVADO' AND grande_area IS NOT NULL GROUP BY grande_area ORDER BY projetos_aprovados DESC"
+  },
+  {
+    "question": "[Base SigPesq - Projetos] Qual a proporção entre projetos de pesquisa aplicada e pesquisa básica?",
+    "sql": "SELECT natureza_projeto, COUNT(DISTINCT id_projeto) AS total_projetos, ROUND(100.0 * COUNT(DISTINCT id_projeto) / NULLIF(SUM(COUNT(DISTINCT id_projeto)) OVER (), 0), 2) AS percentual FROM vfact_projeto_pesquisa_resolved WHERE natureza_projeto IS NOT NULL GROUP BY natureza_projeto ORDER BY total_projetos DESC"
+  },
+  {
+    "question": "[Base SigPesq - Bolsas] Quanto cada agência financiadora investiu em bolsas de pesquisa por ano?",
+    "sql": "SELECT ano, agencia_financiadora, COUNT(DISTINCT id_orientacao) AS total_cotas, ROUND(SUM(investimento_total_estimado), 2) AS investimento_total FROM vfact_orientacao_bolsa_resolved WHERE modalidade = 'BOLSISTA' GROUP BY ano, agencia_financiadora ORDER BY ano DESC, investimento_total DESC"
+  },
+  {
+    "question": "[Base SigPesq - Bolsas] Qual a distribuição de orientações entre bolsistas e voluntários por programa de fomento?",
+    "sql": "SELECT programa_fomento, modalidade, COUNT(DISTINCT id_orientacao) AS total_orientacoes, ROUND(AVG(valor_bolsa_mensal), 2) AS media_bolsa_mensal FROM vfact_orientacao_bolsa_resolved GROUP BY programa_fomento, modalidade ORDER BY total_orientacoes DESC LIMIT 10"
+  },
+  {
+    "question": "[Base Lattes - Produção Científica] Qual a evolução anual de produções científicas distintas por tipo macro de produção?",
+    "sql": "SELECT ano, tipo_macro_producao, COUNT(DISTINCT id_producao) AS total_obras_distintas FROM vfact_producao_cientifica_resolved WHERE ano IS NOT NULL GROUP BY ano, tipo_macro_producao ORDER BY ano DESC, total_obras_distintas DESC"
+  },
+  {
+    "question": "[Base Lattes - Produção Científica] Quais são os 10 veículos de publicação com maior número de artigos em periódicos?",
+    "sql": "SELECT veiculo_publicacao, COUNT(DISTINCT id_producao) AS total_artigos FROM vfact_producao_cientifica_resolved WHERE flag_artigo_periodico = 1 AND veiculo_publicacao IS NOT NULL GROUP BY veiculo_publicacao ORDER BY total_artigos DESC LIMIT 10"
+  },
+  {
+    "question": "[Base CNPq DGP - Grupos de Pesquisa] Quantos grupos de pesquisa certificados pelo CNPq existem por grande área e quantos membros ativos possuem?",
+    "sql": "SELECT grande_area, COUNT(DISTINCT id_grupo_pesquisa) AS total_grupos, SUM(flag_ativo) AS membros_ativos FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo = 'CERTIFICADO' GROUP BY grande_area ORDER BY total_grupos DESC"
+  },
+  {
+    "question": "[Base CNPq DGP - Grupos de Pesquisa] Qual a distribuição de membros ativos e egressos nos grupos de pesquisa por papel desempenhado?",
+    "sql": "SELECT papel_membro, status_participacao, COUNT(DISTINCT id_membro_grupo) AS total_vinculos FROM vfact_grupo_pesquisa_membro_resolved GROUP BY papel_membro, status_participacao ORDER BY total_vinculos DESC"
+  }
+]

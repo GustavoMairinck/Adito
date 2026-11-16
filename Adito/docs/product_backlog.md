@@ -24,6 +24,7 @@ Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por
 | [US-ETL-05](stories/US-ETL-05_extrator-lattes.md) | Extrator do Lattes | EPIC-07 | 5 | 🟡 Média | 01 | FR06, A02, A05 | Backlog |
 | [US-ETL-07](stories/US-ETL-07_ligacoes-grupo-orientacao.md) | Ligações de grupo e de orientação | EPIC-07 | 3 | 🟡 Média | 03, 04, 05, 06 | FR12 | Backlog |
 | [US-ETL-08](stories/US-ETL-08_exportar-json-fatos.md) | Exportar tabelas das views de fatos do PostgreSQL em JSON | EPIC-07 | 5 | 🔴 Alta (slice 3) | banco `unificado` populado | FR14–20, BR07–10, NFR07–10, A06–07 | 🔍 Review |
+| [US-ADITO-DUCKDB-01](stories/US-ADITO-DUCKDB-01_banco-duckdb-olap-fatos.md) | Banco analítico DuckDB OLAP com as 6 tabelas fato e adaptação do Adito | EPIC-07 | 8 | 🔴 Alta | JSONs exportados | FR21–25, BR11–13, NFR11–13 | 🔍 Review |
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >

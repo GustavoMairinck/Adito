@@ -22,7 +22,7 @@ def sql_corrector(
         f"The {dialect} query failed.\n"
         f"Wrong Query: {sql}\nError: {error}\n"
         f"Correct it using ONLY these views: {', '.join(state.get('allowed_views', []))}, "
-        f"with lowercase columns, no schema prefix, and SQLite syntax. Maintain the same structured output format."
+        f"with lowercase columns, no schema prefix, and {dialect.upper()} syntax. Maintain the same structured output format."
     )
     structured_llm = llm_model.with_structured_output(SQLResponse)
     response = structured_llm.invoke([HumanMessage(content=prompt)])

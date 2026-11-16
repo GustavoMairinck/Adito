@@ -33,7 +33,12 @@ def sql_validator(
         log_error("bi", "Sem contexto: nenhuma view exposta.")
         log_node_end("validator", "valid=False")
         return {"validation_result": {"valid": False, "error": "Nenhum contexto de dados selecionado."}}
-    is_safe, error = validate_read_only_sql(sql, policy.exposed_views, dialect=dialect)
+    is_safe, error = validate_read_only_sql(
+        sql,
+        policy.exposed_views,
+        dialect=dialect,
+        sensitive_columns=policy.sensitive_columns,
+    )
     if not is_safe:
         log_error("bi", f"Validação de segurança falhou: {error}")
         log_node_end("validator", "valid=False")

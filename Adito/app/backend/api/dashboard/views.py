@@ -13,12 +13,12 @@ from .models import Dashboard, Widget
 from .serializers import DashboardSerializer, WidgetSerializer
 from chat.views import get_bi_agent
 from core.contexts import pick_contexto
-from core.datastore import connect_dados
+from core.datastore import REPO_APP_DIR, connect_dados
 from core.rich_logging import log_error, log_info, log_success
 
-ANALYTICS_VIEW = 'vfactvendasresolved'
+ANALYTICS_VIEW = 'vfact_orientacao_bolsa_resolved'
 
-# Colunas de filtro devolvidas pelo SQLite como texto JSON (json_group_array).
+# Colunas de filtro devolvidas como lista ou JSON.
 _JSON_COLUMNS = frozenset({
     'anos_disponiveis', 'areas_disponiveis', 'modalidades_disponiveis', 'statuses_disponiveis',
     'anos', 'modalidades', 'status', 'areas', 'instituicoes',
@@ -28,10 +28,10 @@ _JSON_COLUMNS = frozenset({
 def _filters(request):
     mapping = {
         'ano': ('ano', '='),
-        'area': ('categoria_produto', 'ilike'),
-        'modalidade': ('canal', 'ilike'),
-        'status': ('porte_cliente', 'ilike'),
-        'projeto': ('produto', 'ilike'),
+        'area': ('grande_area', 'ilike'),
+        'modalidade': ('programa_fomento', 'ilike'),
+        'status': ('modalidade', 'ilike'),
+        'projeto': ('titulo_projeto', 'ilike'),
     }
     clauses = []
     params = []
@@ -43,7 +43,7 @@ def _filters(request):
             clauses.append(f"{column} = ?")
             params.append(value)
         else:
-            clauses.append(f"{column} LIKE ?")
+            clauses.append(f"{column} ILIKE ?")
             params.append(f"%{value}%")
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", params
 
@@ -145,10 +145,10 @@ def kpis(request):
     year = timezone.now().year
     row = _fetchone(request, f"""
         SELECT
-          COALESCE(SUM(receita_liquida), 0) AS total_investido,
-          COUNT(DISTINCT produto) AS projetos_ativos,
-          COALESCE(SUM(CASE WHEN ano = ? THEN receita_liquida ELSE 0 END), 0) AS pagamentos_ano_vigente,
-          COUNT(DISTINCT vendedor) AS equipe_alocada
+          COALESCE(SUM(investimento_total_estimado), 0) AS total_investido,
+          COUNT(DISTINCT titulo_projeto) AS projetos_ativos,
+          COALESCE(SUM(CASE WHEN ano = ? THEN investimento_total_estimado ELSE 0 END), 0) AS pagamentos_ano_vigente,
+          COUNT(DISTINCT nome_orientador) AS equipe_alocada
         FROM {ANALYTICS_VIEW}
         {where}
     """, [year, *params])
@@ -161,12 +161,12 @@ def top_projects(request):
     where, params = _filters(request)
     rows = _fetchall(request, f"""
         SELECT
-          produto AS nome,
-          COALESCE(SUM(receita_liquida), 0) AS valor,
-          MAX(categoria_produto) AS status
+          titulo_projeto AS nome,
+          COALESCE(SUM(investimento_total_estimado), 0) AS valor,
+          MAX(programa_fomento) AS status
         FROM {ANALYTICS_VIEW}
         {where}
-        GROUP BY produto
+        GROUP BY titulo_projeto
         ORDER BY valor DESC
         LIMIT 10
     """, params)
@@ -180,27 +180,28 @@ def top_projects(request):
 def charts(request):
     where, params = _filters(request)
     por_ano = _fetchall(request, f"""
-        SELECT ano AS year, COALESCE(SUM(receita_liquida), 0) AS value
+        SELECT ano AS year, COALESCE(SUM(investimento_total_estimado), 0) AS value
         FROM {ANALYTICS_VIEW}
         {where}
         GROUP BY ano
         ORDER BY ano
     """, params)
     mensal = _fetchall(request, f"""
-        SELECT mes AS month_num, CAST(mes AS TEXT) AS month,
-               COALESCE(SUM(receita_liquida), 0) AS value
+        SELECT COALESCE(EXTRACT(MONTH FROM data_inicio)::INTEGER, 1) AS month_num,
+               CAST(COALESCE(EXTRACT(MONTH FROM data_inicio)::INTEGER, 1) AS VARCHAR) AS month,
+               COALESCE(SUM(investimento_total_estimado), 0) AS value
         FROM {ANALYTICS_VIEW}
         {where}
-        GROUP BY mes
-        ORDER BY mes
+        GROUP BY month_num, month
+        ORDER BY month_num
     """, params)
     filters = _fetchone(request, f"""
         SELECT
-          COALESCE(json_group_array(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos_disponiveis,
-          COALESCE(json_group_array(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas_disponiveis,
-          COALESCE(json_group_array(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades_disponiveis,
-          COALESCE(json_group_array(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS statuses_disponiveis,
-          COALESCE(MAX(ano), CAST(strftime('%Y', 'now') AS INTEGER)) AS ano_vigente
+          COALESCE(list(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), []) AS anos_disponiveis,
+          COALESCE(list(DISTINCT grande_area) FILTER (WHERE grande_area IS NOT NULL), []) AS areas_disponiveis,
+          COALESCE(list(DISTINCT programa_fomento) FILTER (WHERE programa_fomento IS NOT NULL), []) AS modalidades_disponiveis,
+          COALESCE(list(DISTINCT modalidade) FILTER (WHERE modalidade IS NOT NULL), []) AS statuses_disponiveis,
+          COALESCE(MAX(ano), EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER) AS ano_vigente
         FROM {ANALYTICS_VIEW}
     """, json_columns=_JSON_COLUMNS)
     return Response({
@@ -216,16 +217,16 @@ def projects(request):
     where, params = _filters(request)
     rows = _fetchall(request, f"""
         SELECT
-          MIN(CAST(id_venda AS TEXT)) AS id,
-          produto AS projeto,
-          MAX(cliente) AS edital,
-          MAX(canal) AS modalidade,
-          COALESCE(SUM(receita_liquida), 0) AS valor,
-          MAX(porte_cliente) AS status,
-          MAX(categoria_produto) AS area
+          MIN(CAST(id_orientacao AS VARCHAR)) AS id,
+          titulo_projeto AS projeto,
+          MAX(titulo_edital) AS edital,
+          MAX(programa_fomento) AS modalidade,
+          COALESCE(SUM(investimento_total_estimado), 0) AS valor,
+          MAX(modalidade) AS status,
+          MAX(grande_area) AS area
         FROM {ANALYTICS_VIEW}
         {where}
-        GROUP BY produto
+        GROUP BY titulo_projeto
         ORDER BY valor DESC, projeto
         LIMIT 200
     """, params)
@@ -234,11 +235,11 @@ def projects(request):
         row["valor_formatado"] = _money(row["valor"])
     filters = _fetchone(request, f"""
         SELECT
-          COALESCE(json_group_array(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos,
-          COALESCE(json_group_array(DISTINCT canal) FILTER (WHERE canal IS NOT NULL), '[]') AS modalidades,
-          COALESCE(json_group_array(DISTINCT porte_cliente) FILTER (WHERE porte_cliente IS NOT NULL), '[]') AS status,
-          COALESCE(json_group_array(DISTINCT categoria_produto) FILTER (WHERE categoria_produto IS NOT NULL), '[]') AS areas,
-          COALESCE(json_group_array(DISTINCT cliente) FILTER (WHERE cliente IS NOT NULL), '[]') AS instituicoes
+          COALESCE(list(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), []) AS anos,
+          COALESCE(list(DISTINCT programa_fomento) FILTER (WHERE programa_fomento IS NOT NULL), []) AS modalidades,
+          COALESCE(list(DISTINCT modalidade) FILTER (WHERE modalidade IS NOT NULL), []) AS status,
+          COALESCE(list(DISTINCT grande_area) FILTER (WHERE grande_area IS NOT NULL), []) AS areas,
+          COALESCE(list(DISTINCT agencia_financiadora) FILTER (WHERE agencia_financiadora IS NOT NULL), []) AS instituicoes
         FROM {ANALYTICS_VIEW}
     """, json_columns=_JSON_COLUMNS)
     return Response({"data": rows, "total": len(rows), "filtros_disponiveis": filters})
@@ -272,21 +273,21 @@ def system_status(request):
             "error": str(exc)[:120],
         })
 
-    # ── dados.db (dados do usuário, só leitura) ─────────────
+    # ── dados.duckdb (dados analíticos OLAP, só leitura) ────
     from core.datastore import connect_dados, dados_db_path
     t0 = time.monotonic()
     try:
         with connect_dados() as conn:
             conn.execute("SELECT 1")
         results.append({
-            "name": "dados.db",
+            "name": "dados.duckdb",
             "status": "online",
             "latency_ms": round((time.monotonic() - t0) * 1000),
             "url": str(dados_db_path()),
         })
     except Exception as exc:
         results.append({
-            "name": "dados.db",
+            "name": "dados.duckdb",
             "status": "offline",
             "latency_ms": None,
             "url": str(dados_db_path()),
@@ -359,6 +360,9 @@ def data_bootstrap(request):
     contexts_root = data_dir() / "contexts"
     folders = sorted(p for p in contexts_root.glob("*") if (p / "views.json").exists())
     if not folders:
+        repo_contexts = REPO_APP_DIR / "contexts"
+        folders = sorted(p for p in repo_contexts.glob("*") if (p / "views.json").exists())
+    if not folders:
         return Response(
             {"detail": f"Nenhum contexto encontrado em {contexts_root}."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -372,8 +376,8 @@ def data_bootstrap(request):
             log_error("data_bootstrap", f"Falha ao carregar {folder.name}: {exc}")
             loaded.append({"pasta": folder.name, "ativo": False, "erros": [str(exc)]})
             continue
-        item = {"pasta": folder.name, "slug": contexto.slug, "nome": contexto.name, "ativo": not errors, "erros": errors}
-        if not errors and llm_configured():
+        item = {"pasta": folder.name, "slug": contexto.slug, "nome": contexto.name, "ativo": contexto.is_active, "erros": errors}
+        if contexto.is_active and not errors and llm_configured():
             # RAG (esquema, regras, exemplos) e índice de valores; usa a chave do usuário.
             try:
                 summary = index_contexto(contexto, get_embedder(), examples)

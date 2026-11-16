@@ -1,0 +1,109 @@
+{
+  "contexto": "pesquisa-extensao-ifes",
+  "ativo": true,
+  "nome": "Pesquisa, Extensão e Produção Científica (Ifes)",
+  "descricao": "Dados analíticos unificados do Ifes abrangendo Ações e Participações de Extensão (SRC), Projetos e Bolsas de Pesquisa (SigPesq), Produção Científica e Intelectual (Lattes) e Grupos de Pesquisa (CNPq DGP).",
+  "views": [
+    {
+      "name": "vfact_extensao_acao_resolved",
+      "description": "Uma linha por Ação de Extensão ou Ensino no SRC (id_acao), com campus, coordenador, tipo_acao, natureza, grande_area, area_conhecimento, orgao_fomento, relatorio_aprovado e qtd_atividades_vinculadas.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "titulo_acao",
+        "campus",
+        "tipo_acao",
+        "grande_area",
+        "area_conhecimento",
+        "orgao_fomento"
+      ],
+      "local_search_columns": [
+        "coordenador_nome",
+        "titulo_acao"
+      ]
+    },
+    {
+      "name": "vfact_extensao_participacao_resolved",
+      "description": "Uma linha por inscrição/participação de pessoa em uma atividade de extensão (id_participacao), com carga_horaria, situacao_participante, certificado_emitido, tipo_atividade e campus.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "titulo_acao",
+        "nome_atividade",
+        "tipo_atividade",
+        "campus",
+        "situacao_participante"
+      ],
+      "local_search_columns": [
+        "nome_participante"
+      ]
+    },
+    {
+      "name": "vfact_projeto_pesquisa_resolved",
+      "description": "Uma linha por Projeto de Pesquisa no SigPesq (id_projeto), com parecer_diretoria, natureza_projeto (PESQUISA_APLICADA/PESQUISA_BASICA), campus, coordenador_nome, titulacao_coordenador e qtd_planos_trabalho.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "titulo_projeto",
+        "campus",
+        "grande_area",
+        "area_conhecimento",
+        "natureza_projeto",
+        "parecer_diretoria"
+      ],
+      "local_search_columns": [
+        "coordenador_nome",
+        "titulo_projeto"
+      ]
+    },
+    {
+      "name": "vfact_orientacao_bolsa_resolved",
+      "description": "Uma linha por concessão de bolsa ou orientação de pesquisa (id_orientacao), com programa_fomento (PIBIC, PIBITI, PIBIC-Jr, etc.), modalidade (BOLSISTA/VOLUNTARIO), valor_bolsa_mensal, investimento_total_estimado, titulo_edital, titulo_plano_trabalho, nome_orientador, nome_orientado e agencia_financiadora.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "programa_fomento",
+        "titulo_edital",
+        "titulo_plano_trabalho",
+        "campus",
+        "agencia_financiadora"
+      ],
+      "local_search_columns": [
+        "nome_orientador",
+        "nome_orientado",
+        "titulo_edital"
+      ]
+    },
+    {
+      "name": "vfact_producao_cientifica_resolved",
+      "description": "Uma linha por autoria de produção científica/intelectual no Lattes (id_producao + id_pessoa_lattes), abrangendo artigos em periódicos, trabalhos em congressos, livros, capítulos, patentes e registros de software.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "titulo_producao",
+        "veiculo_publicacao",
+        "campus",
+        "subtipo_producao",
+        "tipo_macro_producao"
+      ],
+      "local_search_columns": [
+        "nome_autor",
+        "titulo_producao",
+        "veiculo_publicacao"
+      ]
+    },
+    {
+      "name": "vfact_grupo_pesquisa_membro_resolved",
+      "description": "Uma linha por vínculo de membro (pesquisador, estudante ou técnico) em Grupo de Pesquisa certificado pelo CNPq DGP (id_membro_grupo), com nome_grupo, situacao_grupo, papel_membro, status_participacao (ATIVO/EGRESSO) e flag_lider.",
+      "sensitive_columns": [],
+      "embed_columns": [
+        "nome_grupo",
+        "campus",
+        "grande_area",
+        "area_conhecimento",
+        "papel_membro",
+        "situacao_grupo"
+      ],
+      "local_search_columns": [
+        "nome_membro",
+        "nome_grupo"
+      ]
+    }
+  ],
+  "llm_row_limit": 50
+}

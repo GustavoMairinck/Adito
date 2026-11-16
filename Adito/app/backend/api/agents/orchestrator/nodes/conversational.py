@@ -1,14 +1,10 @@
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.config import GEMINI_API_KEY, GEMINI_MODEL
+from agents.config import get_chat_llm
 from core.rich_logging import log_info, log_success
 
 from ..config import CONVERSATIONAL_SYSTEM_PROMPT
 from ..state import MultiAgentState
-
-llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
-
 
 async def conversational_node(state: MultiAgentState) -> dict:
     instruction = state.get("delegation_instruction") or state.get("user_input", "")
@@ -24,6 +20,7 @@ async def conversational_node(state: MultiAgentState) -> dict:
         history = [HumanMessage(content=instruction or "Olá!")]
 
     system_content = CONVERSATIONAL_SYSTEM_PROMPT.format(instruction=instruction)
+    llm = get_chat_llm(temperature=0.0)
     response = await llm.ainvoke([SystemMessage(content=system_content)] + history)
 
     log_info(

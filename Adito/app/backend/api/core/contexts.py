@@ -1,35 +1,35 @@
 """
-Contextos: carregam o views.json de quem forneceu os dados, validam contra o dados.db,
+Contextos: carregam o views.json de quem forneceu os dados, validam contra o dados.duckdb,
 montam a política de leitura e o prompt do agente, e geram o RAG do contexto.
 
 Pasta de um contexto:
-    views.json     obrigatório: {"contexto", "nome", "descricao", "views": [...], "llm_row_limit"}
+    views.json     obrigatório: {"contexto", "nome", "descricao", "ativo": true, "views": [...], "llm_row_limit"}
     rules.md       opcional: regras de negócio e métricas
     examples.json  opcional: [{"question": "...", "sql": "..."}]
 """
 import json
 from pathlib import Path
 
+import duckdb
 from django.db import transaction
 
-from .datastore import ReadPolicy, connect_dados
+from .datastore import REPO_APP_DIR, ReadPolicy, connect_dados, data_dir
 from .models import Contexto, Tenant
 
 BASE_SQL_RULES = """
-You are ORACULO-ESX, an AI assistant specialized in data analysis.
+You are ORACULO-ESX (Adito), an AI assistant specialized in OLAP data analysis.
 
-Your task is to generate correct, deterministic SQL queries in SQLite.
+Your task is to generate correct, deterministic SQL queries in DuckDB.
 
 Rules:
-1. Use ONLY the views listed in ALLOWED VIEWS. Never reference any other table or view.
-2. NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, PRAGMA, schema prefixes or multiple statements.
-3. Column names exactly as listed (lowercase).
+1. Use ONLY the tables/views listed in ALLOWED VIEWS. Never reference any other table, view, or external file function.
+2. NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, COPY, ATTACH, DETACH, INSTALL, LOAD, PRAGMA, SET, CALL, schema prefixes or multiple statements.
+3. Column names exactly as listed (lowercase). Never select sensitive columns (CPF or email). Prefer listing explicit columns instead of SELECT *.
 4. Use LIMIT n, never TOP.
 5. Every non-aggregated selected column must appear in GROUP BY.
 6. Percentages must use NULLIF to avoid division by zero.
 7. Return a single valid SQL query without comments or explanations.
-8. SQLite dialect: no ILIKE (LIKE is already case-insensitive for ASCII), no :: casts (use CAST(x AS TYPE)),
-   no EXTRACT/date_trunc (use strftime, e.g. CAST(strftime('%Y', 'now') AS INTEGER)).
+8. DuckDB OLAP dialect: you MAY use ILIKE for case-insensitive matching, EXTRACT(YEAR FROM col), CAST(x AS TYPE) or x::TYPE, COALESCE, COUNT(DISTINCT col), SUM, AVG, ROUND.
 9. PLURAL vs SINGULAR LIMIT:
    - Plural questions ("quais", "liste", "mostre", "os N mais", "top N"): ORDER BY metric DESC LIMIT 10 unless the user gives N.
    - Singular questions ("qual o", "o/a com maior/menor", "o principal"): LIMIT 1.
@@ -48,13 +48,16 @@ def get_contexto(contexto_id) -> Contexto | None:
 def pick_contexto(tenant: Tenant, requested_id=None) -> Contexto | None:
     """Contexto de uma conversa nova: o pedido, ou o único ativo do tenant se houver só um."""
     active = Contexto.objects.filter(tenant=tenant, is_active=True)
+    if not active.exists():
+        sync_default_contexts(tenant)
+        active = Contexto.objects.filter(tenant=tenant, is_active=True)
     if requested_id:
         return active.filter(id=requested_id).first()
     return active.first() if active.count() == 1 else None
 
 
 def read_policy_for(contexto: Contexto | str | None) -> ReadPolicy:
-    """Sem contexto, nada fica exposto: o agente não lê nada do dados.db."""
+    """Sem contexto, nada fica exposto: o agente não lê nada do dados.duckdb."""
     if not isinstance(contexto, Contexto):
         contexto = get_contexto(contexto)
     if contexto is None:
@@ -68,14 +71,22 @@ def row_limit_for(contexto_id, default: int) -> int:
 
 
 def view_columns(view: str, dados_path=None) -> list[tuple[str, str]]:
-    with connect_dados(path=dados_path) as conn:
-        rows = conn.execute(f'PRAGMA table_info("{view.replace(chr(34), chr(34) * 2)}")').fetchall()
-    return [(row["name"], row["type"] or "") for row in rows]
+    safe_view = view.replace('"', '""')
+    try:
+        with connect_dados(path=dados_path) as conn:
+            rows = conn.execute(f'DESCRIBE "{safe_view}"').fetchall()
+        return [(str(row["column_name"]), str(row["column_type"] or "")) for row in rows]
+    except duckdb.CatalogException:
+        return []
 
 
 def visible_columns(contexto: Contexto, view: str, dados_path=None) -> list[tuple[str, str]]:
     sensitive = {column for name, column in contexto.sensitive_columns() if name == view.lower()}
-    return [(name, kind) for name, kind in view_columns(view, dados_path) if name.lower() not in sensitive]
+    return [
+        (name, kind)
+        for name, kind in view_columns(view, dados_path)
+        if name.lower() not in sensitive and "cpf" not in name.lower() and "email" not in name.lower()
+    ]
 
 
 def describe_views(contexto: Contexto, dados_path=None) -> str:
@@ -101,7 +112,7 @@ def build_system_prompt(contexto: Contexto | None, dados_path=None) -> str:
     parts.append("ALLOWED VIEWS (only these, only these columns):\n" + describe_views(contexto, dados_path))
     if contexto.rules:
         parts.append("BUSINESS RULES AND METRICS:\n" + contexto.rules)
-    return "\n\n".join(parts)
+    return "\n".join(parts) if len(parts) == 1 else "\n\n".join(parts)
 
 
 # ── Carga e validação ───────────────────────────────────────────────────────
@@ -118,7 +129,7 @@ def validate_contexto(contexto: Contexto, dados_path=None) -> list[str]:
             continue
         columns = {column.lower() for column, _ in view_columns(name, dados_path)}
         if not columns:
-            errors.append(f"View '{name}' não existe no dados.db.")
+            errors.append(f"View '{name}' não existe no dados.duckdb.")
             continue
         for key in ("sensitive_columns", "embed_columns", "local_search_columns"):
             missing = [column for column in view.get(key, []) if column.lower() not in columns]
@@ -151,6 +162,13 @@ def load_context_dir(path: str | Path, tenant: Tenant, dados_path=None) -> tuple
         },
     )
     examples = json.loads(examples_file.read_text(encoding="utf-8")) if examples_file.exists() else []
+
+    if spec.get("ativo") is False:
+        if contexto.is_active:
+            contexto.is_active = False
+            contexto.save(update_fields=["is_active"])
+        return contexto, examples, []
+
     errors = validate_contexto(contexto, dados_path)
     if errors:
         contexto.is_active = False
@@ -159,6 +177,42 @@ def load_context_dir(path: str | Path, tenant: Tenant, dados_path=None) -> tuple
         contexto.is_active = True
         contexto.save(update_fields=["is_active"])
     return contexto, examples, errors
+
+
+def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
+    """Sincroniza os contextos das pastas do repositório e da pasta do usuário."""
+    context_folders: dict[str, Path] = {}
+    repo_contexts = REPO_APP_DIR / "contexts"
+    if repo_contexts.exists():
+        for p in repo_contexts.glob("*"):
+            if (p / "views.json").exists():
+                context_folders[p.name] = p
+
+    user_contexts = data_dir() / "contexts"
+    if user_contexts.exists():
+        for p in user_contexts.glob("*"):
+            if (p / "views.json").exists():
+                context_folders[p.name] = p
+
+    synced: list[Contexto] = []
+    for folder in context_folders.values():
+        try:
+            ctx, _, _ = load_context_dir(folder, tenant, dados_path=dados_path)
+            synced.append(ctx)
+        except Exception:
+            continue
+
+    # Valida contextos já salvos no banco para desativar os que não existem mais no dados.duckdb
+    for ctx in Contexto.objects.filter(tenant=tenant, is_active=True):
+        try:
+            errors = validate_contexto(ctx, dados_path=dados_path)
+        except FileNotFoundError:
+            errors = ["dados.duckdb não encontrado."]
+        if errors:
+            ctx.is_active = False
+            ctx.save(update_fields=["is_active"])
+
+    return synced
 
 
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:

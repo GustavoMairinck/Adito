@@ -6,3 +6,11 @@
 /AGENTS.md
 /.gitmessage
 *.env
+__pycache__/
+*.py[cod]
+*.duckdb
+*.duckdb.wal
+/ScrumAIDev-*
+/scrumaidev-*
+/RELEASE_NOTES_*
+/VALIDATION_REPORT_*

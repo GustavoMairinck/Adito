@@ -112,33 +112,24 @@ A lista de tabelas vem de `Docs/Fatos/PropostaFatos.md` (commit `c91761a`), agru
 | `vfact_producao_cientifica_resolved` | `artigo_trabalho_evento`, `autoria_producao`, `categoria_producao_tecnica`, `livro_capitulo`, `organizacao`, `patente_registro`, `pesquisador`, `pessoa`, `pessoa_lattes`, `producao`, `producao_tecnica_artistica_bibliografica`, `tipo_artigo_evento`, `tipo_livro_capitulo`, `tipo_patente_registro` |
 | `vfact_grupo_pesquisa_membro_resolved` | `area_conhecimento`, `grande_area`, `grupo_pesquisa`, `grupo_pesquisa_cnpq`, `membro_grupo`, `membro_grupo_cnpq`, `organizacao`, `papel`, `pesquisador`, `pessoa`, `titulacao` |
 
-Quando `Docs/Fatos/PropostaFatos.md` mudar, atualize `TABELAS_POR_VIEW` e `PROPOSTA_COMMIT` em `exportar_json.py`, confira as views com `BEGIN; ...; ROLLBACK;` e rode a suíte de testes (`cd Adito/etl && .venv/bin/python -m pytest`).
+---
 
-### Formato dos arquivos, do `manifesto.json` e conversão de tipos
-- **`<saida>/<tabela>.json`:** lista JSON UTF-8 de objetos (`[{"id": 1, "nome": "Maria Exemplo"}, ...]`), ordenada pela chave primária descoberta em `pg_catalog` (ou por todas as colunas quando não há PK) e gravada atomicamente via arquivo temporário + rename. Tabela vazia sai como `[]`.
-- **`<saida>/manifesto.json`:** registra `gerado_em` (ISO 8601), `commit` (`git rev-parse HEAD`), `proposta` (`arquivo` e `commit`), `postgres` (`SHOW server_version`), `schema` (`"unificado"`) e, para cada tabela exportada, `linhas`, `colunas` (`nome`, `tipo` de `format_type`, `anulavel` e `valores_enum` quando ENUM), `chave_primaria` e `chaves_estrangeiras` (`coluna`, `tabela_destino`, `coluna_destino` e `destino_exportado`).
+## 🦆 Gerar o Banco Analítico DuckDB OLAP (`gerar_duckdb.py`)
 
-| Tipo no PostgreSQL | No JSON (`json_agg`) |
-| :--- | :--- |
-| `text`, `varchar`, `ENUM` | string (o `ENUM` sai pelo rótulo, ex.: `"BOLSISTA"`) |
-| `integer`, `bigint` | número inteiro |
-| `numeric(12,2)` | número com as casas decimais do banco (ex.: `700.00`); o tipo exato vai no manifesto |
-| `boolean` | `true` / `false` |
-| `date` | string ISO `"YYYY-MM-DD"` |
-| `timestamp` / `timestamptz` | string ISO 8601 |
-| arrays (`text[]` etc.) | lista JSON |
-| `NULL` | `null` |
+`gerar_duckdb.py` lê `Adito/etl/saida/json/manifesto.json` e os 41 arquivos `<tabela>.json`, recria o schema `unificado` com tipagem explícita no DuckDB e **materializa as 6 tabelas fato (`CREATE TABLE main.vfact_*_resolved AS SELECT ...`)** definidas em `Docs/Fatos/PropostaFatos.md` em formato colunar nativo `v1.2.0` para máxima velocidade OLAP no Adito.
 
-### Aviso de LGPD
-Os arquivos exportados contêm nomes de pessoas (`pessoa.json`, `orientacao.json`). **A saída nunca vai para o git:**
-- Antes de gravar qualquer arquivo, `exportar_json.py` executa `git check-ignore -q <saida>/x.json` e aborta caso a pasta não esteja ignorada pelo git.
-- Depois de gravar, o script varre todos os JSONs em busca de formatos de CPF ou e-mail; se encontrar qualquer ocorrência, apaga os arquivos gerados e aborta exibindo apenas o nome da tabela e da coluna (nunca o valor).
+```bash
+# Gera Adito/app/data/dados.duckdb e valida as contagens das 41 tabelas base e das 6 tabelas fato
+../app/.venv/bin/python gerar_duckdb.py
 
-### Exemplo ilustrativo de leitura no DuckDB
-De forma apenas ilustrativa, o DuckDB consegue ler diretamente cada arquivo exportado com `read_json`:
-
-```sql
-CREATE TABLE acao AS SELECT * FROM read_json('acao.json', format='array');
+# Ou especificando um caminho customizado de saída
+../app/.venv/bin/python gerar_duckdb.py --saida /caminho/para/dados.duckdb
 ```
 
-> **Nota:** o carregamento definitivo no pacote do DuckDB deve utilizar os tipos exatos, chaves primárias e chaves estrangeiras declarados em `manifesto.json` (especialmente para tabelas vazias como `patente_registro` e colunas `numeric`, `date` e `ENUM`), e não apenas a inferência automática do `read_json`.
+Tabelas fato materializadas no schema `main` (e expostas como views equivalentes em `unificado`):
+- `vfact_extensao_acao_resolved` (`207` linhas)
+- `vfact_extensao_participacao_resolved` (`6.741` linhas)
+- `vfact_projeto_pesquisa_resolved` (`236` linhas)
+- `vfact_orientacao_bolsa_resolved` (`1.203` linhas)
+- `vfact_producao_cientifica_resolved` (`1.232` linhas)
+- `vfact_grupo_pesquisa_membro_resolved` (`553` linhas)

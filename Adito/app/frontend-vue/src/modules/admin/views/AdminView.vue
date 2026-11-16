@@ -1087,7 +1087,7 @@ onBeforeUnmount(() => {
               <div class="space-y-1">
                 <h2 class="text-xl font-semibold text-text-primary">Contextos de dados</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
-                  Valida os contextos da pasta de dados contra o dados.db e, com a chave do Gemini configurada,
+                  Valida os contextos da pasta de dados contra o dados.duckdb e, com a chave do Gemini configurada,
                   gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
                 </p>
               </div>

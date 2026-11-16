@@ -1,15 +1,11 @@
 from langchain_core.messages import HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.config import GEMINI_API_KEY, GEMINI_MODEL
+from agents.config import get_chat_llm
 from core.rich_logging import log_error, log_info, log_success
 
 from ..config import REPORT_AGENT_PROMPT
 from ..state import MultiAgentState
 from .reflection import format_collected_data_for_reflection
-
-llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
-
 
 async def report_agent_node(state: MultiAgentState) -> dict:
     collected = state.get("collected_data", [])
@@ -46,6 +42,7 @@ async def report_agent_node(state: MultiAgentState) -> dict:
     )
 
     try:
+        llm = get_chat_llm(temperature=0.0)
         response = await llm.ainvoke([HumanMessage(content=prompt)])
         content = response.text
     except Exception as exc:

@@ -44,3 +44,6 @@ airflow/dags/jobs/__pycache__
 dbt/.user.yml
 dbt/package-lock.yml
 dbt_bak
+/data/
+*.duckdb
+*.duckdb.wal

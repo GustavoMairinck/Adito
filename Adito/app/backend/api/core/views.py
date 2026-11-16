@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .contexts import sync_default_contexts
 from .models import Contexto
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -13,7 +14,7 @@ LLM_KEY_MISSING = "Configure a chave do Gemini em Configurações para usar o ch
 
 def llm_configured() -> bool:
     """A chave chega do cofre do SO via ambiente quando o Tauri sobe o backend."""
-    return bool(os.environ.get("GEMINI_API_KEY"))
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
 
 
 @api_view(['GET'])
@@ -65,6 +66,9 @@ def test_llm_key(request):
 def contextos(request):
     """Contextos ativos para o seletor do chat e do dashboard (sem colunas sensíveis)."""
     rows = Contexto.objects.filter(tenant=request.user.tenant, is_active=True).order_by('name')
+    if not rows.exists() and request.user.tenant:
+        sync_default_contexts(request.user.tenant)
+        rows = Contexto.objects.filter(tenant=request.user.tenant, is_active=True).order_by('name')
     return Response([
         {
             "id": str(contexto.id),

@@ -297,7 +297,8 @@ async def ask_stream(request):
             import logging
             logger = logging.getLogger(__name__)
             logger.exception("Erro no processamento do stream de chat")
-            yield sse_event("error", {"message": "Erro interno ao processar sua pergunta. Tente novamente em instantes."})
+            err_msg = str(e) or e.__class__.__name__
+            yield sse_event("error", {"message": f"Erro interno ao processar sua pergunta: {err_msg}"})
 
     response = StreamingHttpResponse(event_generator(), content_type='text/event-stream; charset=utf-8')
     response['Cache-Control'] = 'no-cache'

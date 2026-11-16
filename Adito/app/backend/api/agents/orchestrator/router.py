@@ -1,13 +1,9 @@
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from .state import MultiAgentState
 from .models import RouterDecision
-from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, GEMINI_MODEL, GEMINI_API_KEY
+from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, get_chat_llm
 
 mcp_tools = []
-
-llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
-
 
 async def orchestrator_node(state: MultiAgentState):
     global mcp_tools
@@ -15,6 +11,7 @@ async def orchestrator_node(state: MultiAgentState):
     tools_desc = "\n".join([f"- {t.name}: {t.description}" for t in mcp_tools]) if mcp_tools else "Nenhuma ferramenta externa disponível."
     system_prompt = ORCHESTRATOR_SYSTEM_PROMPT.format(tools_desc=tools_desc)
 
+    llm = get_chat_llm(temperature=0.0)
     structured_llm = llm.with_structured_output(RouterDecision, method="function_calling")
 
     # Envia o histórico recente como contexto + a última mensagem como pergunta atual.

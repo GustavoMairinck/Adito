@@ -4,6 +4,7 @@ import re
 import sqlite3
 from contextlib import closing
 
+import duckdb
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
@@ -46,7 +47,7 @@ def _quote(identifier):
 def _kind(view):
     if view.get('kind') in {'fact', 'dimension', 'entity'}:
         return view['kind']
-    name = re.sub(r'^(?:vw_|v_)', '', view['name'].lower())
+    name = re.sub(r'^(?:vw_|v_|v(?=fact|fato))', '', view['name'].lower())
     if name.startswith(('fact', 'fato')):
         return 'fact'
     if name.startswith(('dim_', 'dimensao_')):
@@ -56,7 +57,7 @@ def _kind(view):
 
 def _unavailable():
     return Response(
-        {'detail': 'Não foi possível ler os dados. Verifique o dados.db e recarregue os contextos em Administração.'},
+        {'detail': 'Não foi possível ler os dados. Verifique o dados.duckdb e recarregue os contextos em Administração.'},
         status=503,
     )
 
@@ -79,7 +80,7 @@ def tables(request):
                 'columns': [{'name': name, 'type': kind} for name, kind in columns],
                 'available': bool(columns),
             })
-    except (FileNotFoundError, sqlite3.Error):
+    except (FileNotFoundError, duckdb.Error, sqlite3.Error):
         logger.exception('Falha ao ler o catálogo do contexto %s', contexto.id)
         return _unavailable()
     return Response({'tables': catalog})
@@ -108,10 +109,10 @@ def rows(request):
 
         clauses, values = [], []
         if params['search']:
-            # A busca trata %, _ e ! como texto literal.
+            # A busca trata %, _ e ! como texto literal (ILIKE garante busca case-insensitive no DuckDB).
             search = params['search'].replace('!', '!!').replace('%', '!%').replace('_', '!_')
             clauses.append('(' + ' OR '.join(
-                f"CAST({_quote(column)} AS TEXT) LIKE ? ESCAPE '!'" for column in columns
+                f"CAST({_quote(column)} AS TEXT) ILIKE ? ESCAPE '!'" for column in columns
             ) + ')')
             values.extend([f'%{search}%'] * len(columns))
         if params['filter_column'] and params['filter_value']:
@@ -121,9 +122,10 @@ def rows(request):
         source = _quote(view['name'])
         where = ' WHERE ' + ' AND '.join(clauses) if clauses else ''
         sort = params['sort'] or columns[0]
+        null_order = 'NULLS FIRST' if params['direction'] == 'asc' else 'NULLS LAST'
         order = ', '.join([
-            f'{_quote(sort)} {params["direction"].upper()}',
-            *[_quote(column) for column in columns if column != sort],
+            f'{_quote(sort)} {params["direction"].upper()} {null_order}',
+            *[f'{_quote(column)} ASC {null_order}' for column in columns if column != sort],
         ])
         page_size = int(params['page_size'])
         # O SQL usa apenas a relação e as colunas já validadas no contexto.
@@ -149,13 +151,13 @@ def rows(request):
             'total': total, 'page': page, 'page_size': page_size,
             'distribution': distribution,
         })
-    except (FileNotFoundError, sqlite3.Error):
+    except (FileNotFoundError, duckdb.Error, sqlite3.Error):
         logger.exception('Falha ao consultar a relação %s do contexto %s', view['name'], contexto.id)
         return _unavailable()
 
 
 def _record(row):
     return {
-        key: '0x' + value.hex() if isinstance(value, bytes) else value
+        key: '0x' + bytes(value).hex() if isinstance(value, (bytes, bytearray, memoryview)) else value
         for key, value in dict(row).items()
     }

@@ -1,16 +1,12 @@
 from typing import Any, Sequence
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.config import GEMINI_API_KEY, GEMINI_MODEL
+from agents.config import get_chat_llm
 from core.rich_logging import log_info, log_kv
 
 from ..config import MAX_LOOP_ITERATIONS, ORCHESTRATOR_SYSTEM_PROMPT, RouterDecision
 from ..state import _COLLECTED_RESET, MultiAgentState
-
-llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GEMINI_API_KEY or "not-configured", temperature=0.0)
-
 
 def _entry_value(entry: dict | Any, key: str) -> Any:
     if isinstance(entry, dict):
@@ -71,6 +67,7 @@ async def run_orchestrator_node(
             message for message in raw_messages if isinstance(message, HumanMessage)
         ]
 
+    llm = get_chat_llm(temperature=0.0)
     structured_llm = llm.with_structured_output(RouterDecision, method="function_calling")
     decision: RouterDecision = await structured_llm.ainvoke(
         [SystemMessage(content=system_text)] + raw_messages
