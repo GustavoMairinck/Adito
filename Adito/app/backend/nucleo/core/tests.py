@@ -536,6 +536,19 @@ class CaminhosTests(unittest.TestCase):
             os.environ.pop("MUNINN_DATA_DIR", None)
             self.assertEqual(data_dir(), Path(base) / "br.edu.ifes.leds.muninn")
 
+    def test_migra_pasta_de_dados_antiga_para_a_do_muninn(self):
+        from core.datastore import LEGACY_APP_DIR_NAME, data_dir
+
+        with tempfile.TemporaryDirectory() as base, patch.dict(os.environ, {"XDG_DATA_HOME": base}):
+            os.environ.pop("MUNINN_DATA_DIR", None)
+            antiga = Path(base) / LEGACY_APP_DIR_NAME
+            antiga.mkdir()
+            (antiga / "app.db").write_text("x")
+            nova = data_dir()
+            self.assertEqual(nova, Path(base) / "br.edu.ifes.leds.muninn")
+            self.assertTrue((nova / "app.db").exists())
+            self.assertFalse(antiga.exists())
+
     def test_checkpointer_segue_o_caminho_atual_e_reabre_o_grafo(self):
         from agents.config import checkpoint_db_path
         from agents.orchestrator import graph

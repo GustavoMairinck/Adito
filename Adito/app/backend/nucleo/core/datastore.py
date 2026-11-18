@@ -23,10 +23,19 @@ from typing import Any, Iterator, Sequence
 
 # Mesmo nome da pasta que o Tauri usa (identifier do tauri.conf.json)
 APP_DIR_NAME = "br.edu.ifes.leds.muninn"
+# Nome da pasta na época do Oraculo-ESX/Adito; só serve para migrar os dados para o Muninn.
+LEGACY_APP_DIR_NAME = "br.edu.ifes.leds.oraculo-esx"
 REPO_APP_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_REPO_SQLITE = REPO_APP_DIR / "data" / "dados.db"
 
 _RE_LEADING_EXPLAIN = re.compile(r"^\s*EXPLAIN\s+", re.IGNORECASE)
+
+
+def _migrate_legacy_dir(base: Path) -> None:
+    """Move a pasta de dados antiga para `base` se `base` ainda não existe (mesmo pai)."""
+    legacy = base.parent / LEGACY_APP_DIR_NAME
+    if not base.exists() and legacy.is_dir():
+        legacy.rename(base)
 
 
 def data_dir() -> Path:
@@ -38,6 +47,8 @@ def data_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / APP_DIR_NAME
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / APP_DIR_NAME
+    if not override:
+        _migrate_legacy_dir(base)
     base.mkdir(parents=True, exist_ok=True)
     return base
 

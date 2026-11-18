@@ -30,6 +30,8 @@ const START_TIMEOUT: Duration = Duration::from_secs(90);
 const STOP_GRACE: Duration = Duration::from_secs(3);
 const KEYRING_SERVICE: &str = "br.edu.ifes.leds.muninn";
 const KEYRING_USER: &str = "gemini-api-key";
+/// Identifier da época do Oraculo-ESX/Adito; só serve para migrar dados e chave para o Muninn.
+const LEGACY_IDENTIFIER: &str = "br.edu.ifes.leds.oraculo-esx";
 
 /// Erro devolvido ao front, no mesmo formato de antes: um status no estilo HTTP e o corpo.
 #[derive(Debug, Clone, Serialize)]
@@ -114,6 +116,55 @@ fn read_key() -> Result<Option<String>, String> {
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Copia a chave do cofre do SO do serviço antigo para o do Muninn (uma vez) e remove a antiga.
+fn migrate_legacy_key() {
+    let Ok(new) = key_entry() else { return };
+    if !matches!(new.get_password(), Err(keyring::Error::NoEntry)) {
+        return;
+    }
+    let Ok(old) = keyring::Entry::new(LEGACY_IDENTIFIER, KEYRING_USER) else { return };
+    if let Ok(secret) = old.get_password() {
+        if new.set_password(&secret).is_ok() {
+            let _ = old.delete_credential();
+        }
+    }
+}
+
+const APP_IDENTIFIER: &str = "br.edu.ifes.leds.muninn";
+
+/// Pasta-base dos dados locais do usuário (a mesma que o Tauri usa em `app_local_data_dir`).
+fn local_data_base() -> Option<PathBuf> {
+    if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+    }
+}
+
+/// Precisa rodar antes de a janela existir: o WebView cria a pasta nova assim que sobe, e a
+/// migração só acontece quando a pasta nova ainda não existe.
+fn migrate_legacy_data() {
+    let Some(base) = local_data_base() else { return };
+    if let Err(e) = migrate_legacy_dir(&base.join(APP_IDENTIFIER)) {
+        eprintln!("[migração] não foi possível mover a pasta de dados antiga: {e}");
+    }
+}
+
+/// Move a pasta de dados antiga (irmã da nova, mesmo pai) para o nome do Muninn, se a nova ainda não existe.
+fn migrate_legacy_dir(data_dir: &Path) -> std::io::Result<bool> {
+    let Some(parent) = data_dir.parent() else { return Ok(false) };
+    let legacy = parent.join(LEGACY_IDENTIFIER);
+    if data_dir.exists() || !legacy.is_dir() {
+        return Ok(false);
+    }
+    fs::rename(&legacy, data_dir)?;
+    Ok(true)
 }
 
 // ── Processo do núcleo ───────────────────────────────────────────────────────
@@ -414,6 +465,7 @@ async fn clear_llm_key(state: CoreState<'_>) -> Result<(), String> {
 fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_local_data_dir()?;
     let log_dir = app.path().app_log_dir()?;
+    migrate_legacy_key();
     fs::create_dir_all(&data_dir)?;
     fs::create_dir_all(&log_dir)?;
 
@@ -436,6 +488,7 @@ fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>>
 }
 
 pub fn run() {
+    migrate_legacy_data();
     tauri::Builder::default()
         .setup(|app| {
             let core = setup_core(app)?;
@@ -458,4 +511,45 @@ pub fn run() {
                 app.state::<Arc<Core>>().stop();
             }
         });
+}
+
+#[cfg(test)]
+mod testes_migracao {
+    use super::*;
+
+    fn base(nome: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("muninn-{nome}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn identifier_igual_ao_do_tauri_conf() {
+        let conf = include_str!("../tauri.conf.json");
+        assert!(conf.contains(&format!("\"identifier\": \"{APP_IDENTIFIER}\"")));
+    }
+
+    #[test]
+    fn move_pasta_antiga_quando_a_nova_nao_existe() {
+        let b = base("move");
+        fs::create_dir_all(b.join(LEGACY_IDENTIFIER)).unwrap();
+        fs::write(b.join(LEGACY_IDENTIFIER).join("app.db"), "x").unwrap();
+        let novo = b.join("br.edu.ifes.leds.muninn");
+        assert!(migrate_legacy_dir(&novo).unwrap());
+        assert!(novo.join("app.db").exists());
+        assert!(!b.join(LEGACY_IDENTIFIER).exists());
+        let _ = fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn nao_sobrescreve_pasta_nova_existente() {
+        let b = base("nao-sobrescreve");
+        fs::create_dir_all(b.join(LEGACY_IDENTIFIER)).unwrap();
+        let novo = b.join("br.edu.ifes.leds.muninn");
+        fs::create_dir_all(&novo).unwrap();
+        assert!(!migrate_legacy_dir(&novo).unwrap());
+        assert!(b.join(LEGACY_IDENTIFIER).exists());
+        let _ = fs::remove_dir_all(&b);
+    }
 }
