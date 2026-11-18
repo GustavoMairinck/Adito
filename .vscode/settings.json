@@ -10,7 +10,7 @@
         {
             "alias": "dados",
             "type": "file",
-            "path": "Adito/app/data/dados.duckdb",
+            "path": "Muninn/app/data/dados.duckdb",
             "readOnly": true,
             "attached": true
         }

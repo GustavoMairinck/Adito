@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera 300 registros fictícios para validar o ETL do Horizon (issue #5 do Adito).
+"""Gera 300 registros fictícios para validar o ETL do Horizon (issue #5 do Muninn).
 
 Fontes geradas (nas mesmas estruturas que o ETL lê):
 

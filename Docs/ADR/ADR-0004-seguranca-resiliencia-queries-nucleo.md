@@ -1,3 +1,5 @@
+> **Nota:** ADR escrita quando o projeto se chamava Adito. Os caminhos `Adito/`, o pacote `adito_etl` e as variáveis `ORACULO_*`/`ADITO_*` citados aqui hoje são `Muninn/`, `muninn_etl` e `MUNINN_*` (ver [ADR-0005](ADR-0005-nome-muninn.md)).
+
 # ADR 0004: Estratégia de Segurança e Resiliência de Consultas SQL no Núcleo (Authorizer, Custom LIKE e Transpilação com sqlglot)
 
 **Status:** Aceito  
