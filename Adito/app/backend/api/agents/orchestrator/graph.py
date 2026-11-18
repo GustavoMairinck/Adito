@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from contextlib import asynccontextmanager
@@ -14,17 +15,37 @@ from agents.config import CHECKPOINT_DB_PATH
 mcp_tools = []
 
 
+_compiled = None
+_saver_cm = None
+_lock: asyncio.Lock | None = None
+
+
 @asynccontextmanager
 async def get_graph():
     """
-    Compila o grafo com checkpointer SQLite (no app.db por padrão).
-    O histórico de mensagens fica isolado por thread_id.
+    Grafo compilado com checkpointer SQLite (no app.db por padrão); o histórico fica isolado por thread_id.
+
+    Compilado e conectado uma vez por processo (antes era a cada pergunta).
     """
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH)) as _checkpointer:
-        await _checkpointer.setup()
-        _graph = builder.compile(checkpointer=_checkpointer)
-        print(f"[Graph] Compilado com checkpointer SQLite ({CHECKPOINT_DB_PATH}).")
-        yield _graph
+    global _compiled, _saver_cm, _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    async with _lock:
+        if _compiled is None:
+            saver_cm = AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+            checkpointer = await saver_cm.__aenter__()
+            await checkpointer.setup()
+            _compiled, _saver_cm = builder.compile(checkpointer=checkpointer), saver_cm
+            print(f"[Graph] Compilado com checkpointer SQLite ({CHECKPOINT_DB_PATH}).")
+    yield _compiled
+
+
+async def close_graph():
+    """Fecha a conexão do checkpointer ao encerrar o núcleo."""
+    global _compiled, _saver_cm, _lock
+    if _saver_cm is not None:
+        await _saver_cm.__aexit__(None, None, None)
+    _compiled = _saver_cm = _lock = None
 
 
 async def mcp_tool_node(state: MultiAgentState):
