@@ -39,7 +39,7 @@ Consultas já realizadas (NÃO repita estas instruções):
 Lacunas identificadas pela última Reflection (busque dados para estas):
 {gaps_str}
 
-Lacunas irresolúveis (o oráculo não encontrou estes dados — NÃO tente novamente):
+Lacunas irresolúveis (o Muninn não encontrou estes dados — NÃO tente novamente):
 {unresolvable_str}
 
 Raciocine sobre o que ainda falta e instrua o agente de dados APENAS para as lacunas pendentes.

@@ -16,7 +16,7 @@ class MultiAgentState(TypedDict):
     calls: List[dict]
     # resposta final
     final_response: Annotated[Optional[str], prefer_new]
-    # dados tragos da api do BI (oraculo)
+    # dados tragos da api do BI (Muninn)
     graph: Annotated[Optional[Any], prefer_new]
     sql_used: Annotated[Optional[str], prefer_new]
     text_response: Annotated[Optional[str], prefer_new]

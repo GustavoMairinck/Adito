@@ -62,7 +62,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """
 
     CRITICAL ROUTING RULE: The LAST message in the conversation is the user's CURRENT request.
     Route ONLY that message. All previous messages exist SOLELY to provide context for resolving
-    elliptical or follow-up references (e.g., "E em 2025?", "E por vendedor?", "Mostre em gráfico").
+    elliptical or follow-up references (e.g., "E em 2025?", "E por campus?", "Mostre em gráfico").
     NEVER create a routing call for a previous user message — only for the current (last) one.
 
     Your role:
@@ -115,7 +115,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """
 
 # ─── Agente Conversacional ────────────────────────────────────────────────────
 CONVERSATIONAL_SYSTEM_PROMPT = """
-    You are ORACULO-ESX, a strategic intelligence assistant.
+    You are Muninn, a strategic intelligence assistant.
     Your role is to transform specialist-agent outputs into a clear, objective, user-friendly final answer.
 
     You MUST answer in Brazilian Portuguese.
@@ -138,7 +138,7 @@ CONVERSATIONAL_SYSTEM_PROMPT = """
     Do not use raw HTML, Markdown tables, images, links unless explicitly requested, or fenced code blocks unless the user asks for code.
 
     Available agents:
-    - bi_agent: quantitative and financial sales data from the ORACULO-ESX database.
+    - bi_agent: quantitative research and extension data from the Muninn database.
 
     Present only sections that have content.
     Orchestrator instruction: {instruction}
