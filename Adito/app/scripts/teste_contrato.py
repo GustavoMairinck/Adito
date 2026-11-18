@@ -45,15 +45,15 @@ VIEW = "vfact_orientacao_bolsa_resolved"
 # ── Dados sintéticos ─────────────────────────────────────────────────────────
 
 def criar_dados() -> None:
-    import duckdb
+    import sqlite3
 
-    conn = duckdb.connect(str(DATA_DIR / "dados.duckdb"))
+    conn = sqlite3.connect(str(DATA_DIR / "dados.db"))
     conn.execute(f"""
         CREATE TABLE {VIEW} (
-            id_orientacao INTEGER, ano INTEGER, grande_area VARCHAR, programa_fomento VARCHAR,
-            modalidade VARCHAR, titulo_projeto VARCHAR, titulo_edital VARCHAR,
-            investimento_total_estimado DECIMAL(12,2), nome_orientador VARCHAR,
-            agencia_financiadora VARCHAR, data_inicio DATE, cpf_orientador VARCHAR
+            id_orientacao INTEGER, ano INTEGER, grande_area TEXT, programa_fomento TEXT,
+            modalidade TEXT, titulo_projeto TEXT, titulo_edital TEXT,
+            investimento_total_estimado REAL, nome_orientador TEXT,
+            agencia_financiadora TEXT, data_inicio TEXT, cpf_orientador TEXT
         )
     """)
     areas = ["Exatas", "Humanas", "Saúde"]
@@ -62,11 +62,12 @@ def criar_dados() -> None:
     for i in range(1, 41):
         rows.append((
             i, 2024 + i % 3, areas[i % 3], programas[i % 3], f"Modalidade {i % 2}",
-            f"Projeto {i % 12:02d}", f"Edital {i % 4}", Decimal(f"{(i * 137) % 900 + 100}.50"),
-            f"Pessoa {chr(65 + i % 7)}", f"Agência {i % 2}", date(2024, 1 + i % 12, 1), f"000.000.000-{i:02d}",
+            f"Projeto {i % 12:02d}", f"Edital {i % 4}", float(Decimal(f"{(i * 137) % 900 + 100}.50")),
+            f"Pessoa {chr(65 + i % 7)}", f"Agência {i % 2}", str(date(2024, 1 + i % 12, 1)), f"000.000.000-{i:02d}",
         ))
     conn.executemany(f"INSERT INTO {VIEW} VALUES ({', '.join('?' * 12)})", rows)
     conn.execute("CREATE VIEW dim_area AS SELECT DISTINCT grande_area AS nome FROM " + VIEW)
+    conn.commit()
     conn.close()
 
     ctx = DATA_DIR / "contexts" / "ctx-contrato"

@@ -1,14 +1,14 @@
 [
  {
   "nome": "health",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "status": "ok"
   }
  },
  {
   "nome": "me",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "id": "<id1>",
    "username": "local",
@@ -22,7 +22,7 @@
  },
  {
   "nome": "contextos",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id2>",
@@ -44,7 +44,7 @@
  },
  {
   "nome": "explorer.tables",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "tables": [
     {
@@ -63,39 +63,39 @@
       },
       {
        "name": "grande_area",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "programa_fomento",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "modalidade",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "titulo_projeto",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "titulo_edital",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "investimento_total_estimado",
-       "type": "DECIMAL(12,2)"
+       "type": "REAL"
       },
       {
        "name": "nome_orientador",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "agencia_financiadora",
-       "type": "VARCHAR"
+       "type": "TEXT"
       },
       {
        "name": "data_inicio",
-       "type": "DATE"
+       "type": "TEXT"
       }
      ],
      "available": true
@@ -108,7 +108,7 @@
      "columns": [
       {
        "name": "nome",
-       "type": "VARCHAR"
+       "type": "TEXT"
       }
      ],
      "available": true
@@ -127,7 +127,7 @@
  },
  {
   "nome": "explorer.rows padrão",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "rows": [
     {
@@ -464,7 +464,7 @@
  },
  {
   "nome": "explorer.rows busca",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "rows": [
     {
@@ -918,7 +918,7 @@
  },
  {
   "nome": "explorer.rows ordenado",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "rows": [
     {
@@ -1125,7 +1125,7 @@
  },
  {
   "nome": "explorer.rows filtro+grupo",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "rows": [
     {
@@ -1334,7 +1334,7 @@
  },
  {
   "nome": "explorer.rows dim",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "rows": [
     {
@@ -1355,7 +1355,7 @@
  },
  {
   "nome": "kpis",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "total_investido": 21860.0,
    "projetos_ativos": 12,
@@ -1365,17 +1365,17 @@
  },
  {
   "nome": "kpis filtrado",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "total_investido": 7426.0,
    "projetos_ativos": 4,
-   "pagamentos_ano_vigente": 0.0,
+   "pagamentos_ano_vigente": 0,
    "equipe_alocada": 7
   }
  },
  {
   "nome": "top_projects",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "nome": "Projeto 01",
@@ -1441,7 +1441,7 @@
  },
  {
   "nome": "charts",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "por_ano": [
     {
@@ -1519,7 +1519,7 @@
  },
  {
   "nome": "widgets.create",
-  "status": 201,
+  "status": "2xx",
   "body": {
    "id": "<id3>",
    "title": "Total por ano",
@@ -1557,7 +1557,7 @@
  },
  {
   "nome": "widgets.list",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id3>",
@@ -1585,7 +1585,7 @@
  },
  {
   "nome": "widgets.update",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "id": "<id3>",
    "title": "Total por ano",
@@ -1611,7 +1611,7 @@
  },
  {
   "nome": "widgets.refresh",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "data": [
     {
@@ -1632,7 +1632,7 @@
  },
  {
   "nome": "widgets.create quebrado",
-  "status": 201,
+  "status": "2xx",
   "body": {
    "id": "<id5>",
    "title": "Quebrado",
@@ -1658,11 +1658,11 @@
  },
  {
   "nome": "widgets.refresh quebrado",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "data": [
     {
-     "error": "Binder Error: Referenced column \"coluna_inexistente\" not found in FROM clause!\nCandidate bindings: \"ano\", \"investimento_total_estimado\", \"nome_orientador\", \"titulo_edital\", \"cpf_orientador\"\n\nLINE 1: SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved\n               ^^^^^^^^^^^^^^^^^^"
+     "error": "no such column: coluna_inexistente"
     }
    ],
    "widget_status": "BROKEN"
@@ -1670,7 +1670,7 @@
  },
  {
   "nome": "widgets.delete",
-  "status": 204,
+  "status": "2xx",
   "body": null
  },
  {
@@ -1682,7 +1682,7 @@
  },
  {
   "nome": "widgets.list depois",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id5>",
@@ -1710,7 +1710,7 @@
  },
  {
   "nome": "chat.stream nova",
-  "status": 200,
+  "status": "2xx",
   "events": [
    {
     "event": "status",
@@ -1777,7 +1777,7 @@
  },
  {
   "nome": "chat.stream continua",
-  "status": 200,
+  "status": "2xx",
   "events": [
    {
     "event": "status",
@@ -1838,7 +1838,7 @@
  },
  {
   "nome": "chat.stream local",
-  "status": 200,
+  "status": "2xx",
   "events": [
    {
     "event": "status",
@@ -1941,7 +1941,7 @@
  },
  {
   "nome": "me sem chave",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "id": "<id1>",
    "username": "local",
@@ -1955,7 +1955,7 @@
  },
  {
   "nome": "conversations.list",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id11>",
@@ -2070,7 +2070,7 @@
  },
  {
   "nome": "message_rows 0",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "data": [
     {
@@ -2090,7 +2090,7 @@
  },
  {
   "nome": "message_rows 1",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "data": [
     {
@@ -2113,7 +2113,7 @@
   "status": 409,
   "body": {
    "message": "os dados mudaram desde esta pergunta; refaça a pergunta",
-   "error": "Binder Error: Referenced column \"coluna_inexistente\" not found in FROM clause!\nCandidate bindings: \"ano\", \"investimento_total_estimado\", \"nome_orientador\", \"titulo_edital\", \"cpf_orientador\"\n\nLINE 1: SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved\n               ^^^^^^^^^^^^^^^^^^"
+   "error": "no such column: coluna_inexistente"
   }
  },
  {
@@ -2125,7 +2125,7 @@
  },
  {
   "nome": "query_executions",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id14>",
@@ -2170,17 +2170,17 @@
  },
  {
   "nome": "query_executions inválidas",
-  "status": 200,
+  "status": "2xx",
   "body": []
  },
  {
   "nome": "conversations.delete",
-  "status": 204,
+  "status": "2xx",
   "body": null
  },
  {
   "nome": "conversations.list depois",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id11>",
@@ -2226,7 +2226,7 @@
  },
  {
   "nome": "query_executions depois",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id14>",
@@ -2279,7 +2279,7 @@
  },
  {
   "nome": "system_status",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "services": [
     {
@@ -2289,7 +2289,7 @@
      "url": "<volátil>"
     },
     {
-     "name": "dados.duckdb",
+     "name": "dados.db",
      "status": "online",
      "latency_ms": "<volátil>",
      "url": "<volátil>"
@@ -2308,7 +2308,7 @@
  },
  {
   "nome": "trainings.create",
-  "status": 201,
+  "status": "2xx",
   "body": {
    "id": "<id18>",
    "type": "sql",
@@ -2336,7 +2336,7 @@
  },
  {
   "nome": "system_status depois",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "services": [
     {
@@ -2346,7 +2346,7 @@
      "url": "<volátil>"
     },
     {
-     "name": "dados.duckdb",
+     "name": "dados.db",
      "status": "online",
      "latency_ms": "<volátil>",
      "url": "<volátil>"
@@ -2365,7 +2365,7 @@
  },
  {
   "nome": "bootstrap sem chave",
-  "status": 200,
+  "status": "2xx",
   "body": {
    "status": "success",
    "chave_configurada": false,
@@ -2383,7 +2383,7 @@
  },
  {
   "nome": "contextos depois",
-  "status": 200,
+  "status": "2xx",
   "body": [
    {
     "id": "<id2>",

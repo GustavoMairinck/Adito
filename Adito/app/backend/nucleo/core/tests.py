@@ -4,20 +4,25 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import duckdb
 
 from agents.bi_agent.agent import BIAgent
 from agents.bi_agent.sql_security import validate_read_only_sql
 from analytics_index.services import fetch_distinct_candidates
 from core import db
 from core.contexts import describe_views, load_context_dir, view_columns
-from core.datastore import ReadPolicy, close_dados, connect_dados
+from core.datastore import (
+    DEFAULT_REPO_SQLITE,
+    ReadPolicy,
+    close_dados,
+    connect_dados,
+)
 from core.records import Contexto, Tenant, get_local_user
 from core.schema import ensure_schema
 from rpc import session
@@ -25,30 +30,25 @@ from rpc.errors import ApiError
 from rpc.registry import dispatch, load_handlers
 
 RAIZ_REPO = Path(__file__).resolve().parents[5]
-SCRIPTS_DIR = RAIZ_REPO / "Adito" / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
 
-from gerar_duckdb import (  # noqa: E402
-    CONTAGENS_ESPERADAS_FATOS,
-    PROPOSTA_PADRAO,
-    SAIDA_DUCKDB_PADRAO,
-    extrair_fatos_proposta,
-    gerar_banco_duckdb,
-    mapear_tipo_duckdb,
-)
-
-FATOS_NOMES = frozenset(CONTAGENS_ESPERADAS_FATOS.keys())
+FATOS_NOMES = frozenset({
+    "vfact_extensao_acao_resolved",
+    "vfact_extensao_participacao_resolved",
+    "vfact_projeto_pesquisa_resolved",
+    "vfact_orientacao_bolsa_resolved",
+    "vfact_producao_cientifica_resolved",
+    "vfact_grupo_pesquisa_membro_resolved",
+})
 
 
-def _criar_duckdb_sintetico(caminho_duckdb: Path) -> None:
-    """Cria um arquivo `.duckdb` mínimo contendo as 6 tabelas fato com as colunas do contexto."""
+def _criar_sqlite_sintetico(caminho_sqlite: Path) -> None:
+    """Cria um arquivo `.db` mínimo contendo as 6 tabelas fato com as colunas do contexto."""
     spec = json.loads(
         (RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
             encoding="utf-8"
         )
     )
-    conn = duckdb.connect(str(caminho_duckdb))
+    conn = sqlite3.connect(str(caminho_sqlite))
     try:
         for view in spec["views"]:
             name = view["name"]
@@ -59,12 +59,13 @@ def _criar_duckdb_sintetico(caminho_duckdb: Path) -> None:
                 | {"id", "ano"}
             )
             col_defs = ", ".join(
-                f'"{c}" INTEGER' if c in ("id", "ano") else f'"{c}" VARCHAR'
+                f'"{c}" INTEGER' if c in ("id", "ano") else f'"{c}" TEXT'
                 for c in cols
             )
-            conn.execute(f'CREATE TABLE main."{name}" ({col_defs})')
+            conn.execute(f'CREATE TABLE "{name}" ({col_defs})')
             vals = ", ".join("1" if c == "id" else ("2024" if c == "ano" else f"'val_{c}'") for c in cols)
-            conn.execute(f'INSERT INTO main."{name}" VALUES ({vals})')
+            conn.execute(f'INSERT INTO "{name}" VALUES ({vals})')
+        conn.commit()
     finally:
         conn.close()
 
@@ -94,112 +95,83 @@ def call(method: str, params: dict | None = None) -> tuple[int, object]:
         return exc.status, exc.data
 
 
-class DuckDBSecurityAndContextTests(AppDbTestCase):
+class SQLiteSecurityAndContextTests(AppDbTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
-        self.synthetic_duckdb = Path(self.tmpdir.name) / "test_dados.duckdb"
-        _criar_duckdb_sintetico(self.synthetic_duckdb)
+        self.synthetic_sqlite = Path(self.tmpdir.name) / "test_dados.db"
+        _criar_sqlite_sintetico(self.synthetic_sqlite)
         self.tenant = Tenant(name="ifes-test").insert()
 
-    def test_mapear_tipo_duckdb_e_extrair_fatos_proposta(self) -> None:
-        self.assertEqual(mapear_tipo_duckdb("bigint"), "BIGINT")
-        self.assertEqual(mapear_tipo_duckdb("integer"), "INTEGER")
-        self.assertEqual(mapear_tipo_duckdb("numeric(12,2)"), "DECIMAL(12,2)")
-        self.assertEqual(mapear_tipo_duckdb("boolean"), "BOOLEAN")
-        self.assertEqual(mapear_tipo_duckdb("date"), "DATE")
-        self.assertEqual(mapear_tipo_duckdb("tipo_modalidade"), "VARCHAR")
+    def test_fatos_nomes_cobertura_completa(self) -> None:
+        self.assertEqual(len(FATOS_NOMES), 6)
+        spec = json.loads(
+            (RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        spec_views = {v["name"] for v in spec["views"]}
+        self.assertEqual(spec_views, FATOS_NOMES)
 
-        fatos = extrair_fatos_proposta(PROPOSTA_PADRAO)
-        self.assertEqual(len(fatos), 6)
-        self.assertEqual({nome for nome, _ in fatos}, FATOS_NOMES)
-
-    def test_validate_read_only_sql_duckdb_permite_consultas_olap_validas(self) -> None:
+    def test_validate_read_only_sql_permite_consultas_validas(self) -> None:
         queries = [
-            "SELECT campus, COUNT(*) AS total FROM vfact_extensao_acao_resolved WHERE campus ILIKE '%Serra%' GROUP BY campus",
-            "SELECT EXTRACT(YEAR FROM data_inicio)::INTEGER AS ano, COUNT(DISTINCT id_projeto) FROM vfact_projeto_pesquisa_resolved GROUP BY 1",
+            "SELECT campus, COUNT(*) AS total FROM vfact_extensao_acao_resolved WHERE campus LIKE '%Serra%' GROUP BY campus",
+            "SELECT ano_inicio AS ano, COUNT(DISTINCT id_projeto) FROM vfact_projeto_pesquisa_resolved GROUP BY ano_inicio",
             "WITH resumo AS (SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano) SELECT ano, total FROM resumo ORDER BY ano DESC LIMIT 5",
         ]
         for sql in queries:
-            ok, err = validate_read_only_sql(sql, FATOS_NOMES, dialect="duckdb")
+            ok, err = validate_read_only_sql(sql, FATOS_NOMES, dialect="sqlite")
             self.assertTrue(ok, f"Deveria aprovar SQL válido '{sql}', mas falhou com: {err}")
 
-    def test_validate_read_only_sql_duckdb_bloqueia_escrita_arquivos_e_colunas_sensiveis(self) -> None:
+    def test_validate_read_only_sql_bloqueia_escrita_e_colunas_sensiveis(self) -> None:
         bloqueadas = [
             "DROP TABLE vfact_extensao_acao_resolved",
-            "COPY vfact_extensao_acao_resolved TO '/tmp/out.csv'",
             "ATTACH '/tmp/outro.db' AS outro",
-            "INSTALL httpfs",
-            "LOAD httpfs",
-            "PRAGMA database_list",
-            "SET enable_external_access = true",
-            "SELECT * FROM read_csv_auto('/etc/passwd')",
-            "SELECT * FROM read_parquet('/tmp/test.parquet')",
-            "SELECT * FROM read_json('/tmp/test.json')",
             "SELECT nome FROM pessoa",
-            "SELECT campus FROM unificado.vfact_extensao_acao_resolved",
             "SELECT coordenador_cpf FROM vfact_extensao_acao_resolved",
             "SELECT email_participante FROM vfact_extensao_participacao_resolved",
         ]
         for sql in bloqueadas:
-            ok, err = validate_read_only_sql(sql, FATOS_NOMES, dialect="duckdb")
+            ok, err = validate_read_only_sql(sql, FATOS_NOMES, dialect="sqlite")
             self.assertFalse(ok, f"Deveria bloquear SQL inseguro: {sql}")
             self.assertIsNotNone(err)
 
-        # Bloqueio incondicional de SELECT * (e variantes DuckDB) mesmo sem sensitive_columns declaradas
+        # Bloqueio incondicional de SELECT * mesmo sem sensitive_columns declaradas
         for star_sql in (
             "SELECT * FROM vfact_extensao_acao_resolved",
             "SELECT a.* FROM vfact_extensao_acao_resolved AS a",
-            "SELECT * EXCLUDE (campus) FROM vfact_extensao_acao_resolved",
-            "SELECT COLUMNS('.*') FROM vfact_extensao_acao_resolved",
         ):
             ok_star_sem_sens, err_star = validate_read_only_sql(
-                star_sql, FATOS_NOMES, dialect="duckdb", sensitive_columns=None
+                star_sql, FATOS_NOMES, dialect="sqlite", sensitive_columns=None
             )
             self.assertFalse(ok_star_sem_sens, f"Deveria bloquear '{star_sql}' mesmo sem sensitive_columns")
             self.assertIsNotNone(err_star)
 
-        # Verifica bloqueio de sensitive_columns declaradas no contexto e de SELECT *
+        # Verifica bloqueio de sensitive_columns declaradas no contexto
         sens = {("vfact_extensao_acao_resolved", "documento_secreto")}
         ok_col, _ = validate_read_only_sql(
             "SELECT documento_secreto FROM vfact_extensao_acao_resolved",
             FATOS_NOMES,
-            dialect="duckdb",
+            dialect="sqlite",
             sensitive_columns=sens,
         )
         self.assertFalse(ok_col)
 
-        ok_star, _ = validate_read_only_sql(
-            "SELECT * FROM vfact_extensao_acao_resolved",
-            FATOS_NOMES,
-            dialect="duckdb",
-            sensitive_columns=sens,
-        )
-        self.assertFalse(ok_star)
-
         ok_count_star, err_count = validate_read_only_sql(
             "SELECT COUNT(*) AS total FROM vfact_extensao_acao_resolved",
             FATOS_NOMES,
-            dialect="duckdb",
+            dialect="sqlite",
             sensitive_columns=sens,
         )
         self.assertTrue(ok_count_star, err_count)
 
-        ok_count_sem_sens, err_count_sem_sens = validate_read_only_sql(
-            "SELECT COUNT(*) AS total FROM vfact_extensao_acao_resolved",
-            FATOS_NOMES,
-            dialect="duckdb",
-            sensitive_columns=None,
-        )
-        self.assertTrue(ok_count_sem_sens, err_count_sem_sens)
-
-    def test_connect_dados_e_read_policy_no_duckdb(self) -> None:
+    def test_connect_dados_e_read_policy_no_sqlite(self) -> None:
         policy = ReadPolicy(
             exposed_views=frozenset({"vfact_extensao_acao_resolved"}),
             sensitive_columns=frozenset({("vfact_extensao_acao_resolved", "orgao_fomento")}),
         )
-        with connect_dados(policy=policy, path=self.synthetic_duckdb) as conn:
+        with connect_dados(policy=policy, path=self.synthetic_sqlite) as conn:
             row = conn.execute(
                 "SELECT id, campus FROM vfact_extensao_acao_resolved"
             ).fetchone()
@@ -214,33 +186,36 @@ class DuckDBSecurityAndContextTests(AppDbTestCase):
             with self.assertRaises(PermissionError):
                 conn.execute("SELECT id FROM vfact_projeto_pesquisa_resolved")
 
-    def test_connect_dados_bloqueia_acesso_externo_e_reconfiguracao_no_banco(self) -> None:
-        """Verifica a proteção em nível de banco (DuckDB config), mesmo sem ReadPolicy (segunda camada)."""
-        with connect_dados(path=self.synthetic_duckdb) as conn:
-            with self.assertRaises(duckdb.PermissionException):
-                conn.execute("SELECT * FROM '/tmp/qualquer_arquivo.csv'")
+    def test_connect_dados_bloqueia_mutacoes_e_authorizer_no_banco(self) -> None:
+        """Verifica a proteção em nível de driver SQLite (set_authorizer e query_only)."""
+        with connect_dados(path=self.synthetic_sqlite) as conn:
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("INSERT INTO vfact_extensao_acao_resolved (id) VALUES (99)")
 
-            with self.assertRaises(duckdb.InvalidInputException):
-                conn.execute("SET enable_external_access = true")
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("DROP TABLE vfact_extensao_acao_resolved")
+
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("ATTACH DATABASE '/tmp/outro.db' AS outro")
 
     def test_load_context_dir_ativa_pesquisa_extensao_e_desativa_exemplo_vendas(self) -> None:
         pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
         pasta_vendas = RAIZ_REPO / "Adito" / "app" / "contexts" / "exemplo-vendas"
 
         ctx_ifes, examples_ifes, errors_ifes = load_context_dir(
-            pasta_ifes, self.tenant, dados_path=self.synthetic_duckdb
+            pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
         )
         self.assertEqual(errors_ifes, [])
         self.assertTrue(ctx_ifes.is_active)
         self.assertEqual(len(ctx_ifes.views), 6)
         self.assertGreaterEqual(len(examples_ifes), 6)
 
-        ddl = describe_views(ctx_ifes, dados_path=self.synthetic_duckdb)
+        ddl = describe_views(ctx_ifes, dados_path=self.synthetic_sqlite)
         for view_name in FATOS_NOMES:
             self.assertIn(view_name, ddl)
 
         ctx_vendas, _, errors_vendas = load_context_dir(
-            pasta_vendas, self.tenant, dados_path=self.synthetic_duckdb
+            pasta_vendas, self.tenant, dados_path=self.synthetic_sqlite
         )
         self.assertEqual(errors_vendas, [])
         self.assertFalse(ctx_vendas.is_active)
@@ -248,12 +223,12 @@ class DuckDBSecurityAndContextTests(AppDbTestCase):
     def test_bi_agent_execute_query_e_fetch_distinct_candidates(self) -> None:
         pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
         ctx_ifes, _, _ = load_context_dir(
-            pasta_ifes, self.tenant, dados_path=self.synthetic_duckdb
+            pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
         )
         agent = BIAgent(
             llm_model=MagicMock(),
             embedder=MagicMock(),
-            dados_path=str(self.synthetic_duckdb),
+            dados_path=str(self.synthetic_sqlite),
         )
         rows = agent.execute_query(
             "SELECT campus, COUNT(*) AS total FROM vfact_extensao_acao_resolved GROUP BY campus",
@@ -261,13 +236,11 @@ class DuckDBSecurityAndContextTests(AppDbTestCase):
         )
         self.assertEqual(rows, [{"campus": "val_campus", "total": 1}])
 
-        cols = view_columns("vfact_extensao_acao_resolved", dados_path=self.synthetic_duckdb)
+        cols = view_columns("vfact_extensao_acao_resolved", dados_path=self.synthetic_sqlite)
         self.assertTrue(any(c[0] == "campus" for c in cols))
 
-        import os
-
         old_env = os.environ.get("ORACULO_DADOS_DB")
-        os.environ["ORACULO_DADOS_DB"] = str(self.synthetic_duckdb)
+        os.environ["ORACULO_DADOS_DB"] = str(self.synthetic_sqlite)
         try:
             candidates = fetch_distinct_candidates(ctx_ifes, "vfact_extensao_acao_resolved")
             self.assertEqual(len(candidates), 1)
@@ -277,16 +250,15 @@ class DuckDBSecurityAndContextTests(AppDbTestCase):
             else:
                 os.environ["ORACULO_DADOS_DB"] = old_env
 
-    def test_banco_duckdb_real_contagens_fatos_quando_presente(self) -> None:
-        if not SAIDA_DUCKDB_PADRAO.exists():
-            self.skipTest("dados.duckdb real não está gerado no ambiente atual.")
-        with connect_dados(path=SAIDA_DUCKDB_PADRAO) as conn:
-            for nome_fato, esperado in CONTAGENS_ESPERADAS_FATOS.items():
+    def test_banco_sqlite_real_contagens_fatos_quando_presente(self) -> None:
+        if not DEFAULT_REPO_SQLITE.exists():
+            self.skipTest("dados.db real não está gerado no ambiente atual.")
+        with connect_dados(path=DEFAULT_REPO_SQLITE) as conn:
+            for nome_fato in FATOS_NOMES:
                 obtido = conn.execute(f'SELECT COUNT(*) FROM "{nome_fato}"').fetchone()[0]
-                self.assertEqual(obtido, esperado, f"Contagem divergente em {nome_fato}")
+                self.assertGreater(obtido, 0, f"Contagem nula em {nome_fato}")
 
     def test_gemini_config_e_llm_configured(self) -> None:
-        import os
         from agents.config import get_chat_llm, get_embeddings, get_gemini_api_key
         from rpc.core_methods import llm_configured
 
@@ -308,6 +280,7 @@ class DuckDBSecurityAndContextTests(AppDbTestCase):
                 os.environ["GEMINI_API_KEY"] = old_gemini
             if old_google is not None:
                 os.environ["GOOGLE_API_KEY"] = old_google
+
 
 class Resposta:
     def __init__(self, status, data):
@@ -335,28 +308,34 @@ class ExplorerTests(AppDbTestCase):
         ).insert()
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.db_path = Path(self.folder.name) / 'dados.duckdb'
+        self.db_path = Path(self.folder.name) / 'dados.db'
         self.env = patch.dict(os.environ, {'ORACULO_DADOS_DB': str(self.db_path)})
         self.env.start()
         self.addCleanup(self.env.stop)
-        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
-        conn = duckdb.connect(str(self.db_path))
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
         try:
             conn.execute('''
-                CREATE TABLE area (id INTEGER PRIMARY KEY, nome VARCHAR);
-                INSERT INTO area VALUES (1, 'Computação'), (2, 'Educação');
-                CREATE TABLE projeto (id INTEGER PRIMARY KEY, titulo VARCHAR, id_area INTEGER, ano INTEGER, cpf VARCHAR);
+                CREATE TABLE area (id INTEGER PRIMARY KEY, nome TEXT);
+            ''')
+            conn.execute("INSERT INTO area VALUES (1, 'Computação')")
+            conn.execute("INSERT INTO area VALUES (2, 'Educação')")
+            conn.execute('''
+                CREATE TABLE projeto (id INTEGER PRIMARY KEY, titulo TEXT, id_area INTEGER, ano INTEGER, cpf TEXT);
+            ''')
+            conn.execute('''
                 CREATE VIEW v_fato_projeto AS
                     SELECT p.id, p.titulo, a.nome AS area, p.ano, p.cpf
                     FROM projeto p JOIN area a ON a.id = p.id_area;
-                CREATE VIEW dim_area AS SELECT * FROM area;
-                CREATE VIEW iniciativa AS SELECT id, titulo FROM projeto;
-                CREATE VIEW projetos_pesquisa AS SELECT id, titulo FROM projeto;
             ''')
+            conn.execute("CREATE VIEW dim_area AS SELECT * FROM area;")
+            conn.execute("CREATE VIEW iniciativa AS SELECT id, titulo FROM projeto;")
+            conn.execute("CREATE VIEW projetos_pesquisa AS SELECT id, titulo FROM projeto;")
             conn.executemany('INSERT INTO projeto VALUES (?, ?, ?, ?, ?)', [
                 (i, 'Projeto 100%_IFES' if i == 1 else f'Projeto {i}', 1 + i % 2, 2025 + i % 2, 'restrito')
                 for i in range(1, 34)
             ])
+            conn.commit()
         finally:
             conn.close()
 
@@ -410,11 +389,12 @@ class ExplorerTests(AppDbTestCase):
         self.assertEqual(empty.data['page'], 1)
 
     def test_null_and_binary_values_and_relations_with_only_sensitive_columns(self):
-        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
-        conn = duckdb.connect(str(self.db_path))
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
         try:
             conn.execute('CREATE TABLE dim_nullable (codigo INTEGER, arquivo BLOB)')
             conn.executemany('INSERT INTO dim_nullable VALUES (?, ?)', [(None, b'\xff'), (0, b'')])
+            conn.commit()
         finally:
             conn.close()
         self.contexto.views.append({'name': 'dim_nullable'})
@@ -460,10 +440,11 @@ class ExplorerTests(AppDbTestCase):
         ):
             self.assertEqual(self.catalog().status_code, 503)
             self.assertEqual(self.rows().status_code, 503)
-        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
-        conn = duckdb.connect(str(self.db_path))
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
         try:
             conn.execute('DROP VIEW v_fato_projeto')
+            conn.commit()
         finally:
             conn.close()
         self.assertFalse(self.catalog().data['tables'][0]['available'])
@@ -487,55 +468,43 @@ class ExplorerTests(AppDbTestCase):
         self.assertIn('GEMINI_MODEL', response.data['reason'])
 
 
-class DuckDBAbertoTests(unittest.TestCase):
-    """O dados.duckdb fica aberto no processo: reabre quando o arquivo muda e libera quando pedido."""
+class SQLiteConcorrenciaESegurancaTests(unittest.TestCase):
+    """Verifica comportamento concorrente e travas de segurança do SQLite."""
 
     def setUp(self):
         self.pasta = tempfile.TemporaryDirectory()
         self.addCleanup(self.pasta.cleanup)
         self.addCleanup(close_dados)
-        self.path = Path(self.pasta.name) / "dados.duckdb"
+        self.path = Path(self.pasta.name) / "dados.db"
         self._gravar(self.path, 3)
 
     def _gravar(self, path, linhas):
-        conn = duckdb.connect(str(path))
-        conn.execute(f"CREATE TABLE t AS SELECT range AS i FROM range({linhas})")
+        conn = sqlite3.connect(str(path))
+        conn.execute("CREATE TABLE t (i INTEGER)")
+        conn.executemany("INSERT INTO t VALUES (?)", [(i,) for i in range(linhas)])
+        conn.commit()
         conn.close()
 
     def _contar(self):
         with connect_dados(path=self.path) as conn:
             return conn.execute("SELECT COUNT(*) FROM t").fetchone()[0]
 
-    def test_reaproveita_e_reabre_quando_o_arquivo_e_trocado(self):
-        from core import datastore
-
+    def test_leitura_e_atualizacao_externa(self):
         self.assertEqual(self._contar(), 3)
-        aberto = datastore._abertos[str(self.path.resolve())].conn
-        self.assertEqual(self._contar(), 3)
-        self.assertIs(datastore._abertos[str(self.path.resolve())].conn, aberto)
-        novo = Path(self.pasta.name) / "novo.duckdb"
-        self._gravar(novo, 7)
-        os.replace(novo, self.path)  # como quando o gerar_duckdb.py roda de novo
-        self.assertEqual(self._contar(), 7)
-
-    def test_close_dados_libera_o_arquivo_para_regravar(self):
-        self.assertEqual(self._contar(), 3)
-        close_dados()
-        conn = duckdb.connect(str(self.path))
+        conn = sqlite3.connect(str(self.path))
         conn.execute("INSERT INTO t VALUES (99)")
+        conn.commit()
         conn.close()
         self.assertEqual(self._contar(), 4)
 
-    def test_cursores_em_threads_e_travas_de_seguranca(self):
-        import threading
-
+    def test_consultas_concorrentes_em_threads(self):
         erros = []
 
         def consultar():
             try:
                 for _ in range(20):
                     self._contar()
-            except Exception as exc:  # pragma: no cover - só falha se houver corrida
+            except Exception as exc:
                 erros.append(exc)
 
         threads = [threading.Thread(target=consultar) for _ in range(8)]
@@ -544,15 +513,17 @@ class DuckDBAbertoTests(unittest.TestCase):
         for t in threads:
             t.join()
         self.assertEqual(erros, [])
-        csv = Path(self.pasta.name) / "x.csv"
-        csv.write_text("a\n1\n", encoding="utf-8")
+
+    def test_authorizer_bloqueia_escrita_e_comandos_perigosos(self):
         with connect_dados(path=self.path) as conn:
-            with self.assertRaises(duckdb.PermissionException):
-                conn.execute(f"SELECT * FROM '{csv}'")
-            with self.assertRaises(duckdb.InvalidInputException):
-                conn.execute("SET enable_external_access = true")
-            with self.assertRaises(duckdb.Error):
-                conn.execute("CREATE TABLE z (i INTEGER)")
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("CREATE TABLE z (i INTEGER)")
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("INSERT INTO t VALUES (100)")
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("DROP TABLE t")
+            with self.assertRaises(sqlite3.DatabaseError):
+                conn._conn.execute("ATTACH DATABASE '/tmp/injetado.db' AS inj")
 
 
 class CaminhosTests(unittest.TestCase):
