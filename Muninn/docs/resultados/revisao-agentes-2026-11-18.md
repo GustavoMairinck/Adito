@@ -15,6 +15,8 @@ Legenda: **Confirmado** = reproduzido; **Por código** = deduzido da leitura, n�
 > - 9: o código parado foi removido.
 >
 > O item 3 acrescenta uma chamada ao LLM por pergunta de dados.
+>
+> **Depois do PR #63 (banco em SQLite):** a revisão foi feita com o `dados.duckdb`. No SQLite, o achado 4 não se reproduz (`SELECT p FROM … p` dá "no such column"); o bloqueio no validador fica como defesa caso o motor mude. Os demais achados não dependem do motor.
 
 ## Achados
 
