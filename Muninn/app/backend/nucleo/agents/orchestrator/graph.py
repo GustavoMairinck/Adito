@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage
 from .state import MultiAgentState
 from .router import orchestrator_node
 from .conversational_agent import conversational_node
+from .guard import GUARD_INTENTS, INTENT_BLOCKED, INTENT_OUT_OF_SCOPE, guard_node
 from agents.config import checkpoint_db_path
 
 mcp_tools = []
@@ -129,32 +130,42 @@ async def mcp_tool_node(state: MultiAgentState):
 
 
 def route_from_orchestrator(state: MultiAgentState):
-    has_tool_calls = any(call.get("intent") != "conversational" for call in state["calls"])
+    calls = state.get("calls") or []
+    intents = {call.get("intent") for call in calls}
+    base = {
+        "messages":              state.get("messages", []),
+        "user_input":            state.get("user_input", ""),
+        "tenant_id":             state.get("tenant_id"),
+        "contexto_id":        state.get("contexto_id"),
+        "thread_id":             state.get("thread_id"),
+    }
 
-    sends = []
-    for call in state["calls"]:
-        intent = call.get("intent")
-        base = {
-            "messages":              state.get("messages", []),
-            "user_input":            state.get("user_input", ""),
-            "tenant_id":             state.get("tenant_id"),
-            "contexto_id":        state.get("contexto_id"),
-            "thread_id":             state.get("thread_id"),
-            "delegation_instruction": call.get("delegation_instruction"),
-        }
-        if intent == "conversational":
-            if not has_tool_calls:
-                sends.append(Send("conversational_agent", base))
-        else:
-            sends.append(Send("mcp_tool_node", {**base, "tool_name": intent}))
-    return sends
+    # Bloqueio vence tudo: nenhuma outra chamada roda junto.
+    if INTENT_BLOCKED in intents:
+        return [Send("guard_node", {**base, "tool_name": INTENT_BLOCKED})]
+
+    tool_calls = [c for c in calls if c.get("intent") not in GUARD_INTENTS | {"conversational"}]
+    if tool_calls:
+        return [
+            Send("mcp_tool_node", {**base, "tool_name": c.get("intent"),
+                                   "delegation_instruction": c.get("delegation_instruction")})
+            for c in tool_calls
+        ]
+    if INTENT_OUT_OF_SCOPE in intents:
+        return [Send("guard_node", {**base, "tool_name": INTENT_OUT_OF_SCOPE})]
+
+    conversational = next((c for c in calls if c.get("intent") == "conversational"), {})
+    return [Send("conversational_agent", {**base,
+                 "delegation_instruction": conversational.get("delegation_instruction")})]
 
 
 builder = StateGraph(MultiAgentState)
 builder.add_node("orchestrator", orchestrator_node)
 builder.add_node("conversational_agent", conversational_node)
 builder.add_node("mcp_tool_node", mcp_tool_node)
+builder.add_node("guard_node", guard_node)
 builder.add_edge(START, "orchestrator")
 builder.add_conditional_edges("orchestrator", route_from_orchestrator)
 builder.add_edge("mcp_tool_node", END)
 builder.add_edge("conversational_agent", END)
+builder.add_edge("guard_node", END)
