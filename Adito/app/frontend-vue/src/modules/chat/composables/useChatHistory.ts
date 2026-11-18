@@ -1,4 +1,4 @@
-import httpClient from "@/common/api/httpClient";
+import { call } from "@/common/api/core";
 import { buildChart, isScalarResultData } from "@/modules/chat/composables/useChatApi";
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
 import { computed, ref } from "vue";
@@ -118,7 +118,7 @@ export function useChatHistory() {
     await Promise.all(
       pending.map(async (message) => {
         try {
-          const { data } = await httpClient.get(`/api/chat/messages/${message.id}/rows`);
+          const data = await call("chat.message_rows", { id: message.id });
           const rows = data.data || [];
           const isScalarResult = isScalarResultData(rows);
           updateMessage(convId!, message.id, {
@@ -140,7 +140,7 @@ export function useChatHistory() {
 
   const syncFromBackend = async () => {
     try {
-      const { data } = await httpClient.get("/api/chat/conversations");
+      const data = await call("chat.conversations.list");
       if (!Array.isArray(data)) return;
 
       if (data.length === 0) {
@@ -166,7 +166,7 @@ export function useChatHistory() {
 
   const handleDeleteConversation = async (id: string) => {
     if (!id.startsWith("local-")) {
-      await httpClient.delete(`/api/chat/conversations/${id}`);
+      await call("chat.conversations.delete", { id });
     }
     const updated = conversations.value.filter((c) => c.id !== id);
     if (updated.length === 0) {

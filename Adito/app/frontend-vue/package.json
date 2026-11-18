@@ -13,7 +13,6 @@
     "@tauri-apps/api": "^2.12.4",
     "@vueuse/motion": "^3.0.3",
     "apexcharts": "^5.10.4",
-    "axios": "^1.13.6",
     "grid-layout-plus": "^1.1.1",
     "lucide-vue-next": "^1.0.0",
     "tailwindcss": "^4.2.2",

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { CheckCircle2, KeyRound, ShieldAlert, Trash2 } from 'lucide-vue-next'
-import { isTauri } from '@/common/api/config'
 import { clearKey, keyStatus, testAndSaveKey, type KeyStatus } from '@/common/api/llmKey'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 
@@ -12,7 +11,6 @@ const key = ref('')
 const busy = ref(false)
 const message = ref<{ type: 'ok' | 'error'; text: string } | null>(null)
 
-const desktop = isTauri()
 const configured = computed(() => status.value?.configured ?? !!user.value?.llm_configured)
 
 async function refresh() {
@@ -84,11 +82,7 @@ onMounted(() => {
         (Secret Service no Linux, Gerenciador de Credenciais no Windows), nunca em arquivo do app.
       </p>
 
-      <p v-if="!desktop" class="rounded-lg border border-amber-300/60 bg-amber-50/80 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-300">
-        A chave só pode ser configurada no app desktop. No navegador de desenvolvimento, use a variável GEMINI_API_KEY do backend.
-      </p>
-
-      <p v-else-if="status && !status.store_available" class="flex items-start gap-2 text-sm text-[#C50707] dark:text-red-300">
+      <p v-if="status && !status.store_available" class="flex items-start gap-2 text-sm text-[#C50707] dark:text-red-300">
         <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
         Cofre do sistema indisponível: {{ status.error }}
       </p>

@@ -1,11 +1,11 @@
 import { ref, readonly, computed } from 'vue'
-import httpClient from '@/common/api/httpClient'
+import { call } from '@/common/api/core'
 
 /**
  * useAuth composable — desktop sem login.
  *
- * Há um único usuário local. O app carrega os dados dele de /api/me ao abrir;
- * o acesso ao backend é protegido pelo token local que o Tauri entrega (common/api/config.ts).
+ * Há um único usuário local. O app carrega os dados dele (método `me`) ao abrir;
+ * a chamada vai ao núcleo local pelo Tauri (common/api/core.ts), sem rede.
  */
 
 export interface User {
@@ -27,8 +27,7 @@ const isAuthenticated = computed(() => !!user.value)
 
 export function useAuth() {
   async function loadLocalUser() {
-    const res = await httpClient.get('/api/me')
-    user.value = res.data
+    user.value = await call<User>('me')
     return user.value
   }
 

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import httpClient from '@/common/api/httpClient'
+import { call } from '@/common/api/core'
 
 /**
  * Contextos de dados (views do dados.db) que o usuário pode consultar.
@@ -39,7 +39,7 @@ function save(id: string | null) {
 
 export function useContextos() {
   async function loadContextos() {
-    const { data } = await httpClient.get<Contexto[]>('/api/contextos')
+    const data = await call<Contexto[]>('contextos.list')
     contextos.value = data
     if (!data.some(c => c.id === selectedId.value)) {
       // Sem seleção válida: o único contexto, ou nenhum (o usuário escolhe).

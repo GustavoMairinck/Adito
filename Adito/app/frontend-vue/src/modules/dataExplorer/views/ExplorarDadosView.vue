@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import axios from 'axios'
 import { AlertCircle, BarChart2, ChevronLeft, ChevronRight, Database, Layers, Loader2, RefreshCw, Table2 } from 'lucide-vue-next'
-import httpClient from '@/common/api/httpClient'
+import { CoreError, call } from '@/common/api/core'
 import { useContextos } from '@/common/composables/useContextos'
 import FilterPanel from '../components/FilterPanel.vue'
 import DataTable from '../components/DataTable.vue'
@@ -50,7 +49,7 @@ const lastRecord = computed(() => firstRecord.value + (result.value?.rows.length
 const controlClass = 'rounded-lg border border-border-standard bg-surface px-3 py-2 text-sm text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent'
 
 function errorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string') return error.response.data.detail
+  if (error instanceof CoreError && typeof error.data?.detail === 'string') return error.data.detail
   return fallback
 }
 
@@ -66,14 +65,14 @@ async function fetchCatalog() {
   catalogLoading.value = true
   try {
     if (!selectedId.value) return
-    const { data } = await httpClient.get<{ tables: DataRelation[] }>('/api/explorer/tables', {
-      params: { contexto_id: selectedId.value }, signal: controller.signal
-    })
+    const data = await call<{ tables: DataRelation[] }>('explorer.tables', {
+      contexto_id: selectedId.value
+    }, { signal: controller.signal })
     if (controller.signal.aborted) return
     catalog.value = data.tables
     tableName.value = data.tables.find(table => table.available)?.name ?? ''
   } catch (error) {
-    if (!controller.signal.aborted) catalogError.value = errorMessage(error, 'Não foi possível carregar as tabelas. Verifique a conexão com o backend local.')
+    if (!controller.signal.aborted) catalogError.value = errorMessage(error, 'Não foi possível carregar as tabelas. Verifique o núcleo local do Adito.')
   } finally {
     if (!controller.signal.aborted) catalogLoading.value = false
   }
@@ -88,7 +87,7 @@ async function initialize() {
     ready.value = true
     await fetchCatalog()
   } catch (error) {
-    catalogError.value = errorMessage(error, 'Não foi possível carregar os contextos. Verifique a conexão com o backend local.')
+    catalogError.value = errorMessage(error, 'Não foi possível carregar os contextos. Verifique o núcleo local do Adito.')
     catalogLoading.value = false
   }
 }
@@ -100,15 +99,12 @@ async function fetchRows() {
   loading.value = true
   rowsError.value = ''
   try {
-    const { data } = await httpClient.get<ExplorerResult>('/api/explorer/rows', {
-      params: {
-        contexto_id: selectedId.value, table: tableName.value,
-        search: search.value, filter_column: filterColumn.value, filter_value: filterValue.value,
-        sort: sort.value, direction: direction.value, page: page.value, page_size: pageSize.value,
-        group_by: mode.value === 'chart' ? groupBy.value : ''
-      },
-      signal: controller.signal
-    })
+    const data = await call<ExplorerResult>('explorer.rows', {
+      contexto_id: selectedId.value, table: tableName.value,
+      search: search.value, filter_column: filterColumn.value, filter_value: filterValue.value,
+      sort: sort.value, direction: direction.value, page: page.value, page_size: pageSize.value,
+      group_by: mode.value === 'chart' ? groupBy.value : ''
+    }, { signal: controller.signal })
     if (!controller.signal.aborted) {
       result.value = data
       page.value = data.page
