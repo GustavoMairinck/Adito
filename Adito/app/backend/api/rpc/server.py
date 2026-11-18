@@ -148,7 +148,9 @@ def main() -> None:
             await server.serve(sys.stdin.buffer)
         finally:
             from agents.orchestrator.graph import close_graph
+            from core.datastore import close_dados
 
             await close_graph()
+            close_dados()
 
     asyncio.run(run())

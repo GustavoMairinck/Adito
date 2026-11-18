@@ -17,7 +17,7 @@ from agents.bi_agent.sql_security import validate_read_only_sql
 from analytics_index.services import fetch_distinct_candidates
 from core import db
 from core.contexts import describe_views, load_context_dir, view_columns
-from core.datastore import ReadPolicy, connect_dados
+from core.datastore import ReadPolicy, close_dados, connect_dados
 from core.records import Contexto, Tenant, get_local_user
 from core.schema import ensure_schema
 from rpc import session
@@ -79,6 +79,7 @@ class AppDbTestCase(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.addCleanup(db.close)
+        self.addCleanup(close_dados)
         ensure_schema()
         session.reset()
         self.addCleanup(session.reset)
@@ -338,6 +339,7 @@ class ExplorerTests(AppDbTestCase):
         self.env = patch.dict(os.environ, {'ORACULO_DADOS_DB': str(self.db_path)})
         self.env.start()
         self.addCleanup(self.env.stop)
+        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
         conn = duckdb.connect(str(self.db_path))
         try:
             conn.execute('''
@@ -408,6 +410,7 @@ class ExplorerTests(AppDbTestCase):
         self.assertEqual(empty.data['page'], 1)
 
     def test_null_and_binary_values_and_relations_with_only_sensitive_columns(self):
+        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
         conn = duckdb.connect(str(self.db_path))
         try:
             conn.execute('CREATE TABLE dim_nullable (codigo INTEGER, arquivo BLOB)')
@@ -457,6 +460,7 @@ class ExplorerTests(AppDbTestCase):
         ):
             self.assertEqual(self.catalog().status_code, 503)
             self.assertEqual(self.rows().status_code, 503)
+        close_dados()  # o núcleo mantém o arquivo aberto; regravar exige fechá-lo antes
         conn = duckdb.connect(str(self.db_path))
         try:
             conn.execute('DROP VIEW v_fato_projeto')
@@ -481,6 +485,74 @@ class ExplorerTests(AppDbTestCase):
             response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
         self.assertFalse(response.data['ok'])
         self.assertIn('GEMINI_MODEL', response.data['reason'])
+
+
+class DuckDBAbertoTests(unittest.TestCase):
+    """O dados.duckdb fica aberto no processo: reabre quando o arquivo muda e libera quando pedido."""
+
+    def setUp(self):
+        self.pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self.pasta.cleanup)
+        self.addCleanup(close_dados)
+        self.path = Path(self.pasta.name) / "dados.duckdb"
+        self._gravar(self.path, 3)
+
+    def _gravar(self, path, linhas):
+        conn = duckdb.connect(str(path))
+        conn.execute(f"CREATE TABLE t AS SELECT range AS i FROM range({linhas})")
+        conn.close()
+
+    def _contar(self):
+        with connect_dados(path=self.path) as conn:
+            return conn.execute("SELECT COUNT(*) FROM t").fetchone()[0]
+
+    def test_reaproveita_e_reabre_quando_o_arquivo_e_trocado(self):
+        from core import datastore
+
+        self.assertEqual(self._contar(), 3)
+        aberto = datastore._abertos[str(self.path.resolve())].conn
+        self.assertEqual(self._contar(), 3)
+        self.assertIs(datastore._abertos[str(self.path.resolve())].conn, aberto)
+        novo = Path(self.pasta.name) / "novo.duckdb"
+        self._gravar(novo, 7)
+        os.replace(novo, self.path)  # como quando o gerar_duckdb.py roda de novo
+        self.assertEqual(self._contar(), 7)
+
+    def test_close_dados_libera_o_arquivo_para_regravar(self):
+        self.assertEqual(self._contar(), 3)
+        close_dados()
+        conn = duckdb.connect(str(self.path))
+        conn.execute("INSERT INTO t VALUES (99)")
+        conn.close()
+        self.assertEqual(self._contar(), 4)
+
+    def test_cursores_em_threads_e_travas_de_seguranca(self):
+        import threading
+
+        erros = []
+
+        def consultar():
+            try:
+                for _ in range(20):
+                    self._contar()
+            except Exception as exc:  # pragma: no cover - só falha se houver corrida
+                erros.append(exc)
+
+        threads = [threading.Thread(target=consultar) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(erros, [])
+        csv = Path(self.pasta.name) / "x.csv"
+        csv.write_text("a\n1\n", encoding="utf-8")
+        with connect_dados(path=self.path) as conn:
+            with self.assertRaises(duckdb.PermissionException):
+                conn.execute(f"SELECT * FROM '{csv}'")
+            with self.assertRaises(duckdb.InvalidInputException):
+                conn.execute("SET enable_external_access = true")
+            with self.assertRaises(duckdb.Error):
+                conn.execute("CREATE TABLE z (i INTEGER)")
 
 
 class PersistenciaTests(AppDbTestCase):

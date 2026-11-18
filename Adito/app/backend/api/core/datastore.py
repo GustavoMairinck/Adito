@@ -1,16 +1,19 @@
 """
 Bancos de dados locais do desktop.
 
-- app.db (SQLite): banco operacional do Django (usuários, conversas, dashboards, checkpoints, índices derivados).
+- app.db (SQLite): banco operacional do app (usuários, conversas, dashboards, checkpoints, índices derivados).
 - dados.duckdb (DuckDB OLAP): banco analítico com as 6 tabelas fato (`vfact_*_resolved`). Sempre aberto
   em modo somente-leitura (`read_only=True`), com acesso externo bloqueado nativamente (`enable_external_access=False`,
   `lock_configuration=True`) e protegido por `ReadPolicy` quando consultado pelo agente/usuário.
 """
 from __future__ import annotations
 
+import atexit
 import os
 import re
 import sys
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Sequence
@@ -146,9 +149,11 @@ class DadosConnection:
         self,
         raw_conn: duckdb.DuckDBPyConnection,
         policy: ReadPolicy | None = None,
+        on_close=None,
     ) -> None:
         self._conn = raw_conn
         self._policy = policy
+        self._on_close = on_close
 
     def execute(self, sql: str, parameters: Sequence[Any] | None = None) -> DadosCursor:
         if self._policy is not None:
@@ -160,7 +165,12 @@ class DadosConnection:
         return DadosCursor(self._conn)
 
     def close(self) -> None:
+        if self._conn is None:
+            return
         self._conn.close()
+        self._conn = None
+        if self._on_close is not None:
+            self._on_close()
 
     def __enter__(self) -> DadosConnection:
         return self
@@ -169,28 +179,120 @@ class DadosConnection:
         self.close()
 
 
+# ── Banco aberto uma vez por processo ───────────────────────────────────────
+#
+# Abrir o arquivo do DuckDB custa ~12 ms; a consulta típica do app, ~1 ms. O núcleo abre o arquivo
+# uma vez e cada chamada usa um cursor próprio (barato e seguro entre threads), que herda as mesmas
+# travas: read_only, enable_external_access=False e lock_configuration=True.
+#
+# O banco é reaberto se o arquivo for trocado (ex.: gerar_duckdb.py rodou de novo) e fechado depois
+# de IDLE_CLOSE_S sem uso, para não segurar o arquivo enquanto o app fica parado (no Windows, um
+# arquivo aberto impede que outro processo o regrave).
+
+IDLE_CLOSE_S = float(os.environ.get("ADITO_DUCKDB_IDLE_CLOSE_S", "60"))
+_CONFIG = {
+    "enable_external_access": False,  # banco não lê arquivos nem URLs fora dele
+    "lock_configuration": True,       # o SQL não consegue religar a opção
+}
+
+
+@dataclass
+class _Aberto:
+    conn: duckdb.DuckDBPyConnection
+    assinatura: tuple
+    em_uso: int = 0
+    ultimo_uso: float = 0.0
+
+
+_abertos: dict[str, _Aberto] = {}
+_lock = threading.Lock()
+_vigia: threading.Thread | None = None
+
+
+def _assinatura(path: Path) -> tuple:
+    st = path.stat()
+    return (st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def _fechar(chave: str) -> None:
+    aberto = _abertos.pop(chave, None)
+    if aberto is not None:
+        try:
+            aberto.conn.close()
+        except duckdb.Error:
+            pass
+
+
+def _vigiar_ociosos() -> None:
+    while True:
+        time.sleep(max(1.0, IDLE_CLOSE_S / 4))
+        agora = time.monotonic()
+        with _lock:
+            for chave, aberto in list(_abertos.items()):
+                if aberto.em_uso == 0 and agora - aberto.ultimo_uso >= IDLE_CLOSE_S:
+                    _fechar(chave)
+
+
+def close_dados() -> None:
+    """Fecha o dados.duckdb aberto pelo processo (antes de regravá-lo no mesmo processo, ou ao sair)."""
+    with _lock:
+        for chave in list(_abertos):
+            if _abertos[chave].em_uso == 0:
+                _fechar(chave)
+
+
+atexit.register(close_dados)  # fecha o arquivo também quando o processo termina sem chamar close_dados
+
+
+def _cursor(db_path: Path):
+    """Cursor novo sobre o banco já aberto (abre ou reabre quando preciso) e a função que o devolve."""
+    global _vigia
+    chave = str(db_path)
+    assinatura = _assinatura(db_path)
+    with _lock:
+        aberto = _abertos.get(chave)
+        if aberto is not None and aberto.assinatura != assinatura and aberto.em_uso == 0:
+            _fechar(chave)  # arquivo trocado: reabre para ler a versão nova
+            aberto = None
+        if aberto is None:
+            aberto = _Aberto(duckdb.connect(chave, read_only=True, config=_CONFIG), assinatura)
+            _abertos[chave] = aberto
+        aberto.em_uso += 1
+        aberto.ultimo_uso = time.monotonic()
+        if _vigia is None and IDLE_CLOSE_S > 0:
+            _vigia = threading.Thread(target=_vigiar_ociosos, name="duckdb-ocioso", daemon=True)
+            _vigia.start()
+        try:
+            cursor = aberto.conn.cursor()
+        except Exception:
+            aberto.em_uso -= 1
+            raise
+
+    def devolver() -> None:
+        with _lock:
+            aberto.em_uso -= 1
+            aberto.ultimo_uso = time.monotonic()
+
+    return cursor, devolver
+
+
 def connect_dados(
     policy: ReadPolicy | None = None,
     path: Path | str | None = None,
 ) -> DadosConnection:
-    """Abre o `dados.duckdb` só para leitura com defesa em profundidade.
+    """Conexão só para leitura com o `dados.duckdb`, com defesa em profundidade.
 
     - `read_only=True`: impede modificações nos dados e no esquema.
     - `enable_external_access=False`: bloqueia no próprio DuckDB a leitura de arquivos locais ou URLs.
     - `lock_configuration=True`: bloqueia comandos SQL (`SET`) de reativar configurações.
     - `policy`: quando fornecida, valida via AST SQLGlot tabelas permitidas e colunas sensíveis.
+
+    O arquivo fica aberto no processo; cada chamada recebe um cursor próprio (ver acima).
     """
     db_path = Path(path or dados_db_path()).resolve()
     if not db_path.exists():
         raise FileNotFoundError(
             f"dados.duckdb não encontrado em {db_path}. Gere o banco com Adito/scripts/gerar_duckdb.py antes de consultar."
         )
-    raw_conn = duckdb.connect(
-        str(db_path),
-        read_only=True,
-        config={
-            "enable_external_access": False,  # banco não lê arquivos nem URLs fora dele
-            "lock_configuration": True,       # o SQL não consegue religar a opção
-        },
-    )
-    return DadosConnection(raw_conn=raw_conn, policy=policy)
+    cursor, devolver = _cursor(db_path)
+    return DadosConnection(raw_conn=cursor, policy=policy, on_close=devolver)
