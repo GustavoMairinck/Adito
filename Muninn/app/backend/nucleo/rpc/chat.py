@@ -188,8 +188,6 @@ def persist_assistant_response(conversation: Conversation, user_message: Message
 _STATUS = {
     "orchestrator": "Roteando pergunta...",
     "mcp_tool_node": "Consultando dados...",
-    "reflection_data": "Avaliando cobertura dos dados...",
-    "report_agent": "Gerando relatório analítico...",
     "conversational_agent": "Gerando resposta...",
     "guard_node": "Gerando resposta...",
 }
@@ -270,7 +268,7 @@ async def chat_stream(params, emit):
                     log_info("chat", f"nó={node_name} status={status_message}")
                     await emit("status", {"status": "processing", "step": node_name, "message": status_message})
 
-                    if node_name in ("mcp_tool_node", "report_agent", "conversational_agent", "guard_node"):
+                    if node_name in ("mcp_tool_node", "conversational_agent", "guard_node"):
                         for upd in updates_list:
                             if not isinstance(upd, dict) or has_emitted_result:
                                 continue

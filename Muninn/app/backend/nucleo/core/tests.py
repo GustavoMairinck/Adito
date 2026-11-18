@@ -764,5 +764,150 @@ class AgentesMemoriaEscopoTests(unittest.TestCase):
         self.assertLessEqual(len(historico[-1].content), MAX_MESSAGE_CHARS + 10)
 
 
+class AgentesRevisaoTests(unittest.TestCase):
+    """Correções da revisão dos agentes de 2026-11-18 (LLM e banco simulados)."""
+
+    def test_chamadas_a_mesma_ferramenta_viram_uma(self):
+        from agents.orchestrator.graph import route_from_orchestrator
+
+        sends = route_from_orchestrator({"calls": [
+            {"intent": "bi_agent", "delegation_instruction": "contar projetos"},
+            {"intent": "bi_agent", "delegation_instruction": "contar grupos"},
+        ]})
+        self.assertEqual(len(sends), 1)
+        instrucao = sends[0].arg["delegation_instruction"]
+        self.assertIn("1. contar projetos", instrucao)
+        self.assertIn("2. contar grupos", instrucao)
+
+    def test_uma_chamada_mantem_a_instrucao(self):
+        from agents.orchestrator.graph import route_from_orchestrator
+
+        sends = route_from_orchestrator({"calls": [{"intent": "bi_agent", "delegation_instruction": "contar projetos"}]})
+        self.assertEqual(sends[0].arg["delegation_instruction"], "contar projetos")
+
+    def test_busca_de_valores_isolada_por_execucao(self):
+        import threading
+        from langchain_core.runnables.config import ContextThreadPoolExecutor
+        from agents.bi_agent.tools import vector_search as vs
+
+        def busca(**kw):
+            return [{"distance": 0.1, "embedding_text": f"{kw['contexto']}:{kw['query_embedding']}"}]
+
+        embedder = MagicMock()
+        embedder.embed_query.side_effect = lambda q: q
+        resultados, barreira = {}, threading.Barrier(2)
+
+        def execucao(nome):
+            vs.configure_vector_search(contexto=nome, embedder=embedder, top_k=3)
+            barreira.wait()  # as duas configuram antes de qualquer busca
+            # Como o ToolNode do LangGraph: a ferramenta roda numa thread do executor que copia o contexto.
+            with ContextThreadPoolExecutor(max_workers=1) as ex:
+                ex.submit(vs.search_analytics_values.invoke, {"query": f"termo-{nome}", "source_table": "v"}).result()
+            resultados[nome] = vs.vector_search_results()
+
+        with patch.object(vs, "configured_tables", return_value=["v"]), \
+                patch.object(vs, "search_text_embeddings", side_effect=busca):
+            threads = [threading.Thread(target=execucao, args=(n,)) for n in ("A", "B")]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        for nome in ("A", "B"):
+            candidatos, termos, _ = resultados[nome]
+            self.assertEqual(termos, [f"termo-{nome}"])
+            self.assertEqual([c["embedding_text"] for c in candidatos], [f"{nome}:termo-{nome}"])
+
+    def _run_bi(self, resultado_ask, resposta_llm="Existem 42 projetos.", limite=7):
+        from langchain_core.messages import AIMessage
+        from agents.bi_agent import tool
+
+        agente = MagicMock()
+        agente.ask.return_value = resultado_ask
+        llm = MagicMock()
+        llm.invoke.return_value = AIMessage(content=resposta_llm)
+        with patch.object(tool, "get_bi_agent", return_value=agente), \
+                patch.object(tool, "get_chat_llm", return_value=llm), \
+                patch.object(tool, "row_limit_for", return_value=limite):
+            payload = json.loads(tool.run_bi_agent("quantos projetos?", "1", "1"))
+        return payload, llm
+
+    def test_resposta_escrita_depois_da_execucao_com_limite_de_linhas(self):
+        linhas = [{"total": i} for i in range(30)]
+        payload, llm = self._run_bi({"sql": "SELECT 1", "valid": True, "explanation": "Aqui está o levantamento.",
+                                     "data": linhas})
+        self.assertEqual(payload["text_response"], "Existem 42 projetos.")
+        self.assertEqual(payload["type"], "analysis")
+        enviado = llm.invoke.call_args[0][0][1].content
+        self.assertIn("Total de linhas no resultado: 30 (enviadas: 7)", enviado)
+        self.assertIn("quantos projetos?", enviado)
+
+    def test_erro_de_execucao_nao_vira_dado(self):
+        payload, llm = self._run_bi({"sql": "SELECT 1", "valid": True, "explanation": "x",
+                                     "data": [{"error": "Conversion Error"}]})
+        self.assertEqual(payload["type"], "fallback")
+        self.assertEqual(payload["data_rows"], [])
+        self.assertIn("Não consegui executar", payload["text_response"])
+        llm.invoke.assert_not_called()
+
+    def test_falha_do_llm_mantem_a_explicacao(self):
+        from agents.bi_agent import tool
+
+        agente = MagicMock()
+        agente.ask.return_value = {"sql": "SELECT 1", "valid": True, "explanation": "Explicação.", "data": [{"t": 1}]}
+        llm = MagicMock()
+        llm.invoke.side_effect = RuntimeError("sem rede")
+        with patch.object(tool, "get_bi_agent", return_value=agente), \
+                patch.object(tool, "get_chat_llm", return_value=llm), \
+                patch.object(tool, "row_limit_for", return_value=5):
+            payload = json.loads(tool.run_bi_agent("q", "1", "1"))
+        self.assertEqual(payload["text_response"], "Explicação.")
+
+    def test_referencia_a_linha_inteira_bloqueada(self):
+        views = ["vfact_x"]
+        for sql in (
+            "SELECT p FROM vfact_x p",
+            "SELECT to_json(p) AS linha FROM vfact_x p",
+            "SELECT vfact_x FROM vfact_x",
+            "SELECT struct_extract(p, 'nome') AS n FROM vfact_x p",
+        ):
+            ok, err = validate_read_only_sql(sql, views, dialect="sqlite")
+            self.assertFalse(ok, sql)
+            self.assertIn("linha inteira", err)
+        for sql in (
+            "SELECT p.campus, COUNT(*) AS total FROM vfact_x p GROUP BY p.campus",
+            "SELECT campus FROM vfact_x",
+            "WITH t AS (SELECT COUNT(*) AS total FROM vfact_x) SELECT total FROM t",
+        ):
+            ok, err = validate_read_only_sql(sql, views, dialect="sqlite")
+            self.assertTrue(ok, f"{sql}: {err}")
+
+    def test_corretor_recebe_pergunta_e_contexto(self):
+        from agents.bi_agent.config import SQLResponse
+        from agents.bi_agent.nodes.sql_corrector import sql_corrector
+
+        estruturado = MagicMock()
+        estruturado.invoke.return_value = SQLResponse(sql="SELECT 1", explanation="ok", reasoning="r")
+        llm = MagicMock()
+        llm.with_structured_output.return_value = estruturado
+        sql_corrector(
+            {"validation_result": {"error": "coluna x não existe"}, "generated_sql": "SELECT x FROM v",
+             "user_input": "quantos projetos por campus?", "retrieved_schema": "CREATE VIEW v (campus TEXT)",
+             "system_prompt": "regras do contexto", "allowed_views": ["v"]},
+            llm_model=llm, dialect="sqlite",
+        )
+        sistema, humano = estruturado.invoke.call_args[0][0]
+        self.assertIn("CREATE VIEW v (campus TEXT)", sistema.content)
+        self.assertIn("regras do contexto", sistema.content)
+        self.assertIn("quantos projetos por campus?", humano.content)
+
+    def test_prompt_do_resolvedor_sem_vendas(self):
+        from agents.bi_agent.config import BI_VALUE_RESOLVER_SYSTEM_PROMPT as prompt
+
+        for termo in ("sales", "client", "CRM", "vendas", "salesperson", "product names"):
+            self.assertNotIn(termo, prompt)
+        self.assertIn("research group", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

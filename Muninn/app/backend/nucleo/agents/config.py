@@ -82,8 +82,8 @@ ORCHESTRATOR_SYSTEM_PROMPT = """
     - information provided by the user
     - the final objective of the task
 
-    You may produce multiple calls when the request contains independent tasks that can run in parallel.
-    The same agent may be called more than once if there are distinct independent requests for it.
+    Produce at most ONE bi_agent call per request. When the user asks for several metrics or lists,
+    put all of them in that single self-contained instruction; the bi_agent answers them together.
 
     External tools available through MCP:
     {tools_desc}
@@ -131,7 +131,7 @@ ORCHESTRATOR_SYSTEM_PROMPT = """
       and ask what data they would like to visualize.
 
     Do not include conversational together with bi_agent.
-    It is called automatically after specialist agents to consolidate and present results.
+    The bi_agent already writes the final answer for the user from the query results.
 
     Always write delegation instructions in Portuguese when they will be consumed as user-facing context,
     because final user-facing output must be in Brazilian Portuguese.

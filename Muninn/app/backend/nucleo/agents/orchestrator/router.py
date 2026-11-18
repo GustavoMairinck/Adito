@@ -21,7 +21,7 @@ async def orchestrator_node(state: MultiAgentState):
     structured_llm = llm.with_structured_output(RouterDecision, method="function_calling")
 
     # Envia o histórico recente como contexto + a última mensagem como pergunta atual.
-    # O orquestrador recebe contexto para resolver follow-ups ("E em 2025?", "E por vendedor?"),
+    # O orquestrador recebe contexto para resolver follow-ups ("E em 2025?", "E por campus?"),
     # mas o prompt instrui a rotear APENAS a última mensagem — nunca re-rotear perguntas antigas.
     all_messages = state.get("messages", [])
     context_messages = all_messages[:-1][-8:] if len(all_messages) > 1 else []

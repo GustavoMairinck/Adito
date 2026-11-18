@@ -129,6 +129,19 @@ async def mcp_tool_node(state: MultiAgentState):
     return {"messages": [AIMessage(content=f"Ferramenta MCP {tool_name} não encontrada.")]}
 
 
+def merge_instructions(instrucoes: list[str]) -> str:
+    """Junta várias instruções para a mesma ferramenta em um pedido só."""
+    instrucoes = [i.strip() for i in instrucoes if i and i.strip()]
+    if len(instrucoes) <= 1:
+        return instrucoes[0] if instrucoes else ""
+    itens = "\n".join(f"{n}. {i}" for n, i in enumerate(instrucoes, 1))
+    return (
+        "Responda todos os itens abaixo com uma única consulta SQL "
+        "(use subconsultas, CTEs ou UNION ALL se precisar), com uma coluna identificando cada item:\n"
+        + itens
+    )
+
+
 def route_from_orchestrator(state: MultiAgentState):
     calls = state.get("calls") or []
     intents = {call.get("intent") for call in calls}
@@ -146,10 +159,15 @@ def route_from_orchestrator(state: MultiAgentState):
 
     tool_calls = [c for c in calls if c.get("intent") not in GUARD_INTENTS | {"conversational"}]
     if tool_calls:
+        # Uma chamada por ferramenta: o estado guarda um resultado só (final_response, graph, sql_used),
+        # então chamadas paralelas à mesma ferramenta se sobrescreviam e o usuário via só uma.
+        por_ferramenta: dict[str, list[str]] = {}
+        for c in tool_calls:
+            por_ferramenta.setdefault(c.get("intent"), []).append(c.get("delegation_instruction") or "")
         return [
-            Send("mcp_tool_node", {**base, "tool_name": c.get("intent"),
-                                   "delegation_instruction": c.get("delegation_instruction")})
-            for c in tool_calls
+            Send("mcp_tool_node", {**base, "tool_name": nome,
+                                   "delegation_instruction": merge_instructions(instrucoes)})
+            for nome, instrucoes in por_ferramenta.items()
         ]
     if INTENT_OUT_OF_SCOPE in intents:
         return [Send("guard_node", {**base, "tool_name": INTENT_OUT_OF_SCOPE})]

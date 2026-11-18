@@ -192,10 +192,23 @@ def validate_read_only_sql(
                 "SELECT * não é permitido para proteger colunas sensíveis (LGPD). Liste as colunas explicitamente.",
             )
 
+    # Citar o nome ou o alias de uma tabela como coluna (`SELECT p FROM v p`, `to_json(p)`) devolve
+    # a linha inteira em motores como DuckDB e Postgres. No SQLite dá erro, mas a regra fica como defesa
+    # caso o motor mude.
+    row_refs = {(t.name or "").lower() for t in table_nodes} | {
+        (t.alias or "").lower() for t in table_nodes if t.alias
+    }
+    row_refs.discard("")
+
     for col in parsed.find_all(exp.Column):
         col_name = (col.name or "").lower()
         if not col_name:
             continue
+        if not col.table and col_name in row_refs:
+            return (
+                False,
+                f"Referência à linha inteira não permitida ('{col_name}'). Liste as colunas explicitamente.",
+            )
         if col_name in blocked_cols or "cpf" in col_name or "email" in col_name:
             return False, f"Coluna sensível não permitida (LGPD): {col_name}."
 
