@@ -77,6 +77,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("cruzar", help="Liga pessoas entre as fontes pelo nome (US-ETL-06)")
     sub.add_parser("verificar-pii", help="Confere que brutos/ e trabalho/ não têm CPF nem e-mail")
 
+    p = sub.add_parser("popular-banco", help="Popula o banco acadêmico SQLite (dados.db) diretamente (US-SQLITE-02)")
+    p.add_argument("--banco", type=Path, default=None, help="Caminho do arquivo dados.db")
+    p.add_argument("--so-gerar", action="store_true", help="Apenas gera o SQL sem popular o banco")
+
     args = ap.parse_args(argv)
     try:
         if args.comando == "src-acoes":
@@ -120,6 +124,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"PII: {pr}")
             print("ok: nenhum CPF/e-mail encontrado" if not problemas else f"{len(problemas)} arquivo(s) com PII")
             return 2 if problemas else 0
+        if args.comando == "popular-banco":
+            import subprocess
+            scripts_dir = Path(__file__).resolve().parents[3] / "scripts"
+            popular_script = scripts_dir / "popular_banco.py"
+            cmd = [sys.executable, str(popular_script), "--etl", str(base_dir())]
+            if args.banco:
+                cmd.extend(["--banco", str(args.banco)])
+            if args.so_gerar:
+                cmd.append("--so-gerar")
+            r = subprocess.run(cmd)
+            return r.returncode
     except (CredencialAusente, FileNotFoundError, PIIEncontrada) as e:
         print(f"erro: {e}", file=sys.stderr)
         return 2

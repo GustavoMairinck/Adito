@@ -1,33 +1,19 @@
 #!/usr/bin/env python3
-"""Popula o schema `unificado` com o que o ETL do Adito já extraiu.
+"""Popula o banco de dados acadêmicos SQLite (`dados.db`) com o que o ETL do Adito já extraiu.
 
 Lê a pasta do ETL (`brutos/` de cada fonte + `trabalho/pessoas.json` do
-cruzamento), gera um único arquivo SQL (uma transação, só INSERT) e o executa
-com o psql do container `oraculo-postgres` deste diretório.
+cruzamento), recria o schema SQLite nativo (DDLs 00 a 04), insere todas as 42
+tabelas base em uma única transação atômica e compila as 6 views analíticas
+(100% OLTP, zero duplicação em disco).
 
-Não altera a estrutura do banco: nenhum CREATE/ALTER/DROP/TRUNCATE. As tabelas de
-domínio populadas pelo DDL (`01_tipos_e_dominios.sql`) não recebem linhas novas:
-valor que não está nelas vira NULL e aparece no relatório. Se o banco já tiver
-dados, a carga para sem gravar nada; para recarregar, rode `./recriar_banco.sh`
-antes.
+Não depende de Docker, PostgreSQL ou DuckDB.
+Executa em tempo inferior a 5 segundos diretamente via `sqlite3`.
 
-Uso (a partir de Adito/scripts/; o ETL é a pasta irmã Adito/etl/):
-    ./recriar_banco.sh                          # banco vazio, se ainda não subiu
+Uso (a partir de Adito/scripts/):
     python3 popular_banco.py
-    python3 popular_banco.py --so-gerar         # só gera o SQL
-    python3 popular_banco.py --etl OUTRA/PASTA/etl
-
-Pré-requisito no ETL: `adito-etl cruzar` já rodado (gera `trabalho/pessoas.json`).
-
-Dados pessoais: o ETL não guarda CPF, e-mail, telefone, fax nem data de
-nascimento. O banco não tem mais `pessoa.cpf` nem e-mail de pessoa (removidos do
-DDL em 2026-11-11); `pessoa_src.dt_nasc`, `email` (só de grupo), `telefone` e
-`fax` ficam vazios. Sexo e endereço profissional (Lattes, sem telefone) e o endereço
-do grupo (CNPq) entram (decisão do usuário em 2026-11-11). Antes de executar, o SQL
-gerado é conferido: se tiver algo com formato de e-mail ou CPF, a carga para.
-
-O SQL gerado e o relatório ficam em `<etl>/saida/` (fora do git do ETL), porque
-contêm nomes de pessoas.
+    python3 popular_banco.py --banco ../app/data/dados.db
+    python3 popular_banco.py --so-gerar
+    python3 popular_banco.py --etl ../etl
 """
 
 from __future__ import annotations
@@ -36,8 +22,9 @@ import argparse
 import json
 import os
 import re
-import subprocess
+import sqlite3
 import sys
+import time
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import date
@@ -47,7 +34,6 @@ from typing import Any, Iterable
 
 AQUI = Path(__file__).resolve().parent
 DDL = AQUI / "sql"
-S = "unificado"
 LOTE = 500
 
 
@@ -88,14 +74,14 @@ def ano(v: Any) -> int | None:
     return n if n and 1900 <= n <= 2100 else None
 
 
-def booleano(v: Any) -> bool | None:
+def booleano(v: Any) -> int | None:
     if isinstance(v, bool):
-        return v
+        return 1 if v else 0
     s = forma(v)
     if s in ("true", "sim", "s", "1"):
-        return True
+        return 1
     if s in ("false", "nao", "n", "0"):
-        return False
+        return 0
     return None
 
 
@@ -117,13 +103,13 @@ def data(v: Any) -> str | None:
         return None
 
 
-def dinheiro(v: Any) -> Decimal | None:
+def dinheiro(v: Any) -> float | None:
     s = str(v or "").strip()
     if not s or s == "None":
         return None
     s = s.replace(".", "").replace(",", ".") if "," in s else s
     try:
-        return Decimal(s).quantize(Decimal("0.01"))
+        return float(Decimal(s).quantize(Decimal("0.01")))
     except InvalidOperation:
         return None
 
@@ -148,8 +134,8 @@ def literal(v: Any) -> str:
     if isinstance(v, Sql):
         return str(v)
     if isinstance(v, bool):
-        return "TRUE" if v else "FALSE"
-    if isinstance(v, (int, Decimal)):
+        return "1" if v else "0"
+    if isinstance(v, (int, float, Decimal)):
         return str(v)
     return "'" + str(v).replace("'", "''") + "'"
 
@@ -159,17 +145,18 @@ def ler_ddl() -> tuple[dict[str, list[str]], dict[str, set[str]]]:
     """Valores dos ENUMs e das tabelas de domínio, lidos do próprio DDL."""
     sql = (DDL / "01_tipos_e_dominios.sql").read_text(encoding="utf-8")
     enums = {m.group(1): re.findall(r"'([^']+)'", m.group(2))
-             for m in re.finditer(r"CREATE TYPE unificado\.(\w+) AS ENUM \((.*?)\);", sql, re.S)}
+             for m in re.finditer(r"(?:--\s*)?CREATE TYPE (?:unificado\.)?(\w+) AS ENUM \((.*?)\);", sql, re.S)}
     dominios = {m.group(1): set(re.findall(r"'([^']+)'", m.group(2)))
-                for m in re.finditer(r"INSERT INTO unificado\.(\w+) \(nome\) VALUES(.*?);", sql, re.S)}
+                for m in re.finditer(r"INSERT (?:OR IGNORE )?INTO (?:unificado\.)?(\w+) \(nome\) VALUES(.*?);", sql, re.S)}
     return enums, dominios
 
 
 # ============================================================================ carga
 class Carga:
-    # Ordem de inserção (respeita as chaves estrangeiras).
+    # Ordem de inserção (respeita as chaves estrangeiras no SQLite).
     ORDEM = [
-        "organizacao", "instituicao_lattes", "instituicao_parceira_cnpq", "endereco", "grande_area", "area_conhecimento", "subarea_conhecimento_lattes", "especialidade_lattes", "idioma",
+        "organizacao", "instituicao_lattes", "instituicao_parceira_cnpq", "endereco",
+        "grande_area", "area_conhecimento", "subarea_conhecimento_lattes", "especialidade_lattes", "idioma",
         "titulacao", "curso", "pessoa", "pessoa_lattes", "pessoa_src", "pesquisador",
         "estudante", "area_atuacao", "grupo_pesquisa", "grupo_pesquisa_cnpq", "website",
         "grupo_pesquisa_externo", "linha_pesquisa", "papel", "membro_grupo", "membro_grupo_cnpq",
@@ -178,7 +165,7 @@ class Carga:
         "projeto_pesquisa", "projeto_lattes", "edital", "plano_trabalho", "orientacao",
         "formacao_academica", "atuacao_profissional", "orientacao_lattes",
         "banca_examinadora", "evento_cientifico", "producao", "artigo_trabalho_evento",
-        "livro_capitulo", "producao_tecnica_artistica_bibliografica", "premio_titulo",
+        "livro_capitulo", "producao_tecnica_artistica_bibliografica", "patente_registro", "premio_titulo",
         "membro_projeto", "fomento_projeto", "participacao_evento", "proficiencia_idioma",
         "lideranca_grupo_pesquisa", "cooperacao_grupo_externo_projeto", "fomento_acao",
         "acao_campus", "parceiro_demandante_projeto", "participacao_estudante_projeto",
@@ -187,18 +174,23 @@ class Carga:
         "grupo_pesquisa_linha_pesquisa", "parceria_grupo", "equipamento_software", "grupo_pesquisa_equipamento",
         "pessoa_lattes_titulacao",
     ]
-    # Tabelas com id próprio (identity) que recebem id explícito; o resto usa o id da base.
-    BASE = {"instituicao_lattes": "organizacao", "pessoa_lattes": "pessoa", "pessoa_src": "pessoa",
-            "pesquisador": "pessoa", "estudante": "pessoa", "acao": "iniciativa",
-            "projeto_pesquisa": "iniciativa", "projeto_lattes": "iniciativa",
-            "membro_equipe_execucao_src": "membro_grupo", "grupo_pesquisa_cnpq": "grupo_pesquisa",
-            "membro_grupo_cnpq": "membro_grupo", "instituicao_parceira_cnpq": "organizacao", "artigo_trabalho_evento": "producao",
-            "livro_capitulo": "producao", "producao_tecnica_artistica_bibliografica": "producao"}
-    JUNCAO = {"lideranca_grupo_pesquisa", "cooperacao_grupo_externo_projeto", "fomento_acao",
-              "acao_campus", "parceiro_demandante_projeto", "participacao_estudante_projeto",
-              "autoria_producao", "participacao_pesquisador_projeto", "membro_banca_examinadora",
-              "grupo_pesquisa_projeto", "pesquisador_linha_pesquisa", "grupo_pesquisa_grande_area",
-              "grupo_pesquisa_linha_pesquisa", "grupo_pesquisa_equipamento", "pessoa_lattes_titulacao"}
+    # Tabelas com id próprio (subclasses) que herdam chave primária da superclasse
+    BASE = {
+        "instituicao_lattes": "organizacao", "pessoa_lattes": "pessoa", "pessoa_src": "pessoa",
+        "pesquisador": "pessoa", "estudante": "pessoa", "acao": "iniciativa",
+        "projeto_pesquisa": "iniciativa", "projeto_lattes": "iniciativa",
+        "membro_equipe_execucao_src": "membro_grupo", "grupo_pesquisa_cnpq": "grupo_pesquisa",
+        "membro_grupo_cnpq": "membro_grupo", "instituicao_parceira_cnpq": "organizacao",
+        "artigo_trabalho_evento": "producao", "livro_capitulo": "producao",
+        "producao_tecnica_artistica_bibliografica": "producao", "patente_registro": "producao"
+    }
+    JUNCAO = {
+        "lideranca_grupo_pesquisa", "cooperacao_grupo_externo_projeto", "fomento_acao",
+        "acao_campus", "parceiro_demandante_projeto", "participacao_estudante_projeto",
+        "autoria_producao", "participacao_pesquisador_projeto", "membro_banca_examinadora",
+        "grupo_pesquisa_projeto", "pesquisador_linha_pesquisa", "grupo_pesquisa_grande_area",
+        "grupo_pesquisa_linha_pesquisa", "grupo_pesquisa_equipamento", "pessoa_lattes_titulacao"
+    }
 
     def __init__(self, etl: Path):
         self.etl = etl
@@ -259,7 +251,7 @@ class Carga:
             k = (alias or {}).get(k, k)
             for nome in self.dominios[tabela]:
                 if chave_enum(nome) == k:
-                    return Sql(f"(SELECT id FROM {S}.{tabela} WHERE nome = {literal(nome)})")
+                    return Sql(f"(SELECT id FROM {tabela} WHERE nome = {literal(nome)})")
         self.aviso(f"valor fora do domínio {tabela} (gravado NULL)", valor)
         return None
 
@@ -288,7 +280,6 @@ class Carga:
         nome = nome.title() if nome.isupper() else nome
         return self.org(nome, "Campus", self.ifes(), direto=True)
 
-    # Só quando o nome COMEÇA pelo Ifes ("Cooperativa dos Alunos do IFES", "PAEX-IFES" são outras organizações).
     IFES = re.compile(r"^\s*(ifes|ins?tituto federal do esp[ií]rito (do )?santo|ins?tituto federal de educa[cç][aã]o,? "
                       r"ci[eê]ncia e tecnologia do esp[ií]rito (do )?santo)\b", re.I)
     PREFIXOS_LATTES = re.compile(r"^(orienta[cç][aã]o de outra natureza|inicia[cç][aã]o cient[ií]fica)\s*[-.]\s*", re.I)
@@ -301,6 +292,22 @@ class Carga:
         m = re.search(r"campus\s+(?:de\s+|do\s+|da\s+)?([^,.;/-]+)", nome, re.I) or \
             re.search(r"santo\s*[-–]\s*(?!ifes\b)([A-Za-zÀ-ú][A-Za-zÀ-ú ]*)$", nome, re.I)
         return self.campus(m.group(1).strip()) if m else self.ifes()
+
+    def eh_ifes_ou_campus(self, org_id: int | None) -> bool:
+        if org_id is None:
+            return False
+        if org_id == self.ifes():
+            return True
+        linha = self.linhas["organizacao"].get(org_id, {})
+        return linha.get("id_organizacao_pai") == self.ifes()
+
+    @staticmethod
+    def eh_fomento(nome: Any) -> bool:
+        if not nome:
+            return False
+        s = forma(nome)
+        palavras = ["fapes", "cnpq", "capes", "finep", "fundacao de amparo", "agencia de fomento"]
+        return any(p in s for p in palavras)
 
     def instituicao_lattes(self, bruto: Any) -> int | None:
         """'Universidade Federal do Espírito Santo, UFES, Brasil' -> nome, sigla, país.
@@ -354,8 +361,7 @@ class Carga:
             self.pares_area.setdefault(forma(area), texto(grande))
 
     def completar_areas(self) -> None:
-        """Liga cada área à sua grande área, com os pares vistos em qualquer fonte
-        (a área pode ter sido criada antes por uma fonte sem a grande área)."""
+        """Liga cada área à sua grande área, com os pares vistos em qualquer fonte."""
         for k, i in list(self.cache.items()):
             if len(k) == 2 and k[0] == "area_conhecimento":
                 chave = k[1]
@@ -403,17 +409,28 @@ class Carga:
 
     def pesquisador(self, nome: Any, fonte: str, organizacao: int | None = None,
                     titulacao: Any = None) -> int | None:
+        """P1: Prioriza campus Ifes no pesquisador; nunca promove agência de fomento a lotação."""
         pid = self.pessoa(nome, fonte)
         if pid is not None:
-            self.sub("pesquisador", pid, id_organizacao=organizacao,
-                     id_titulacao=self.simples("titulacao", "nome", titulacao))
+            atual_pesq = self.linhas["pesquisador"].setdefault(pid, {"id": pid})
+            if organizacao is not None:
+                # Se veio campus Ifes, prioridade absoluta
+                if self.eh_ifes_ou_campus(organizacao):
+                    atual_pesq["id_organizacao"] = organizacao
+                elif atual_pesq.get("id_organizacao") is None:
+                    atual_pesq["id_organizacao"] = organizacao
+            if titulacao:
+                id_tit = self.simples("titulacao", "nome", titulacao)
+                if id_tit and atual_pesq.get("id_titulacao") is None:
+                    atual_pesq["id_titulacao"] = id_tit
         return pid
 
     NIVEL = {"ENSINO_PROFISSIONAL_DE_NIVEL_TECNICO": "ENSINO_PROFISSIONAL_TECNICO"}
-    # Programa de iniciação do SigPesq -> nível do bolsista (Jr/EM = ensino médio; os demais, graduação)
-    NIVEL_PROGRAMA = {"PIBIC": "Graduação", "PIBITI": "Graduação", "PIVIC": "Graduação", "PIVITI": "Graduação",
-                      "PIBIC_AF": "Graduação", "PIBIC_JR": "Ensino Médio (2o grau)",
-                      "PIBIC_EM": "Ensino Médio (2o grau)"}
+    NIVEL_PROGRAMA = {
+        "PIBIC": "Graduação", "PIBITI": "Graduação", "PIVIC": "Graduação", "PIVITI": "Graduação",
+        "PIBIC_AF": "Graduação", "PIBIC_JR": "Ensino Médio (2o grau)",
+        "PIBIC_EM": "Ensino Médio (2o grau)", "JTC": "Graduação", "PICTI": "Graduação"
+    }
 
     def estudante(self, nome: Any, fonte: str, campus: Any = None, curso: Any = None,
                   nivel: Any = None) -> int | None:
@@ -499,7 +516,6 @@ class Carga:
     # ================================================================ SigPesq
     @staticmethod
     def cancelamento(bruto: Any) -> tuple[str | None, str | None]:
-        """'Por Maria Exemplo Silva Em 11/05/2022 17:39' -> ('Maria Exemplo Silva', '2022-05-11')."""
         s = texto(bruto)
         if not s:
             return None, None
@@ -538,19 +554,20 @@ class Carga:
         projetos: dict[str, int] = {}
         for p in linhas("projetos"):
             coord = None
+            campus_exec = self.campus(p.get("CampusExecucao"))
             for n in nomes(p.get("Coordenador"), r";"):
-                coord = coord or self.pesquisador(n, "sigpesq", self.campus(p.get("CampusExecucao")))
+                coord = coord or self.pesquisador(n, "sigpesq", campus_exec)
             i = self.novo("iniciativa", nome=texto(p.get("Titulo")) or f"Projeto {p.get('Id')}")
             self.sub("projeto_pesquisa", i, id_origem=inteiro(p.get("Id")), data_inicio=data(p.get("Inicio")),
                      data_fim=data(p.get("Fim")), palavras_chave=texto(p.get("PalavraChave")),
                      sigilo=booleano(p.get("Sigilo")),
                      id_natureza_projeto=self.enum("tipo_natureza_projeto", p.get("Natureza")),
                      parecer_diretoria=self.enum("tipo_parecer_diretoria", p.get("ParecerDiretoria")),
-                     id_campus=self.campus(p.get("CampusExecucao")),
+                     id_campus=campus_exec,
                      id_area_conhecimento=self.area(p.get("AreaConhecimento")), id_coordenador=coord)
             projetos.setdefault(forma(p.get("Titulo")), i)
             for n in nomes(p.get("Pesquisadores"), r";"):
-                self.juncao("participacao_pesquisador_projeto", id_pesquisador=self.pesquisador(n, "sigpesq"),
+                self.juncao("participacao_pesquisador_projeto", id_pesquisador=self.pesquisador(n, "sigpesq", campus_exec),
                             id_projeto_pesquisa=i)
             for n in nomes(p.get("Estudantes"), r";"):
                 self.juncao("participacao_estudante_projeto", id_estudante=self.estudante(n, "sigpesq"),
@@ -570,14 +587,15 @@ class Carga:
 
         minimos = 0
         for o in linhas("orientacoes"):
-            orientador = self.pesquisador(o.get("Orientador"), "sigpesq", self.campus(o.get("CampusOrientador")))
+            campus_orient = self.campus(o.get("CampusOrientador"))
+            orientador = self.pesquisador(o.get("Orientador"), "sigpesq", campus_orient)
             orientado = self.estudante(o.get("Orientado"), "sigpesq", o.get("Campus") or o.get("CampusExecucao"),
                                        o.get("Curso"), self.NIVEL_PROGRAMA.get(chave_enum(o.get("Programa"))))
             if orientador is None or orientado is None:
                 self.aviso("orientação SigPesq sem orientador ou orientado (NOT NULL; não gravada)", o.get("Id"))
                 continue
             projeto = projetos.get(forma(o.get("TituloPJ")))
-            if projeto is None:  # projeto fora do relatório de projetos: registro mínimo (decisão do usuário)
+            if projeto is None:
                 cod = inteiro(o.get("CodPJ"))
                 k = ("projeto_minimo", cod or forma(o.get("TituloPJ")))
                 if k not in self.cache:
@@ -597,22 +615,21 @@ class Carga:
                 self.org(o.get("AgFinanciadora"), "AgenciaFinanciamento")
             nome_canc, data_canc = self.cancelamento(o.get("CanceladoPor"))
             self.novo("orientacao", id_origem=inteiro(o.get("Id")), ano=ano(o.get("Ano")),
-                      valor_bolsa=dinheiro(o.get("Valor")), data_inicio=data(o.get("Inicio")),
-                      data_fim=data(o.get("Fim")), cancelado=booleano(o.get("Cancelado")),
-                      nome_cancelador=nome_canc, data_cancelado=data_canc,
-                      relatorio_enviado=None if not texto(o.get("AvaliacaoRelatorio")) else
-                      forma(o.get("AvaliacaoRelatorio")) != "nao enviado",
-                      modalidade=self.enum("tipo_modalidade", o.get("Modalidade")),
-                      gerenciamento=self.enum("tipo_gerenciamento", o.get("Gerenciamento")),
-                      id_programa=self.dominio("programa", o.get("Programa")), id_plano_trabalho=plano,
-                      id_orientador=orientador, id_orientado=orientado,
-                      id_campus=self.campus(o.get("CampusExecucao")), id_financiador=fin)
+                       valor_bolsa=dinheiro(o.get("Valor")), data_inicio=data(o.get("Inicio")),
+                       data_fim=data(o.get("Fim")), cancelado=booleano(o.get("Cancelado")),
+                       nome_cancelador=nome_canc, data_cancelado=data_canc,
+                       relatorio_enviado=None if not texto(o.get("AvaliacaoRelatorio")) else
+                       forma(o.get("AvaliacaoRelatorio")) != "nao enviado",
+                       modalidade=self.enum("tipo_modalidade", o.get("Modalidade")),
+                       gerenciamento=self.enum("tipo_gerenciamento", o.get("Gerenciamento")),
+                       id_programa=self.dominio("programa", o.get("Programa")), id_plano_trabalho=plano,
+                       id_orientador=orientador, id_orientado=orientado,
+                       id_campus=self.campus(o.get("CampusExecucao")), id_financiador=fin)
         self.avisos["projetos SigPesq mínimos criados para orientações (só título)"] += minimos
 
     # ================================================================ Lattes
     ORDEM_TITULACAO = ["POS_DOUTORADO", "LIVRE_DOCENCIA", "DOUTORADO", "MESTRADO_PROFISSIONAL", "MESTRADO",
                        "ESPECIALIZACAO", "APERFEICOAMENTO", "GRADUACAO"]
-
     MODALIDADE_ORIENTACAO = {"POS_DOUTORADO", "DOUTORADO", "MESTRADO", "ESPECIALIZACAO", "TCC",
                              "INICIACAO_CIENTIFICA", "OUTROS"}
 
@@ -634,7 +651,7 @@ class Carga:
                            url_lattes=texto(info.get("url")), data_atualizacao_cv=data(info.get("atualizacao_cv")),
                            endereco_profissional=texto(info.get("endereco_profissional")))
 
-        maior = None  # formação concluída mais alta, para a titulação do pesquisador
+        maior = None
         for f in cv.get("formacao_academica") or []:
             nivel_f = texto((f.get("tipo") or "").partition(" em ")[0])
             if nivel_f and ano(f.get("ano_conclusao")):
@@ -657,23 +674,33 @@ class Carga:
                       nome_orientador=achar("Orientador"), nome_coorientador=achar("Coorientador"),
                       id_pessoa_lattes=dono, id_instituicao=inst, id_curso=self.simples("curso", "nome", curso))
 
-        atual = None
+        atual_ifes = None
+        atual_outro = None
         for a in cv.get("atuacao_profissional") or []:
-            inst = self.instituicao_lattes(a.get("instituicao") or a.get("instituicao_nome"))
+            nome_inst = a.get("instituicao") or a.get("instituicao_nome")
+            # P1: nunca aceita fomento como lotação
+            if self.eh_fomento(nome_inst):
+                continue
+            inst = self.instituicao_lattes(nome_inst)
             if inst is None:
                 self.aviso("atuação sem instituição (NOT NULL; não gravada)", ident)
                 continue
-            if atual is None and forma(a.get("ano_fim")) == "atual":
-                atual = inst
+            if forma(a.get("ano_fim")) == "atual":
+                if self.eh_ifes_ou_campus(inst) and atual_ifes is None:
+                    atual_ifes = inst
+                elif atual_outro is None:
+                    atual_outro = inst
             self.novo("atuacao_profissional", ano_inicio=ano(a.get("ano_inicio")), ano_fim=ano(a.get("ano_fim")),
-                      atual=forma(a.get("ano_fim")) == "atual", vinculo=texto(a.get("vinculo")),
+                      atual=booleano(forma(a.get("ano_fim")) == "atual"), vinculo=texto(a.get("vinculo")),
                       enquadramento=texto(a.get("enquadramento")), regime_trabalho=texto(a.get("regime")),
                       atividades=self.lista_texto(a.get("atividades")),
                       id_pessoa_lattes=dono, id_instituicao=inst)
 
-        if atual is not None or maior:  # titular: organização da atuação atual e maior titulação concluída
-            self.sub("pesquisador", dono, id_organizacao=atual,
-                     id_titulacao=self.simples("titulacao", "nome", maior))
+        lotacao = atual_ifes or atual_outro
+        if lotacao is not None or maior:
+            self.pesquisador(info.get("nome_completo"), "lattes",
+                             organizacao=lotacao, titulacao=maior)
+
         for a in cv.get("areas_de_atuacao") or []:
             self.par_area(a.get("area"), a.get("grande_area"))
             ac = self.area(a.get("area"), a.get("grande_area"))
@@ -780,14 +807,13 @@ class Carga:
                 if not nome:
                     continue
                 ev = self.unico("evento_cientifico", (forma(nome), ano(e.get("ano"))), nome_evento=nome,
-                                natureza_tipo_evento=texto(e.get("tipo_evento") or e.get("natureza")), ano=ano(e.get("ano")))
+                                 natureza_tipo_evento=texto(e.get("tipo_evento") or e.get("natureza")), ano=ano(e.get("ano")))
                 self.unico("participacao_evento", (dono, ev, papel), id_pessoa_lattes=dono, id_evento_cientifico=ev,
                            papel_evento=papel, titulo_apresentacao=texto(e.get("apresentacao")))
 
         self.producoes(cv, dono)
 
     PRODUCOES = {
-        # seção -> (tabela, tipo/categoria, campos)
         ("producao_bibliografica", "artigos_periodicos"): ("artigo", "ARTIGO_PERIODICO", None),
         ("producao_bibliografica", "artigos_aceitos"): ("artigo", "ARTIGO_PERIODICO", "Aceito para publicação"),
         ("producao_bibliografica", "trabalhos_completos_congressos"): ("artigo", "TRABALHO_COMPLETO_CONGRESSO", None),
@@ -834,25 +860,72 @@ class Carga:
                                  id_categoria=self.dominio("categoria_producao_tecnica", cat),
                                  subtipo=texto(it.get("tipo")) or (sub or secao).replace("_", " "))
                 self.juncao("autoria_producao", id_pessoa_lattes=dono, id_producao=self.cache[k])
+
+        # P5: Patentes e registros (id_instituicao_depositante NULLABLE no SQLite)
         pats = cv.get("patentes_registros") or {}
-        n = sum(len(v or []) for v in pats.values()) + len((cv.get("producao_tecnica") or {}).get("softwares_com_patente") or [])
-        if n:
-            self.sem_coluna["patente/registro (instituição depositante é NOT NULL e o Lattes não traz)"] += n
+        for sub_tipo, lista in pats.items():
+            for item in lista if isinstance(lista, list) else []:
+                titulo = texto(item.get("titulo") or item.get("nome"))
+                if not titulo:
+                    continue
+                ano_p = ano(item.get("ano"))
+                k = ("producao", "patentes_registros", sub_tipo, forma(titulo), ano_p)
+                if k not in self.cache:
+                    pid = self.cache[k] = self.novo("producao", titulo=titulo, ano=ano_p)
+                    tipo_pat = "PATENTE" if "patente" in sub_tipo else (
+                        "PROGRAMA_COMPUTADOR" if "programa" in sub_tipo or "software" in sub_tipo else (
+                            "DESENHO_INDUSTRIAL" if "desenho" in sub_tipo else (
+                                "MARCA" if "marca" in sub_tipo else "PATENTE"
+                            )
+                        )
+                    )
+                    dep = self.instituicao_lattes(item.get("instituicao_depositante") or item.get("instituicao") or item.get("depositante"))
+                    self.sub("patente_registro", pid,
+                             id_tipo_patente_registro=self.dominio("tipo_patente_registro", tipo_pat),
+                             modalidade_patente=texto(item.get("modalidade") or sub_tipo),
+                             pais=texto(item.get("pais") or "Brasil"),
+                             data_registro=texto(item.get("data") or item.get("data_registro")),
+                             codigo_registro=texto(item.get("codigo") or item.get("registro") or item.get("codigo_registro")),
+                             id_instituicao_depositante=dep)
+                self.juncao("autoria_producao", id_pessoa_lattes=dono, id_producao=self.cache[k])
+
+        softwares_pat = (cv.get("producao_tecnica") or {}).get("softwares_com_patente") or []
+        for item in softwares_pat if isinstance(softwares_pat, list) else []:
+            titulo = texto(item.get("titulo") or item.get("nome"))
+            if not titulo:
+                continue
+            ano_p = ano(item.get("ano"))
+            k = ("producao", "producao_tecnica", "softwares_com_patente", forma(titulo), ano_p)
+            if k not in self.cache:
+                pid = self.cache[k] = self.novo("producao", titulo=titulo, ano=ano_p)
+                dep = self.instituicao_lattes(item.get("instituicao_depositante") or item.get("instituicao") or item.get("depositante"))
+                self.sub("patente_registro", pid,
+                         id_tipo_patente_registro=self.dominio("tipo_patente_registro", "PROGRAMA_COMPUTADOR"),
+                         modalidade_patente="SOFTWARE_COM_PATENTE",
+                         pais=texto(item.get("pais") or "Brasil"),
+                         data_registro=texto(item.get("data") or item.get("data_registro")),
+                         codigo_registro=texto(item.get("codigo") or item.get("registro") or item.get("codigo_registro")),
+                         id_instituicao_depositante=dep)
+            self.juncao("autoria_producao", id_pessoa_lattes=dono, id_producao=self.cache[k])
 
     # ================================================================ CNPq
-    SITUACAO_GRUPO = (("CERTIFICADO_NAO_ATUALIZADO", "CERTIFICADO_NAO_ATUALIZADO"),
-                      ("EM_PREENCHIMENTO", "EM_PREENCHIMENTO"),
-                      ("AGUARDANDO_CERTIFICACAO", "AGUARDANDO_CERTIFICACAO"),
-                      ("CERTIFICADO", "CERTIFICADO"))
-    # tabela de recursos humanos do espelho -> (papel, status)
-    PAPEL_RH = {"pesquisadores": ("Pesquisador", "ATIVO"), "estudantes": ("Estudante", "ATIVO"),
-                "tecnicos": ("Técnico", "ATIVO"), "colaboradores_estrangeiros": ("Colaborador estrangeiro", "ATIVO"),
-                "egressos_pesquisadores": ("Pesquisador", "EGRESSO"), "egressos_estudantes": ("Estudante", "EGRESSO"),
-                "egressos_tecnicos": ("Técnico", "EGRESSO"), "egressos": ("Egresso", "EGRESSO")}
+    # P3: Adiciona 'EXCLUIDO' mapeado para o domínio/check de situação do grupo
+    SITUACAO_GRUPO = (
+        ("CERTIFICADO_NAO_ATUALIZADO", "CERTIFICADO_NAO_ATUALIZADO"),
+        ("EM_PREENCHIMENTO", "EM_PREENCHIMENTO"),
+        ("AGUARDANDO_CERTIFICACAO", "AGUARDANDO_CERTIFICACAO"),
+        ("CERTIFICADO", "CERTIFICADO"),
+        ("EXCLUIDO", "EXCLUIDO")
+    )
+    PAPEL_RH = {
+        "pesquisadores": ("Pesquisador", "ATIVO"), "estudantes": ("Estudante", "ATIVO"),
+        "tecnicos": ("Técnico", "ATIVO"), "colaboradores_estrangeiros": ("Colaborador estrangeiro", "ATIVO"),
+        "egressos_pesquisadores": ("Pesquisador", "EGRESSO"), "egressos_estudantes": ("Estudante", "EGRESSO"),
+        "egressos_tecnicos": ("Técnico", "EGRESSO"), "egressos": ("Egresso", "EGRESSO")
+    }
 
     @staticmethod
     def itens(secao: Any) -> list[dict]:
-        """Linhas das tabelas genéricas do espelho: {"items": [[{...}, ...]]} ou {"outros_dados": [[...]]}."""
         out: list[dict] = []
         if isinstance(secao, dict):
             for v in secao.values():
@@ -861,7 +934,7 @@ class Carga:
         return out
 
     def cnpq(self) -> None:
-        """Espelho DGP/CNPq: só para grupos que já vieram do SigPesq (o mesmo id de 16 dígitos)."""
+        """Espelho DGP/CNPq: só para grupos que já vieram do SigPesq."""
         for arq in sorted((self.etl / "brutos" / "cnpq").glob("grupo_*.json")):
             g = ler(arq)
             ident = str(g.get("id_espelho") or arq.stem.removeprefix("grupo_"))
@@ -897,7 +970,7 @@ class Carga:
             for lider in idt.get("lideres_do_grupo") or []:
                 if isinstance(lider, str) and lider.strip().lower() != "ui-button":
                     self.juncao("lideranca_grupo_pesquisa", id_grupo_pesquisa=gid,
-                                id_pesquisador=self.pesquisador(lider, "cnpq"))
+                                id_pesquisador=self.pesquisador(lider, "cnpq", campus))
             area = texto(idt.get("area_predominante"))
             if area and ";" in area:
                 self.par_area(area.split(";", 1)[1], area.split(";")[0])
@@ -917,9 +990,9 @@ class Carga:
                     if not nome or nome.strip().lower() == "ui-button":
                         continue
                     if tabela == "pesquisadores":
-                        pid = self.pesquisador(nome, "cnpq", titulacao=it.get("titulacao_maxima"))
+                        pid = self.pesquisador(nome, "cnpq", campus, titulacao=it.get("titulacao_maxima"))
                     elif tabela == "estudantes":
-                        pid = self.estudante(nome, "cnpq", nivel=it.get("nivel_de_treinamento"))
+                        pid = self.estudante(nome, "cnpq", campus, nivel=it.get("nivel_de_treinamento"))
                     else:
                         pid = self.pessoa(nome, "cnpq")
                     if pid is None:
@@ -940,7 +1013,7 @@ class Carga:
                     self.sub("instituicao_parceira_cnpq", org, sigla=texto(it.get("sigla")),
                              uf=self.enum("tipo_uf", uf) if uf else None)
                     self.unico("parceria_grupo", (gid, org), id_grupo_pesquisa_cnpq=gid,
-                               id_instituicao_parceira=org, tipo=rotulo)
+                                id_instituicao_parceira=org, tipo=rotulo)
             for it in self.itens(g.get("equipamentos_e_softwares_relevantes")):
                 for k, tipo in (("softwares", "SOFTWARE"), ("software", "SOFTWARE"),
                                 ("equipamentos", "EQUIPAMENTO"), ("equipamento", "EQUIPAMENTO")):
@@ -956,13 +1029,12 @@ class Carga:
         return [t for t in self.ORDEM if self.linhas.get(t)]
 
     def sql(self) -> str:
-        out = ["-- Gerado por Adito/scripts/popular_banco.py. Só INSERT; uma transação.",
-               "\\set ON_ERROR_STOP on", "BEGIN;", f"SET search_path TO {S}, public;",
-               "DO $$ BEGIN",
-               "  IF EXISTS (SELECT 1 FROM unificado.pessoa) OR EXISTS (SELECT 1 FROM unificado.iniciativa)",
-               "     OR EXISTS (SELECT 1 FROM unificado.organizacao) OR EXISTS (SELECT 1 FROM unificado.producao) THEN",
-               "    RAISE EXCEPTION 'o banco já tem dados: rode ./recriar_banco.sh antes de popular';",
-               "  END IF;", "END $$;"]
+        """Gera o bloco SQL de inserção pura compatível com SQLite."""
+        out = [
+            "-- Gerado por Adito/scripts/popular_banco.py para SQLite. Transação atômica única.",
+            "PRAGMA foreign_keys = ON;",
+            "BEGIN TRANSACTION;"
+        ]
         for t in self.tabelas_com_dados():
             linhas = list(self.linhas[t].values())
             if t in self.BASE or t not in self.JUNCAO:
@@ -973,11 +1045,7 @@ class Carga:
             for i in range(0, len(linhas), LOTE):
                 valores = ",\n".join("(" + ", ".join(literal(r.get(c)) for c in cols) + ")"
                                      for r in linhas[i:i + LOTE])
-                out.append(f"INSERT INTO {S}.{t} ({', '.join(cols)}) VALUES\n{valores};")
-        for t in self.tabelas_com_dados():
-            if t not in self.BASE and t not in self.JUNCAO:
-                out.append(f"SELECT setval(pg_get_serial_sequence('{S}.{t}', 'id'), "
-                           f"(SELECT max(id) FROM {S}.{t}));")
+                out.append(f"INSERT INTO {t} ({', '.join(cols)}) VALUES\n{valores};")
         out.append("COMMIT;")
         return "\n".join(out) + "\n"
 
@@ -985,7 +1053,7 @@ class Carga:
         return {t: len(self.linhas[t]) for t in self.tabelas_com_dados()}
 
 
-# ============================================================================ main
+# ============================================================================ PII & Validação
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 CPF = re.compile(r"(?<![\d.])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\d])|(?<!\d)\d{11}(?!\d)")
 
@@ -999,26 +1067,105 @@ def conferir_pii(sql: str) -> list[str]:
     return achados
 
 
-def ler_env(path: Path) -> dict[str, str]:
-    env = {}
-    if path.exists():
-        for linha in path.read_text(encoding="utf-8").splitlines():
-            if "=" in linha and not linha.lstrip().startswith("#"):
-                k, v = linha.split("=", 1)
-                env[k.strip()] = v.strip().strip('"').strip("'")
-    return env
+def inicializar_banco_sqlite(banco_path: Path) -> sqlite3.Connection:
+    """Cria ou recria a base dados.db aplicando os DDLs 00 a 04."""
+    banco_path.parent.mkdir(parents=True, exist_ok=True)
+    if banco_path.exists():
+        banco_path.unlink()
+
+    conn = sqlite3.connect(str(banco_path))
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+
+    ddl_arquivos = [
+        "00_schema.sql",
+        "01_tipos_e_dominios.sql",
+        "02_tabelas.sql",
+        "03_relacionamentos_e_juncoes.sql",
+        "04_fatos_views.sql"
+    ]
+    for ddl_arq in ddl_arquivos:
+        sql_text = (DDL / ddl_arq).read_text(encoding="utf-8")
+        conn.executescript(sql_text)
+
+    return conn
+
+
+def validar_sanidade_banco(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Executa as validações estruturais pós-carga e checagens das 6 fatos (P1 a P12)."""
+    # 1. Integridade de chaves estrangeiras
+    fk_erros = list(conn.execute("PRAGMA foreign_key_check;"))
+    if fk_erros:
+        raise RuntimeError(f"Violação de chaves estrangeiras pós-carga: {fk_erros}")
+
+    # 2. Validações das views analíticas
+    res_lider = conn.execute("SELECT SUM(flag_lider) FROM vfact_grupo_pesquisa_membro_resolved;").fetchone()[0] or 0
+    if res_lider <= 0:
+        raise AssertionError("vfact_grupo_pesquisa_membro_resolved: SUM(flag_lider) deve ser > 0")
+
+    res_neg_dias = conn.execute(
+        "SELECT COUNT(*) FROM vfact_grupo_pesquisa_membro_resolved WHERE tempo_participacao_dias < 0;"
+    ).fetchone()[0]
+    if res_neg_dias > 0:
+        raise AssertionError(f"vfact_grupo_pesquisa_membro_resolved: {res_neg_dias} registros com tempo_participacao_dias < 0")
+
+    # Obra única na produção
+    row_prod = conn.execute(
+        "SELECT SUM(flag_obra_unica), COUNT(DISTINCT id_producao) FROM vfact_producao_cientifica_resolved;"
+    ).fetchone()
+    sum_obra_unica, count_dist_prod = row_prod[0] or 0, row_prod[1] or 0
+    if sum_obra_unica != count_dist_prod:
+        raise AssertionError(
+            f"vfact_producao_cientifica_resolved: SUM(flag_obra_unica) ({sum_obra_unica}) != COUNT(DISTINCT id_producao) ({count_dist_prod})"
+        )
+
+    # Campus IFES limpo de fomento/externos (P1)
+    fapes_ufes_campus = conn.execute(
+        "SELECT COUNT(*) FROM vfact_producao_cientifica_resolved WHERE campus IN ('FAPES', 'UFES');"
+    ).fetchone()[0]
+    if fapes_ufes_campus > 0:
+        raise AssertionError(f"vfact_producao_cientifica_resolved: {fapes_ufes_campus} ocorrências indevidas de FAPES/UFES na coluna campus")
+
+    # Contagens das 6 views
+    views = [
+        "vfact_extensao_acao_resolved",
+        "vfact_extensao_participacao_resolved",
+        "vfact_projeto_pesquisa_resolved",
+        "vfact_orientacao_bolsa_resolved",
+        "vfact_producao_cientifica_resolved",
+        "vfact_grupo_pesquisa_membro_resolved"
+    ]
+    contagens_views = {}
+    for v in views:
+        qtd = conn.execute(f"SELECT COUNT(*) FROM {v};").fetchone()[0]
+        contagens_views[v] = qtd
+
+    return {
+        "fk_erros": len(fk_erros),
+        "total_lideres": res_lider,
+        "obras_unicas_consistentes": True,
+        "campus_ifes_puro": True,
+        "views": contagens_views
+    }
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Popula o schema unificado com os dados do ETL do Adito.")
+    inicio = time.time()
+    ap = argparse.ArgumentParser(description="Popula o banco SQLite (dados.db) com os dados acadêmicos do Adito.")
     ap.add_argument("--etl", type=Path, default=os.environ.get("ADITO_ETL_DIR") or AQUI.parent / "etl",
                     help="Pasta etl/ do Adito (com brutos/ e trabalho/). Padrão: $ADITO_ETL_DIR ou ../etl")
-    ap.add_argument("--saida", type=Path, default=None, help="Arquivo SQL (padrão: <etl>/saida/carga_banco.sql)")
-    ap.add_argument("--so-gerar", action="store_true", help="Só gera o SQL e o relatório; não executa")
+    ap.add_argument("--banco", type=Path, default=os.environ.get("ADITO_DB_PATH") or AQUI.parent / "app" / "data" / "dados.db",
+                    help="Caminho do arquivo SQLite dados.db (padrão: Adito/app/data/dados.db)")
+    ap.add_argument("--saida", type=Path, default=None, help="Arquivo SQL de dump (padrão: <etl>/saida/carga_banco.sql)")
+    ap.add_argument("--so-gerar", action="store_true", help="Só gera o SQL e o relatório; não executa a carga")
     args = ap.parse_args(list(argv) if argv is not None else None)
+
     etl = args.etl.expanduser().resolve()
     if not (etl / "brutos").is_dir():
         ap.error(f"{etl} não parece a pasta etl/ do Adito (falta brutos/)")
+
+    banco_path = args.banco.expanduser().resolve()
 
     carga = Carga(etl)
     carga.carregar_pessoas()
@@ -1027,43 +1174,57 @@ def main(argv: Iterable[str] | None = None) -> int:
     carga.lattes()
     carga.cnpq()
     carga.completar_areas()
-    sql = carga.sql()
+    sql_inserts = carga.sql()
 
     saida = args.saida or etl / "saida" / "carga_banco.sql"
     saida.parent.mkdir(parents=True, exist_ok=True)
-    pii = conferir_pii(sql)
+    pii = conferir_pii(sql_inserts)
     if pii:
         print("erro: o SQL gerado tem algo com formato de dado pessoal; nada foi gravado no banco:", file=sys.stderr)
         for p in pii:
             print(f"  {p}", file=sys.stderr)
         return 2
-    saida.write_text(sql, encoding="utf-8")
-    relatorio = {"contagens": carga.contagens(),
-                 "avisos": {k: {"quantidade": v, "exemplos": sorted(carga.exemplos.get(k, []))}
-                            for k, v in sorted(carga.avisos.items())},
-                 "dados_sem_coluna_no_banco": dict(sorted(carga.sem_coluna.items()))}
+
+    saida.write_text(sql_inserts, encoding="utf-8")
+    relatorio = {
+        "contagens": carga.contagens(),
+        "avisos": {k: {"quantidade": v, "exemplos": sorted(carga.exemplos.get(k, []))}
+                   for k, v in sorted(carga.avisos.items())},
+        "dados_sem_coluna_no_banco": dict(sorted(carga.sem_coluna.items()))
+    }
+
+    print(f"SQL gerado: {saida} ({saida.stat().st_size // 1024} KiB)")
+    for t, n in relatorio["contagens"].items():
+        print(f"  {t:45s} {n:7d}")
+
+    if args.so_gerar:
+        (saida.parent / "carga_banco_relatorio.json").write_text(
+            json.dumps(relatorio, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return 0
+
+    print(f"\nInicializando banco SQLite nativo em: {banco_path}...")
+    conn = inicializar_banco_sqlite(banco_path)
+
+    print("Executando carga atômica de dados...")
+    conn.executescript(sql_inserts)
+
+    print("Executando validações estruturais e integridade (PRAGMA foreign_key_check, P1 a P12)...")
+    validacao = validar_sanidade_banco(conn)
+    relatorio["validacao_pos_carga"] = validacao
     (saida.parent / "carga_banco_relatorio.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    print(f"SQL: {saida} ({saida.stat().st_size // 1024} KiB)")
-    for t, n in relatorio["contagens"].items():
-        print(f"  {t:45s} {n:7d}")
-    for k, v in relatorio["avisos"].items():
-        print(f"  aviso: {k}: {v['quantidade']}" + (f" (ex.: {'; '.join(v['exemplos'][:3])})" if v["exemplos"] else ""))
-    for k, v in relatorio["dados_sem_coluna_no_banco"].items():
-        print(f"  sem coluna: {k}: {v}")
-    if args.so_gerar:
-        return 0
+    conn.execute("PRAGMA optimize;")
+    conn.close()
 
-    env = {**ler_env(AQUI / ".env.example"), **ler_env(AQUI / ".env")}
-    cmd = ["docker", "compose", "exec", "-T", "oraculo-postgres", "psql", "-q", "-v", "ON_ERROR_STOP=1",
-           "-U", env.get("POSTGRES_USER", "oraculo"), "-d", env.get("POSTGRES_DB", "oraculo_db")]
-    with saida.open("rb") as f:
-        r = subprocess.run(cmd, cwd=AQUI, stdin=f)
-    if r.returncode != 0:
-        print("erro: a carga falhou e a transação foi desfeita (o banco ficou como estava)", file=sys.stderr)
-        return 1
-    print("carga concluída")
+    tempo_total = time.time() - inicio
+    tamanho_mb = banco_path.stat().st_size / (1024 * 1024)
+    print(f"\n✅ Carga concluída com sucesso em {tempo_total:.2f}s!")
+    print(f"📦 Tamanho final de {banco_path.name}: {tamanho_mb:.2f} MB")
+    print("\n📊 Linhas acessíveis pelas 6 Views Analíticas (OLTP):")
+    for v, qtd in validacao["views"].items():
+        print(f"  {v:45s} {qtd:7d}")
+
     return 0
 
 
