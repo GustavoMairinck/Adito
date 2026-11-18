@@ -1,3 +1,5 @@
+> **Nota:** documento de discovery da época em que o produto se chamava Adito (derivado do Oraculo-ESX). O nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # Discovery — Adito (painel do Campus Serra com oráculo local)
 
 **Status:** PROBLEM_READY (rev. 5 aprovada em 2026-11-12; rev. 6 aprovada em 2026-11-13)

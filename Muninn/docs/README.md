@@ -1,23 +1,23 @@
-# Oráculo desktop: decisões do porte
+# Muninn desktop: decisões do porte
 
-Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo desktop em Tauri, no Windows e no Linux. O código está em [../app/](../app/).
+Decisões tomadas para levar o Oraculo-ESX (web, em Docker) para um aplicativo desktop em Tauri, no Windows e no Linux. O código está em [../app/](../app/).
 
-- **[stories/](stories/)**: user stories no template do Oráculo, uma por decisão ou entrega.
+- **[stories/](stories/)**: user stories no template do Muninn, uma por decisão ou entrega.
 - **[PORTE_DESKTOP_DECISOES.md](PORTE_DESKTOP_DECISOES.md)**: registro completo, com datas, consequências, achados no código e o que não foi verificado.
 - **[NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md)**: como o app fala com o núcleo Python por stdin/stdout, sem servidor HTTP (2026-11-17).
 
-## Documentação da interface do Adito
+## Documentação da interface do Muninn
 
-- [Guia de identidade visual](design/Identidade-visual-Adito.md) com fontes,
+- [Guia de identidade visual](design/Identidade-visual-Muninn.md) com fontes,
   paletas, componentes e registro dos ajustes solicitados.
-- [Resultados da tarefa #48](resultados/issue-48-interface-adito.md) com a
+- [Resultados da tarefa #48](resultados/issue-48-interface-muninn.md) com a
   adaptação da interface, alterações do chat e validações realizadas.
 
 ## User stories
 
 | US | Título | Status |
 |---|---|---|
-| [US-001](stories/US-001_app-desktop-tauri.md) | Rodar o Oráculo como aplicativo desktop | Done |
+| [US-001](stories/US-001_app-desktop-tauri.md) | Rodar o Muninn como aplicativo desktop | Done |
 | [US-002](stories/US-002_sqlite-sem-docker.md) | Guardar tudo em SQLite, sem Postgres nem Redis | Done |
 | [US-003](stories/US-003_sem-login.md) | Abrir o app direto, sem login | Done |
 | [US-004](stories/US-004_chave-mistral.md) | Informar a minha própria chave da Mistral | Done |
@@ -34,11 +34,11 @@ Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo 
 | [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard e Explorar Dados por contexto | Backlog |
 | [US-016](stories/US-016_nucleo-local-sem-http.md) | Núcleo local sem servidor HTTP | In Review |
 
-## ETL do Adito (EPIC-07)
+## ETL do Muninn (EPIC-07)
 
 Extração de SRC, SigPesq, CNPq/DGP e Lattes e cruzamento por nome, em [../etl/](../etl/). Carga no banco unificado por [../scripts/popular_banco.py](../scripts/popular_banco.py).
 
-- **[discovery/adito.md](discovery/adito.md)** (rev. 4) e **[requirements/adito-etl.md](requirements/adito-etl.md)**.
+- **[discovery/muninn.md](discovery/muninn.md)** (rev. 4) e **[requirements/muninn-etl.md](requirements/muninn-etl.md)**.
 - **[product_backlog.md](product_backlog.md)**: stories US-ETL-01 a US-ETL-07 em [stories/](stories/).
 
 ## Decisões em uma linha

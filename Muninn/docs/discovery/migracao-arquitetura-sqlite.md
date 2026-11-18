@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # Discovery — Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)
 
 **Status:** PROBLEM_READY  

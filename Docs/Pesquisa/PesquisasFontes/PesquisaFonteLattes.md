@@ -66,7 +66,7 @@ A Plataforma Lattes resolve exclusivamente o perfil acadêmico e o histórico de
               
 **4\. Ficha de anotação** 
 
-| Dado | Seção no Lattes (HTML) | Campo no JSON | Vem sempre? | Serve ao oráculo? |
+| Dado | Seção no Lattes (HTML) | Campo no JSON | Vem sempre? | Serve ao Muninn? |
 | ----- | ----- | ----- | ----- | ----- |
 | ID Lattes | cabeçalho | `informacoes_pessoais.id_lattes` | Sim | chave de ligação |
 | Nome | cabeçalho | `nome_completo` | Sim | chave por nome/ principal de busca |

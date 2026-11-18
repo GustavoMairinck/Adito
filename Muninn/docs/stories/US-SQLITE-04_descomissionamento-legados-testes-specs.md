@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # User Story: [US-SQLITE-04] Descomissionamento de Legados, Atualização de Testes e Especificações Técnicas
 
 **Epic:** EPIC-08: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)  

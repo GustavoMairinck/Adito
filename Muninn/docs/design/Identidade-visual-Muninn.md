@@ -1,12 +1,12 @@
-# Identidade visual do Adito
+# Identidade visual do Muninn
 
 Guia de aplicação e registro das alterações • 11 de novembro de 2026
 
-O Adito reúne consultas e análises de pesquisa e extensão do IFES Campus Serra. Este guia registra a identidade aplicada à interface e orienta a continuidade do design pela equipe de desenvolvimento.
+O Muninn reúne consultas e análises de pesquisa e extensão do IFES Campus Serra. Este guia registra a identidade aplicada à interface e orienta a continuidade do design pela equipe de desenvolvimento.
 
 # **Direção visual**
 
-A composição usa verde-floresta, superfícies claras com tom de papel e bordas discretas. O nome Adito ganha presença no menu e na entrada do chat. A identificação Pesquisa e extensão e a referência ao Campus Serra situam o produto no contexto institucional.
+A composição usa verde-floresta, superfícies claras com tom de papel e bordas discretas. O nome Muninn ganha presença no menu e na entrada do chat. A identificação Pesquisa e extensão e a referência ao Campus Serra situam o produto no contexto institucional.
 
 A marca gráfica foi adaptada da imagem fornecida pela equipe, com círculo vermelho, peças verdes e barra horizontal em uma base arredondada. A versão clara usa fundo claro e borda sálvia. A escura usa fundo grafite e peças mais claras, acompanhando o tema selecionado.
 
@@ -64,7 +64,7 @@ O tema escuro usa fundos grafite e superfícies cinza para separar as áreas da 
 
 # **Organização do chat**
 
-A entrada apresenta Adito e o título Explore a pesquisa e a extensão do Campus Serra. Os cartões mantêm as cinco áreas disponíveis. Em telas a partir de 640 px, há três cartões na primeira linha e dois centralizados na segunda. Em telas menores, o arranjo usa duas colunas com a última opção centralizada.
+A entrada apresenta Muninn e o título Explore a pesquisa e a extensão do Campus Serra. Os cartões mantêm as cinco áreas disponíveis. Em telas a partir de 640 px, há três cartões na primeira linha e dois centralizados na segunda. Em telas menores, o arranjo usa duas colunas com a última opção centralizada.
 
 O campo de pergunta recebe cantos de 16 px e identificação acessível. O botão de envio possui nome acessível. Os cartões comunicam a seleção também por aria-pressed.
 
@@ -72,7 +72,7 @@ O campo de pergunta recebe cantos de 16 px e identificação acessível. O botã
 
 | Área | Alteração aplicada |
 | :---- | :---- |
-| Navegação | Logo fornecida pela equipe aplicada ao menu, cabeçalho móvel e chat. Troca automática entre as versões clara e escura, incluindo o ícone da aba. Nome Adito, rodapé IFES Campus Serra e item Meu painel. |
+| Navegação | Logo fornecida pela equipe aplicada ao menu, cabeçalho móvel e chat. Troca automática entre as versões clara e escura, incluindo o ícone da aba. Nome Muninn, rodapé IFES Campus Serra e item Meu painel. |
 | Chat | Nova apresentação da marca e título institucional. Cartões maiores, subtítulos mais legíveis, ícones com recipientes quadrados e seleção com borda e fundo. |
 | Áreas do chat | Opção Editais e Bolsas removida. Permanecem Pesquisa, Extensão, Grupos CNPq, Produção Lattes e Pesquisadores. |
 | Composição dos cartões | Centralização das linhas incompletas preservada, incluindo as duas opções inferiores no desktop. |
@@ -87,7 +87,7 @@ O campo de pergunta recebe cantos de 16 px e identificação acessível. O botã
 
 src/style.css centraliza os tokens de cores, superfícies, tipografia e componentes compartilhados. public/fonts/fonts.css declara as fontes locais. index.html carrega essa folha e define os metadados da aplicação.
 
-As telas ajustadas incluem SidebarNav.vue, ChatConversation.vue, ChatInputArea.vue, MeuDashboardView.vue e AdminView.vue. BrandIcon.vue compartilha a logo de public/brand/adito-light.png e adito-dark.png. As classes adito-wordmark e adito-topic definem a assinatura textual e os cartões do chat.
+As telas ajustadas incluem SidebarNav.vue, ChatConversation.vue, ChatInputArea.vue, MeuDashboardView.vue e AdminView.vue. BrandIcon.vue compartilha a logo de public/brand/muninn-light.png e muninn-dark.png. As classes muninn-wordmark e muninn-topic definem a assinatura textual e os cartões do chat.
 
 # **Continuidade do design**
 

@@ -1,4 +1,4 @@
-# Adito (Oraculo local do IFES)
+# Muninn (Muninn local do IFES)
 <img width="700" height="76" alt="image" src="https://github.com/user-attachments/assets/bb871070-f07e-4c9a-b2fd-0a4e2146bb01" />
 
 

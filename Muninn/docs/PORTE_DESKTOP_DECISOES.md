@@ -1,10 +1,10 @@
-# Porte do Oráculo-ESX para desktop: decisões e pendências
+# Porte do Oraculo-ESX (hoje Muninn) para desktop: decisões e pendências
 
 Compilado em 2026-11-03 a partir da conversa de planejamento e atualizado durante a implementação, até 2026-11-04. Os caminhos de arquivo são relativos a [`../app/`](../app/). As user stories em [`stories/`](stories/) resumem cada decisão.
 
-Objetivo: gerar o Oráculo-ESX como aplicativo desktop (Windows e Linux). O app não depende de nenhuma fonte de dados específica: os dados e as views serão fornecidos depois pelo usuário e não têm relação com SigPesq nem Horizon. Ordem de grandeza a suportar: cerca de 50 mil registros de alunos. (Versão anterior deste documento amarrava várias decisões ao SigPesq/Horizon; isso foi removido em 2026-11-03.)
+Objetivo: gerar o Oraculo-ESX como aplicativo desktop (Windows e Linux). O app não depende de nenhuma fonte de dados específica: os dados e as views serão fornecidos depois pelo usuário e não têm relação com SigPesq nem Horizon. Ordem de grandeza a suportar: cerca de 50 mil registros de alunos. (Versão anterior deste documento amarrava várias decisões ao SigPesq/Horizon; isso foi removido em 2026-11-03.)
 
-> **Atualização de 2026-11-17:** o backend deixou de ser um servidor web. Saíram Django, DRF, daphne, a porta em `127.0.0.1` e o token; o núcleo Python fala com o Tauri por stdin/stdout e usa o mesmo `app.db` sem ORM. As linhas "Casca" e "Processos" abaixo e as menções a Django, `daphne`, `X-Oraculo-Token` e `backend_info` neste documento são históricas. Ver [NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md) e [US-016](stories/US-016_nucleo-local-sem-http.md).
+> **Atualização de 2026-11-17:** o backend deixou de ser um servidor web. Saíram Django, DRF, daphne, a porta em `127.0.0.1` e o token; o núcleo Python fala com o Tauri por stdin/stdout e usa o mesmo `app.db` sem ORM. As linhas "Casca" e "Processos" abaixo e as menções a Django, `daphne`, `X-Muninn-Token` e `backend_info` neste documento são históricas. Ver [NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md) e [US-016](stories/US-016_nucleo-local-sem-http.md).
 
 ## 1. Decidido
 
@@ -52,7 +52,7 @@ Três caminhos levam dados do banco para a Mistral:
 
 | Caminho | Onde está | Controle |
 |---|---|---|
-| Linhas de resultado no histórico da conversa | Corrigido em 2026-11-03: `reflection.py` e `report.py` não estão ligados a nenhum grafo (código morto). O caminho vivo é a prévia de 5 linhas que `oraculo_mcp_server.py` põe no `final_content`; ela entra nas mensagens da conversa e volta ao LLM nas próximas perguntas | Views do contexto sem colunas sensíveis; prévia limitada; preferir agregados |
+| Linhas de resultado no histórico da conversa | Corrigido em 2026-11-03: `reflection.py` e `report.py` não estão ligados a nenhum grafo (código morto). O caminho vivo é a prévia de 5 linhas que `muninn_mcp_server.py` põe no `final_content`; ela entra nas mensagens da conversa e volta ao LLM nas próximas perguntas | Views do contexto sem colunas sensíveis; prévia limitada; preferir agregados |
 | Valores únicos embedados para resolver nomes | `analytics_index/services.py:104` e `analytics_index/config.py` | Embedar só campos não pessoais; nomes de pessoas resolvidos localmente no SQLite (FTS5 ou busca por prefixo) |
 | Pergunta do usuário, DDL e exemplos no prompt de geração de SQL | agente BI | Inevitável: avisar que nomes digitados na pergunta são enviados |
 
@@ -76,11 +76,11 @@ Regras:
 
 ### Consequências do MCP no mesmo processo
 
-- Só existe uma ferramenta MCP, a `bi_agent` (`backend/api/agents/oraculo_mcp_server.py:40`). Hoje o servidor escuta em `0.0.0.0:8005` sem autenticação; no desktop isso deixa de existir.
+- Só existe uma ferramenta MCP, a `bi_agent` (`backend/api/agents/muninn_mcp_server.py:40`). Hoje o servidor escuta em `0.0.0.0:8005` sem autenticação; no desktop isso deixa de existir.
 - Extrair o corpo da ferramenta para uma função ou `StructuredTool` local com o mesmo nome e descrição. O router (`agents/orchestrator/router.py:15`) e o nó de ferramenta (`agents/orchestrator/graph.py:37`) continuam funcionando sem mudar o contrato (retorno em JSON dentro de string).
 - O `.ask()` do agente é síncrono e hoje roda em outro processo. No mesmo processo bloquearia o loop assíncrono do streaming SSE; envolver com `asyncio.to_thread`.
 - Carregar a lista de ferramentas uma vez na inicialização. Hoje cada requisição abre um cliente MCP com timeout de 30 s e troca as globais `mcp_tools` (`backend/api/chat/stream_views.py:203-216`).
-- Remover: `fastmcp`, `mcp`, `langchain-mcp-adapters`, a porta 8005, o serviço `oraculo_esx_mcp`, `ORACULO_MCP_URL` e a duplicata de `mcp_client.py` (existe em `agents/orchestrator/` e em `agents/orchestrator/tools/`).
+- Remover: `fastmcp`, `mcp`, `langchain-mcp-adapters`, a porta 8005, o serviço `muninn_esx_mcp`, `MUNINN_MCP_URL` e a duplicata de `mcp_client.py` (existe em `agents/orchestrator/` e em `agents/orchestrator/tools/`).
 - O `CallbackHandler` do Langfuse criado dentro da ferramenta vira opcional, desligado por padrão.
 - Backend ASGI: `daphne` já está no `requirements.txt` e em `INSTALLED_APPS`. Subir em `127.0.0.1`, porta livre, com o token efêmero do Tauri. Tratado como decidido por ser consequência de "sem login".
 
@@ -104,7 +104,7 @@ Regras:
 ### Por que manter o tenant (fixo)
 
 - Cerca de 150 referências em 30 arquivos (RAG, conversas, dashboards, auditoria, `thread_id`).
-- Manter o modelo preserva compatibilidade com a versão web (`oraculo.agentes.leds.dev.br`) e deixa um caminho barato para multi-instituição (um arquivo por tenant).
+- Manter o modelo preserva compatibilidade com a versão web (`muninn.agentes.leds.dev.br`) e deixa um caminho barato para multi-instituição (um arquivo por tenant).
 - A única parte que não existe em SQLite é o schema; essa sai.
 
 ## 2. Decidido: vários contextos e várias views (modelo `Contexto` novo)
@@ -163,7 +163,7 @@ Rascunho do `views.json` de um contexto (a validar):
 |---|---|
 | Agente BI, LangGraph, sqlglot, prompts | Aproveitar, com `dialect="sqlite"` |
 | Conexão do agente ao banco (`psycopg2` em `agent.py` e `sql_validator.py`) | Adaptar: `sqlite3` só leitura no `dados.db` |
-| Servidor MCP separado (`oraculo_mcp_server.py`, porta 8005, `fastmcp`, `mcp`, `langchain-mcp-adapters`) | Descartar no desktop; a ferramenta `bi_agent` vira função local |
+| Servidor MCP separado (`muninn_mcp_server.py`, porta 8005, `fastmcp`, `mcp`, `langchain-mcp-adapters`) | Descartar no desktop; a ferramenta `bi_agent` vira função local |
 | Models e views Django | Adaptar: sem `VectorField`, SQL cru reescrito |
 | Front Vue | Aproveitar |
 | URL da API no front | Adaptar: `VITE_API_URL` é fixada no build; a porta agora é dinâmica |
@@ -185,8 +185,8 @@ Rascunho do `views.json` de um contexto (a validar):
    - **Status em 2026-11-03 (commitado):** feito e testado (`scripts/teste_nucleo_sqlite.py`, 48 verificações sem LLM). Modelo `Contexto` com FK em conversa, widget, RAG, auditoria e índice de valores; carga e validação de `views.json`/`rules.md`/`examples.json` (`core/contexts.py`, comando `load_context`); política, prompt, RAG e índice de valores por contexto; conversa nova exige contexto (ou usa o único ativo); `GET /api/contextos`; `db_schema_name`, a view fixa no agente e o bootstrap de vendas foram removidos. Contexto de exemplo em `contexts/exemplo-vendas/`.
    - **Ficou para depois:** os endpoints fixos do painel (`kpis`, `charts`, `projects`) continuam presos à view de vendas de demonstração e precisam do `filters.json` por contexto; `train.py` e `backend/training/` ficaram obsoletos (o RAG agora sai do contexto); `local_search_columns` (busca local com FTS5) ainda não existe; histórico ainda grava `data`; caminho com LLM real não testado.
 4. Casca Tauri e sidecar Python (PyInstaller ou Nuitka), porta dinâmica, CORS/CSP, loopback com token.
-   - **Status em 2026-11-03:** backend e front feitos e testados (`scripts/teste_nucleo_sqlite.py`, 58 verificações sem LLM, mais o front rodando no navegador contra o backend local até a chamada da Mistral). Casca Tauri em `src-tauri/` **compilada e rodando no Linux** (Rust 1.99.1, tauri-cli 2.12.4 via npm): o app sobe o backend numa porta livre, o front recebe URL e token por `backend_info`, o CORS do webview passa e `/api/me`, `/api/contextos` e `/api/chat/conversations` respondem 200. Dados do app em `~/.local/share/br.edu.ifes.leds.oraculo-esx/`, log do backend em `logs/backend.log`.
-     - Sem login: `core/local_auth.py` (usuário local fixo e token efêmero no header `X-Oraculo-Token`), `GET /api/me`; saíram JWT, cookie login, `simplejwt` e a tela de login. `SECRET_KEY` gerada por instalação, `DEBUG` desligado por padrão, `ALLOWED_HOSTS` só `127.0.0.1`/`localhost`.
+   - **Status em 2026-11-03:** backend e front feitos e testados (`scripts/teste_nucleo_sqlite.py`, 58 verificações sem LLM, mais o front rodando no navegador contra o backend local até a chamada da Mistral). Casca Tauri em `src-tauri/` **compilada e rodando no Linux** (Rust 1.99.1, tauri-cli 2.12.4 via npm): o app sobe o backend numa porta livre, o front recebe URL e token por `backend_info`, o CORS do webview passa e `/api/me`, `/api/contextos` e `/api/chat/conversations` respondem 200. Dados do app em `~/.local/share/br.edu.ifes.leds.muninn/`, log do backend em `logs/backend.log`.
+     - Sem login: `core/local_auth.py` (usuário local fixo e token efêmero no header `X-Muninn-Token`), `GET /api/me`; saíram JWT, cookie login, `simplejwt` e a tela de login. `SECRET_KEY` gerada por instalação, `DEBUG` desligado por padrão, `ALLOWED_HOSTS` só `127.0.0.1`/`localhost`.
      - MCP no mesmo processo: `agents/bi_agent/tool.py` (`StructuredTool` `bi_agent` com `asyncio.to_thread`); saíram o servidor MCP, o cliente MCP, `fastmcp`, `mcp` e `langchain-mcp-adapters`. Langfuse só liga se as chaves existirem.
      - Histórico guarda só o SQL; `GET /api/chat/messages/<id>/rows` reexecuta no `dados.db` (409 se o esquema mudou). O front carrega as linhas ao abrir a conversa.
      - Front: URL e token vêm do Tauri (`invoke('backend_info')`) ou do `.env` do Vite; hash router; seletor de contexto na conversa nova e contexto travado na existente; o widget fixado leva o contexto da conversa.
@@ -195,7 +195,7 @@ Rascunho do `views.json` de um contexto (a validar):
      `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`,
      instalar o Rust com o rustup, a CLI do Tauri já está em `frontend-vue` (`npx tauri`),
      `cargo tauri icon src-tauri/icons/icon.png` (gera os ícones), e para desenvolver: `npm --prefix frontend-vue run dev` num terminal e `cargo run` em `src-tauri/` noutro.
-   - **Ficou para depois:** chave da Mistral no cofre do SO e tela de configuração (hoje vem do ambiente); sidecar empacotado (`oraculo-backend` via PyInstaller ou Nuitka) no lugar do `.venv`; perguntas iniciais do chat ainda são de vendas; o CSP só foi exercitado no modo dev (front servido pelo Vite); falta testar com o front embutido (`tauri build`).
+   - **Ficou para depois:** chave da Mistral no cofre do SO e tela de configuração (hoje vem do ambiente); sidecar empacotado (`muninn-backend` via PyInstaller ou Nuitka) no lugar do `.venv`; perguntas iniciais do chat ainda são de vendas; o CSP só foi exercitado no modo dev (front servido pelo Vite); falta testar com o front embutido (`tauri build`).
 5. Empacotamento: NSIS/MSI no Windows e `.deb`/AppImage no Linux, assinatura de código no Windows (tem custo), updater do Tauri, backup do `.db` antes de cada migração, logs na pasta de logs do usuário, CI com matriz Windows e Linux.
 
 Também falta: gerar `DJANGO_SECRET_KEY` por instalação, forçar `DEBUG=false`, não criar superusuário padrão (o `.env.example` traz `admin`), trocar o card de status do Postgres/Redis por uma tela de diagnóstico e gerar o RAG (DDL, exemplos e índice de valores) quando o usuário carrega os dados, com a chave dele, e não no build, porque as views só chegam depois. Os exemplos atuais de vendas (cerca de 20 KB) são descartados.
@@ -207,7 +207,7 @@ Também falta: gerar `DJANGO_SECRET_KEY` por instalação, forçar `DEBUG=false`
 - Redis só serve de checkpointer do LangGraph (`backend/api/agents/orchestrator/graph.py:23`, `backend/api/agents/config.py:16`), com limpeza em `backend/api/core/management/commands/flush_data.py:107` e ping em `backend/api/dashboard/views.py:331`. Não existe cache de resultados; o campo `cache_ttl_hours` do `Widget` não é usado.
 - A view `vfactvendasresolved` está fixa em: `backend/api/agents/bi_agent/config.py:6`, `backend/api/agents/bi_agent/sql_security.py:37`, `backend/api/agents/config.py:35`, `backend/api/dashboard/views.py:17`, `backend/api/core/services/sales_bootstrap.py:39`. O `backend/api/analytics_index/config.py:5` já é um dicionário por view.
 - Backend sobe com `runserver 0.0.0.0:8001`; servidor MCP separado em `:8005`; `VITE_API_URL` é fixada no build (`frontend-vue/src/common/api/config.ts:7`); CORS lista só o domínio de produção e `localhost:5173` (`backend/api/bi_agent_api/settings.py:199`).
-- Todas as chamadas de LLM usam `ChatMistralAI` (`backend/api/agents/orchestrator/` e `oraculo_mcp_server.py`). As linhas de resultado (`data_rows`) vão no prompt de reflexão e de relatório (`orchestrator/nodes/reflection.py:48`, `orchestrator/nodes/report.py:38`).
+- Todas as chamadas de LLM usam `ChatMistralAI` (`backend/api/agents/orchestrator/` e `muninn_mcp_server.py`). As linhas de resultado (`data_rows`) vão no prompt de reflexão e de relatório (`orchestrator/nodes/reflection.py:48`, `orchestrator/nodes/report.py:38`).
 - O índice de valores faz `SELECT DISTINCT` dos campos de texto configurados (`backend/api/analytics_index/services.py:104`) e manda cada valor ao embedder da Mistral (`embed_texts`, linha 123). Se campos com nomes de pessoas forem configurados, esses nomes saem para a nuvem.
 - O cliente MCP é aberto por requisição em `backend/api/chat/stream_views.py:203` (timeout de 30 s para listar ferramentas), que grava as ferramentas nas globais `router.mcp_tools` e `graph_module.mcp_tools`. O servidor MCP expõe uma única ferramenta (`bi_agent`).
 - O histórico do chat grava as linhas de resultado completas em `Message.metadata["data"]` (`backend/api/chat/stream_views.py:84-102`), junto com o SQL, a explicação e as sugestões.

@@ -1,11 +1,11 @@
-# Product Backlog — Adito
+# Product Backlog — Muninn
 
-Backlog do Adito no monorepo. As stories do porte desktop (US-001 a US-015) estão indexadas em [README.md](README.md); aqui fica o que veio depois do Discovery rev. 4.
+Backlog do Muninn no monorepo. As stories do porte desktop (US-001 a US-015) estão indexadas em [README.md](README.md); aqui fica o que veio depois do Discovery rev. 4.
 
 ## Epics
 
-### EPIC-07: ETL do Adito
-Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por nome normalizado em `Adito/etl/`. Origem: `docs/discovery/adito.md` (rev. 4 e rev. 5) e `docs/requirements/adito-etl.md` (rev. 1 e rev. 2).
+### EPIC-07: ETL do Muninn
+Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por nome normalizado em `Muninn/etl/`. Origem: `docs/discovery/muninn.md` (rev. 4 e rev. 5) e `docs/requirements/muninn-etl.md` (rev. 1 e rev. 2).
 - **Stories**: US-ETL-01 a US-ETL-07 (US-ETL-08 e US-ADITO-DUCKDB-01 substituídas pelo EPIC-08).
 
 ### EPIC-08: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)
@@ -16,7 +16,7 @@ Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada an
 
 ## User Stories Priorizadas
 
-### 🗂️ EPIC-07 — ETL do Adito (aprovado em 10/11/2026)
+### 🗂️ EPIC-07 — ETL do Muninn (aprovado em 10/11/2026)
 
 | ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
 |----|--------|------|------------------|------------|------------|------------|--------|

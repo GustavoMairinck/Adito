@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # Task Breakdown: [US-SQLITE-03] Adaptação do Backend Núcleo para SQLite (Datastore Somente-Leitura, Authorizer, Custom LIKE e Transpilação)
 
 **Data:** 18/11/2026  

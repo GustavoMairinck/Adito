@@ -3,7 +3,7 @@
 **Status:** Aprovado  
 **Data da Revisão Final:** 18/11/2026  
 **Fonte Original:** `Docs/ModelosClasses/ModeloClassesUnificado.asta` (Diagrama `ModeloCore_SRC_DGP_SIGPESQ_LATTES`)  
-**Banco Alvo:** SQLite 3 nativo (`Adito/app/data/dados.db`), 100% OLTP como Single Source of Truth
+**Banco Alvo:** SQLite 3 nativo (`Muninn/app/data/dados.db`), 100% OLTP como Single Source of Truth
 
 ---
 

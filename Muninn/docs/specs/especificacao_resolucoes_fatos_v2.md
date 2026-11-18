@@ -10,7 +10,7 @@
 
 ## 1. Conceito, Funcionamento e Modelo Dimensional (100% SQLite)
 
-O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expor ~85 tabelas normalizadas (3FN) ou misturar tudo em uma única tabela esparsa, o sistema materializa **6 visões/tabelas analíticas desnormalizadas**, cada uma representando um **evento de negócio** e um **grão** (o que significa exatamente **1 linha**):
+O Muninn adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expor ~85 tabelas normalizadas (3FN) ou misturar tudo em uma única tabela esparsa, o sistema materializa **6 visões/tabelas analíticas desnormalizadas**, cada uma representando um **evento de negócio** e um **grão** (o que significa exatamente **1 linha**):
 
 | Tabela Fato (`vfact_*_resolved`) | Fonte Principal | Grão (1 linha =) | Papel Analítico |
 | :--- | :--- | :--- | :--- |
@@ -22,9 +22,9 @@ O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expo
 | **`vfact_grupo_pesquisa_membro_resolved`** | CNPq DGP | 1 vínculo de membro em grupo (`id_membro_grupo`) | Grupos certificados, membros ativos/egressos, papéis e titulação |
 
 ### O que muda com a ADR-0001 (PostgreSQL + JSON + DuckDB → 100% SQLite `dados.db`)
-- **Pipeline simplificado:** elimina Docker/PostgreSQL, `recriar_banco.sh`, `psql`, `exportar_json.py` e `gerar_duckdb.py`. Um script Python único com `sqlite3` gera diretamente `Adito/app/data/dados.db` a partir dos dados do `Adito/etl/`.
+- **Pipeline simplificado:** elimina Docker/PostgreSQL, `recriar_banco.sh`, `psql`, `exportar_json.py` e `gerar_duckdb.py`. Um script Python único com `sqlite3` gera diretamente `Muninn/app/data/dados.db` a partir dos dados do `Muninn/etl/`.
 - **Fim do gargalo de exportação de 41 tabelas:** como todo o modelo unificado e as 6 fatos passam a residir diretamente dentro do mesmo `dados.db`, tabelas como `lideranca_grupo_pesquisa` já ficam acessíveis na geração das fatos sem depender de etapa intermediária de JSON.
-- **Mudança obrigatória de dialeto SQL:** todas as queries das 6 fatos, o validador `sql_security.py` e o contexto do Oráculo (`rules.md` / `examples.json`) passam a operar em **SQLite** (sem `unificado.`, sem `::TYPE`, sem `EXTRACT`, sem `ILIKE`, usando `julianday()` para diferença de dias, `strftime()` para datas, `GROUP_CONCAT()` e `MIN()`/`MAX()`).
+- **Mudança obrigatória de dialeto SQL:** todas as queries das 6 fatos, o validador `sql_security.py` e o contexto do Muninn (`rules.md` / `examples.json`) passam a operar em **SQLite** (sem `unificado.`, sem `::TYPE`, sem `EXTRACT`, sem `ILIKE`, usando `julianday()` para diferença de dias, `strftime()` para datas, `GROUP_CONCAT()` e `MIN()`/`MAX()`).
 
 ---
 
@@ -33,7 +33,7 @@ O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expo
 ### Problema 1 — Vínculo de `campus` distorcido nas Produções Científicas do Lattes
 - **Escopo exato do problema:**
   - Ocorre especificamente nas **Produções Científicas do Lattes** (`vfact_producao_cientifica_resolved` — artigos, livros, produções técnicas), e **não** nos projetos do Lattes (`projeto_lattes` nem participa das 6 fatos).
-  - Como uma publicação no Lattes não traz campus próprio, a view herda `pesquisador.id_organizacao`. Quando o pesquisador **não** recebeu campus prévio do SigPesq, a carga em [popular_banco.py](../../Adito/scripts/popular_banco.py) pega a **1ª atuação marcada como `"Atual"`** no currículo Lattes — que pode ser outra universidade (`UFES`) ou até uma **agência de fomento (`FAPES`)**.
+  - Como uma publicação no Lattes não traz campus próprio, a view herda `pesquisador.id_organizacao`. Quando o pesquisador **não** recebeu campus prévio do SigPesq, a carga em [popular_banco.py](../../Muninn/scripts/popular_banco.py) pega a **1ª atuação marcada como `"Atual"`** no currículo Lattes — que pode ser outra universidade (`UFES`) ou até uma **agência de fomento (`FAPES`)**.
 - **Evidência nos dados reais (`1.220` linhas):** `421` produções saem como `campus = 'Universidade Federal do Espírito Santo'` e `247` como `'Fundação de Amparo à Pesquisa e Inovação do Espírito Santo'` (`54,8%` da tabela), misturando campi do IFES (`Serra`, `Vitória`), universidade externa e agência de fomento na mesma coluna.
 - **Solução lógica:**
   1. **Hierarquia de vínculo institucional na carga SQLite:** priorizar sempre um **Campus do IFES** (vindo do SigPesq, do CNPq ou de atuação no IFES dentro do Lattes) antes de aceitar instituições externas, e **nunca** promover agência de fomento (`FAPES`, `CNPq`) a organização de lotação.
@@ -128,12 +128,12 @@ O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expo
 ## 4. Decisão sobre as ~85 Tabelas na Arquitetura 100% SQLite (`dados.db`)
 
 - **No banco `dados.db`:** o script Python único cria e popula o schema relacional necessário diretamente com `sqlite3` (sem Docker/Postgres/JSON intermediário) e materializa/expõe as **6 fatos (`vfact_*_resolved`)**.
-- **Para o Oráculo (`ReadPolicy` + `views.json`):** o agente e o Explorador continuam acessando **exclusivamente as 6 fatos** (nunca as ~85 tabelas 3FN cruas), mantendo baixo risco de alucinação de SQL, proteção LGPD (`email`/`telefone`/`fax` ausentes) e latência < 10 ms em SQLite.
+- **Para o Muninn (`ReadPolicy` + `views.json`):** o agente e o Explorador continuam acessando **exclusivamente as 6 fatos** (nunca as ~85 tabelas 3FN cruas), mantendo baixo risco de alucinação de SQL, proteção LGPD (`email`/`telefone`/`fax` ausentes) e latência < 10 ms em SQLite.
 
 ---
 
 ## 5. Ordem Recomendada de Aplicação (Alinhada à ADR-0001)
 
 1. **DDL & Domínios SQLite:** definir schema SQLite equivalente sem `ENUM`s fechados incompletos (`pivic`, `pibic_em`, `jtc`, `picti`, `'EXCLUIDO'`, etc.) e `patente_registro.id_instituicao_depositante` anulável.
-2. **Gerador Python Único (`sqlite3` → `Adito/app/data/dados.db`):** preservar campus IFES no pesquisador (P1), gravar patentes (P5), mapear `'EXCLUIDO'` (P3) e materializar/criar as 6 fatos da [PropostaFatosV2.md](PropostaFatosV2.md).
+2. **Gerador Python Único (`sqlite3` → `Muninn/app/data/dados.db`):** preservar campus IFES no pesquisador (P1), gravar patentes (P5), mapear `'EXCLUIDO'` (P3) e materializar/criar as 6 fatos da [PropostaFatosV2.md](PropostaFatosV2.md).
 3. **Backend, Contexto e Testes (`datastore.py`, `sql_security.py`, `pesquisa-extensao-ifes/`, `core/tests.py`):** apontar leitura `read-only` para `dados.db`, dialeto `sqlite`, atualizar `views.json`/`rules.md`/`examples.json` e validar `manage.py test core` sem travas fixas.

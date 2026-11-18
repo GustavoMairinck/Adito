@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # User Story: [US-SQLITE-01] Modelagem DDL em SQLite (42 Tabelas Base 3FN e 6 Fatos Analíticas v2.0)
 
 **Epic:** EPIC-08: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)  

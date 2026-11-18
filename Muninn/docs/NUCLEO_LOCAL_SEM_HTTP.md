@@ -4,8 +4,8 @@ Registrado em 2026-11-17 ([US-016](stories/US-016_nucleo-local-sem-http.md)). Es
 
 ## Resumo
 
-- **O que saiu:** o servidor web local. Isso inclui Django, Django REST Framework, daphne, CORS, whitenoise, a porta em `127.0.0.1` e o token `X-Oraculo-Token`.
-- **O que entrou:** o Python (agente, contextos, DuckDB, `app.db`) continua, agora como um processo filho que conversa com a janela por stdin/stdout. O Adito é um app desktop; não precisa de servidor.
+- **O que saiu:** o servidor web local. Isso inclui Django, Django REST Framework, daphne, CORS, whitenoise, a porta em `127.0.0.1` e o token `X-Muninn-Token`.
+- **O que entrou:** o Python (agente, contextos, DuckDB, `app.db`) continua, agora como um processo filho que conversa com a janela por stdin/stdout. O Muninn é um app desktop; não precisa de servidor.
 - **O que não mudou:** as telas recebem exatamente as mesmas respostas. O teste de contrato prova isso em 51 chamadas. O `app.db` de instalações antigas abre sem migração de dados.
 
 ## Lista de mudanças
@@ -111,7 +111,7 @@ Rotas que o front não usava saíram sem substituto:
 ## Como rodar e testar
 
 - **App em desenvolvimento:** `./rodar_desktop.sh`, na raiz do repositório.
-- **Testes**, a partir de `Adito/app`; nenhum usa rede nem chave:
+- **Testes**, a partir de `Muninn/app`; nenhum usa rede nem chave:
   - `.venv/bin/python scripts/teste_contrato.py` compara as respostas com a referência gravada no Django;
   - `.venv/bin/python scripts/teste_stdio.py` testa o processo real e o protocolo;
   - `cd backend/nucleo && ../../.venv/bin/python -m unittest core.tests` roda os testes do núcleo.
@@ -144,6 +144,6 @@ Dois ganhos explicam esses tempos:
 
 Além disso, o grafo do orquestrador e o checkpointer são abertos uma vez por processo. Widgets e histórico reexecutam o SQL sem instanciar o LLM. O tempo até o primeiro token do chat não foi medido, porque exige a chave e a rede.
 
-**O `dados.duckdb` fica aberto.** O núcleo mantém o arquivo aberto, só para leitura, com as mesmas travas de antes: sem acesso a arquivos externos e sem `SET`. O banco é reaberto quando o arquivo é trocado e solto depois de 60 s sem uso; o tempo é ajustável com `ADITO_DUCKDB_IDLE_CLOSE_S`.
+**O `dados.duckdb` fica aberto.** O núcleo mantém o arquivo aberto, só para leitura, com as mesmas travas de antes: sem acesso a arquivos externos e sem `SET`. O banco é reaberto quando o arquivo é trocado e solto depois de 60 s sem uso; o tempo é ajustável com `MUNINN_DUCKDB_IDLE_CLOSE_S`.
 - **Linux:** rodar o `gerar_duckdb.py` com o app aberto funciona; a consulta seguinte já lê o banco novo.
 - **Windows:** um arquivo aberto não pode ser apagado. Feche o app ou espere 60 s sem usar o Explorar e o Dashboard antes de regerar o banco.

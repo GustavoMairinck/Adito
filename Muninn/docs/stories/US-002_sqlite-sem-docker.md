@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito (e, antes, Oraculo-ESX) na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # User Story: [US-002] Guardar tudo em SQLite, sem Postgres nem Redis
 
 **Epic:** Porte do Oráculo-ESX para desktop

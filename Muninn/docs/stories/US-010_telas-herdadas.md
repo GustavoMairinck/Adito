@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito (e, antes, Oraculo-ESX) na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # User Story: [US-010] Tirar do app as telas que só faziam sentido na web
 
 **Epic:** Porte do Oráculo-ESX para desktop

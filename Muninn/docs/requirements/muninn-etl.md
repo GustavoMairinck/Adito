@@ -1,13 +1,13 @@
-# Requirements — ETL e Banco Analítico DuckDB OLAP do Adito
+# Requirements — ETL e Banco Analítico DuckDB OLAP do Muninn
 
 **Status:** REQUIREMENTS_READY (rev. 1 aprovada em 2026-11-10; rev. 2 aprovada em 2026-11-12; rev. 3 aprovada em 2026-11-13)
-**Discovery de origem:** `docs/discovery/adito.md` (rev. 4, rev. 5 e rev. 6, PROBLEM_READY)
+**Discovery de origem:** `docs/discovery/muninn.md` (rev. 4, rev. 5 e rev. 6, PROBLEM_READY)
 **Classificacao de Processo:** NORMAL PROCESS
-**Recorte:** o ETL em `etl/` (fases de extração e cruzamento), a exportação JSON de 41 tabelas (`Adito/scripts/exportar_json.py`) e a geração do banco analítico DuckDB OLAP (`Adito/scripts/gerar_duckdb.py` com as 6 tabelas fato materializadas `vfact_*_resolved`) + adaptação do `Adito/app/backend/` para DuckDB e contexto `pesquisa-extensao-ifes`.
+**Recorte:** o ETL em `etl/` (fases de extração e cruzamento), a exportação JSON de 41 tabelas (`Muninn/scripts/exportar_json.py`) e a geração do banco analítico DuckDB OLAP (`Muninn/scripts/gerar_duckdb.py` com as 6 tabelas fato materializadas `vfact_*_resolved`) + adaptação do `Muninn/app/backend/` para DuckDB e contexto `pesquisa-extensao-ifes`.
 
 ## Intent Summary
 
-A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o bruto sem banco nem servidor, depois um script que liga as pessoas entre as quatro bases pelo nome normalizado, popula o banco PostgreSQL `unificado` (`Adito/scripts/popular_banco.py`) e executa `Adito/scripts/exportar_json.py` para tirar uma fotografia consistente (somente leitura) das 41 tabelas necessárias às 6 views analíticas (`vfact_*_resolved`) em arquivos JSON acompanhados de um `manifesto.json` de schema. Em seguida, `Adito/scripts/gerar_duckdb.py` compila essa fotografia no banco colunar embutido `Adito/app/data/dados.duckdb` com as 6 tabelas fato materializadas para alimentar o backend analítico do Adito. Em nenhum arquivo do ETL, da exportação ou do DuckDB aparece dado pessoal além do nome (e endereços profissionais/de grupo autorizados).
+A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o bruto sem banco nem servidor, depois um script que liga as pessoas entre as quatro bases pelo nome normalizado, popula o banco PostgreSQL `unificado` (`Muninn/scripts/popular_banco.py`) e executa `Muninn/scripts/exportar_json.py` para tirar uma fotografia consistente (somente leitura) das 41 tabelas necessárias às 6 views analíticas (`vfact_*_resolved`) em arquivos JSON acompanhados de um `manifesto.json` de schema. Em seguida, `Muninn/scripts/gerar_duckdb.py` compila essa fotografia no banco colunar embutido `Muninn/app/data/dados.duckdb` com as 6 tabelas fato materializadas para alimentar o backend analítico do Muninn. Em nenhum arquivo do ETL, da exportação ou do DuckDB aparece dado pessoal além do nome (e endereços profissionais/de grupo autorizados).
 
 ## Functional Requirements
 
@@ -32,21 +32,21 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 - **FR12** — O cruzamento grava as ligações que não são de pessoa: grupo SigPesq ↔ CNPq pelo id de 16 dígitos do espelho e orientação SigPesq ↔ Lattes por título normalizado + orientador normalizado.
 - **FR13** — O cruzamento gera `etl/trabalho/relatorio_cruzamento.md` com: pessoas por fonte, pares ligados por par de fontes, nomes sem par em cada fonte e nomes ambíguos não ligados (com as ocorrências de cada um).
 
-### Exportação JSON de Fatos (`Adito/scripts/exportar_json.py` — rev. 2)
-- **FR14** — O script `Adito/scripts/exportar_json.py` fornece interface CLI (`argparse`, `--help` em português) com as opções `--saida <pasta>` (padrão `Adito/etl/saida/json/`), `--modo docker|conexao` (padrão `docker`), `--servico <nome>`, `--banco <nome>` e `--usuario <nome>` (lidos por padrão de `Adito/scripts/docker-compose.yml` e `.env`/`.env.example`), `--tabelas a,b,c` (subconjunto da lista oficial), `--forcar` (sobrescreve pasta com JSONs existentes) e `--so-validar <pasta>` (executa apenas a validação pós-exportação sobre uma pasta existente, sem conectar ao banco).
+### Exportação JSON de Fatos (`Muninn/scripts/exportar_json.py` — rev. 2)
+- **FR14** — O script `Muninn/scripts/exportar_json.py` fornece interface CLI (`argparse`, `--help` em português) com as opções `--saida <pasta>` (padrão `Muninn/etl/saida/json/`), `--modo docker|conexao` (padrão `docker`), `--servico <nome>`, `--banco <nome>` e `--usuario <nome>` (lidos por padrão de `Muninn/scripts/docker-compose.yml` e `.env`/`.env.example`), `--tabelas a,b,c` (subconjunto da lista oficial), `--forcar` (sobrescreve pasta com JSONs existentes) e `--so-validar <pasta>` (executa apenas a validação pós-exportação sobre uma pasta existente, sem conectar ao banco).
 - **FR15** — Antes de exportar, o script confere que todas as tabelas solicitadas existem no schema `unificado` e que o banco não está vazio; se faltar tabela ou o banco estiver vazio, aborta com mensagem clara sem criar nem popular nada.
 - **FR16** — Toda a leitura do banco ocorre em uma única sessão do `psql` dentro de `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;` encerrada com `ROLLBACK;`, garantindo fotografia consistente no mesmo instante e bloqueando qualquer escrita.
 - **FR17** — Para cada tabela exportada, o PostgreSQL gera o JSON (`coalesce(json_agg(t ORDER BY <ordem>), '[]'::json)`) sem corrupção por escape de texto, ordenado pela chave primária descoberta no catálogo (`pg_index`) ou por todas as colunas na ordem da tabela quando não houver PK. Cada tabela é gravada em `<saida>/<tabela>.json` (UTF-8, lista de objetos, escrita atômica via arquivo temporário + rename) e validada imediatamente com `json.loads`.
 - **FR18** — O script consulta `pg_catalog` (`pg_attribute`, `format_type`, `pg_index`, `pg_constraint`, `pg_enum`) e `SHOW server_version;` e grava `<saida>/manifesto.json` contendo `gerado_em` (ISO 8601 UTC), `commit` atual do git, `proposta` (`arquivo` e `commit`), `postgres` e, por tabela exportada, `linhas`, `colunas` (`nome`, `tipo` exato, `anulavel`, `valores_enum` opcional), `chave_primaria` e `chaves_estrangeiras` (`coluna`, `referencia` e `destino_exportado`).
-- **FR19** — Após gravar os arquivos, o script varre todos os JSONs gerados procurando padrões de CPF e e-mail (mesma regra de `popular_banco.py` / `adito_etl.pii`); se encontrar qualquer ocorrência, apaga os arquivos gerados e aborta informando apenas tabela e coluna (nunca o valor encontrado).
+- **FR19** — Após gravar os arquivos, o script varre todos os JSONs gerados procurando padrões de CPF e e-mail (mesma regra de `popular_banco.py` / `muninn_etl.pii`); se encontrar qualquer ocorrência, apaga os arquivos gerados e aborta informando apenas tabela e coluna (nunca o valor encontrado).
 - **FR20** — No final da exportação (e quando chamado com `--so-validar <pasta>`), o script executa a validação completa: (a) todo `<tabela>.json` listado no manifesto existe, é JSON válido, é uma lista e tem exatamente `linhas` itens; (b) as chaves de cada objeto batem com os nomes das colunas do manifesto na mesma ordem; (c) integridade referencial para toda FK com `destino_exportado: true` (todo valor não nulo existe na coluna referenciada do arquivo de destino); (d) lista no resumo as FKs com `destino_exportado: false` e imprime resumo por tabela (linhas, colunas, tamanho em bytes e FKs verificadas).
 
-### Banco Analítico DuckDB OLAP e Adaptação do Adito (rev. 3)
-- **FR21** — O script `Adito/scripts/gerar_duckdb.py` lê `Adito/etl/saida/json/manifesto.json` e os 41 arquivos `<tabela>.json`, cria o arquivo `Adito/app/data/dados.duckdb` (ou caminho configurado via `--saida` / `ORACULO_DADOS_DB`) de forma idempotente, carrega as 41 tabelas no schema `unificado` com os tipos mapeados do `manifesto.json` e valida a contagem de linhas de cada tabela.
+### Banco Analítico DuckDB OLAP e Adaptação do Muninn (rev. 3)
+- **FR21** — O script `Muninn/scripts/gerar_duckdb.py` lê `Muninn/etl/saida/json/manifesto.json` e os 41 arquivos `<tabela>.json`, cria o arquivo `Muninn/app/data/dados.duckdb` (ou caminho configurado via `--saida` / `MUNINN_DADOS_DB`) de forma idempotente, carrega as 41 tabelas no schema `unificado` com os tipos mapeados do `manifesto.json` e valida a contagem de linhas de cada tabela.
 - **FR22** — O `gerar_duckdb.py` executa os 6 SQLs de `Docs/Fatos/PropostaFatos.md` e **materializa as 6 tabelas fato (`CREATE TABLE main.vfact_*_resolved AS SELECT ...`)** em formato colunar no schema `main` do DuckDB (além de views equivalentes em `unificado.vfact_*_resolved`), validando ao final as contagens exatas (`vfact_extensao_acao_resolved=207`, `vfact_extensao_participacao_resolved=6741`, `vfact_projeto_pesquisa_resolved=236`, `vfact_orientacao_bolsa_resolved=1203`, `vfact_producao_cientifica_resolved=1232`, `vfact_grupo_pesquisa_membro_resolved=553`).
-- **FR23** — A camada analítica de `Adito/app/backend/` (`core/datastore.py`, `core/contexts.py`, `analytics_index/services.py` e `dashboard/views.py`) conecta ao `dados.duckdb` em modo somente-leitura (`read_only=True`) com defesa em profundidade nativa (`enable_external_access=False` e `lock_configuration=True`), mantendo `app.db` em SQLite para o Django e o checkpointer do LangGraph, e provendo compatibilidade de linhas/dicionários e introspecção de colunas (`view_columns`) no DuckDB.
+- **FR23** — A camada analítica de `Muninn/app/backend/` (`core/datastore.py`, `core/contexts.py`, `analytics_index/services.py` e `dashboard/views.py`) conecta ao `dados.duckdb` em modo somente-leitura (`read_only=True`) com defesa em profundidade nativa (`enable_external_access=False` e `lock_configuration=True`), mantendo `app.db` em SQLite para o Django e o checkpointer do LangGraph, e provendo compatibilidade de linhas/dicionários e introspecção de colunas (`view_columns`) no DuckDB.
 - **FR24** — O validador de segurança SQL (`agents/bi_agent/sql_security.py`, `agent.py`, `graph.py`, `tool.py`, `nodes/sql_validator.py`) opera no dialeto `duckdb` (`sqlglot`), permitindo apenas consultas `SELECT` sobre as 6 tabelas fato declaradas em `allowed_tables`, bloqueando comandos de escrita/sistema (`COPY`, `ATTACH`, `DETACH`, `INSTALL`, `LOAD`, `PRAGMA`, `SET`, `CALL`, `EXPORT`, `IMPORT`), funções de leitura de arquivos externos (`read_csv*`, `read_parquet*`, `read_json*`, `parquet_scan`, `iceberg_scan`, `delta_scan`) e referências às `sensitive_columns` (`*cpf*`, `*email*`).
-- **FR25** — O contexto `Adito/app/contexts/pesquisa-extensao-ifes/` é criado com `views.json` (6 tabelas fato, `sensitive_columns`, `embed_columns`, `local_search_columns`, `llm_row_limit: 50`), `rules.md` (regras de grão N:N, `COUNT(DISTINCT ...)`, orçamento vs. bolsa, códigos `'NI'`) e `examples.json` (exemplos pergunta → SQL DuckDB sem nomes reais de pessoas), enquanto `Adito/app/contexts/exemplo-vendas/views.json` permanece desativado (`"ativo": false`, suportado por `load_context_dir`).
+- **FR25** — O contexto `Muninn/app/contexts/pesquisa-extensao-ifes/` é criado com `views.json` (6 tabelas fato, `sensitive_columns`, `embed_columns`, `local_search_columns`, `llm_row_limit: 50`), `rules.md` (regras de grão N:N, `COUNT(DISTINCT ...)`, orçamento vs. bolsa, códigos `'NI'`) e `examples.json` (exemplos pergunta → SQL DuckDB sem nomes reais de pessoas), enquanto `Muninn/app/contexts/exemplo-vendas/views.json` permanece desativado (`"ativo": false`, suportado por `load_context_dir`).
 
 ## Business / Domain Rules
 
@@ -66,18 +66,18 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 
 ## Non-Functional Requirements
 
-- **NFR01** — Sem banco, Prefect, Supabase, `research-domain`/`eo_lib`, Telegram ou LLM em nenhuma fase de extração e cruzamento. *(Rev. 2026-11-11: o Infisical volta como origem das credenciais, ver NFR02; a carga no banco unificado é feita por `Adito/scripts/popular_banco.py`, fora do ETL.)*
-- **NFR02** — As credenciais (SRC e SigPesq) vêm do Infisical (`ADITO_CREDENCIAIS=infisical`, mesma identidade de máquina do horizon_etl) ou do `etl/.env` (`ADITO_CREDENCIAIS=env`), escolha explícita; a configuração fica em `etl/.env`, fora do git, e nenhum valor aparece em log nem em arquivo gerado. *(Rev. 2026-11-11, pedido do usuário.)*
+- **NFR01** — Sem banco, Prefect, Supabase, `research-domain`/`eo_lib`, Telegram ou LLM em nenhuma fase de extração e cruzamento. *(Rev. 2026-11-11: o Infisical volta como origem das credenciais, ver NFR02; a carga no banco unificado é feita por `Muninn/scripts/popular_banco.py`, fora do ETL.)*
+- **NFR02** — As credenciais (SRC e SigPesq) vêm do Infisical (`MUNINN_CREDENCIAIS=infisical`, mesma identidade de máquina do horizon_etl) ou do `etl/.env` (`MUNINN_CREDENCIAIS=env`), escolha explícita; a configuração fica em `etl/.env`, fora do git, e nenhum valor aparece em log nem em arquivo gerado. *(Rev. 2026-11-11, pedido do usuário.)*
 - **NFR03** — O `etl/` tem `pyproject.toml` e ambiente Python próprios, separados do sidecar do app. Dependências a aprovar: Playwright, httpx, beautifulsoup4, pydantic, `sigpesq-agent`, `dgp-cnpq-lib`, `scriptLattes` (e o que estas exigirem, como selenium e openpyxl).
 - **NFR04** — A coleta autenticada no SRC é sequencial numa única sessão (o SRC aceita uma sessão por usuário). As requisições se identificam por user-agent, e erros de limite (429) esperam antes de tentar de novo.
 - **NFR05** — Rodar a mesma extração duas vezes sobre a mesma fonte dá o mesmo bruto, salvo mudança na própria fonte. O cruzamento é determinístico para os mesmos brutos.
 - **NFR06** — Há testes automatizados para: a normalização de nomes (BR02); a regra de ambíguos (BR03); e o filtro de dado pessoal (BR01), que falha se aparecer CPF ou e-mail em qualquer arquivo de `etl/brutos/` ou `etl/trabalho/`.
-- **NFR07** *(rev. 2)* — `Adito/scripts/exportar_json.py` utiliza **exclusivamente a biblioteca padrão do Python** (Python 3.10+) e o binário `psql` (no container Docker ou local via variáveis da `libpq`), sem adicionar pacotes externos (`psycopg`, `duckdb`, etc.) e sem gravar senhas em código, README ou logs.
+- **NFR07** *(rev. 2)* — `Muninn/scripts/exportar_json.py` utiliza **exclusivamente a biblioteca padrão do Python** (Python 3.10+) e o binário `psql` (no container Docker ou local via variáveis da `libpq`), sem adicionar pacotes externos (`psycopg`, `duckdb`, etc.) e sem gravar senhas em código, README ou logs.
 - **NFR08** *(rev. 2)* — A exportação JSON é determinística: duas execuções consecutivas sobre o mesmo banco produzem arquivos `<tabela>.json` idênticos byte a byte (variando apenas o campo `gerado_em` no `manifesto.json`).
-- **NFR09** *(rev. 2)* — Há testes unitários em `Adito/etl/tests/test_exportar_json.py` (rodando sem depender de Docker, apenas com dados sintéticos como `"Maria Exemplo"`, nunca nomes reais do banco) cobrindo: geração do SQL com ordem por PK e por todas as colunas quando sem PK; recusa de tabela fora da constante de 41 tabelas; ausência de comandos SQL de escrita no código-fonte de `exportar_json.py`; recusa de pasta não ignorada pelo git; detecção de CPF e e-mail nos JSONs gerados; e `--so-validar` (aceita conjunto coerente e rejeita contagem divergente, coluna faltando/fora de ordem e FK quebrada).
-- **NFR10** *(rev. 2)* — `Adito/scripts/README.md` inclui a seção `"Exportar JSON para o DuckDB"` documentando propósito, pré-requisitos, modos `docker` e `conexao`, lista das 41 tabelas e como atualizá-la, formato dos arquivos e do `manifesto.json`, tabela de tipos PostgreSQL → JSON, aviso de LGPD e exemplo ilustrativo de leitura no DuckDB com `read_json`.
-- **NFR11** *(rev. 3)* — `duckdb>=1.2.0` é adicionado em `Adito/app/backend/requirements.txt`, mantendo o `app.db` em SQLite inalterado.
-- **NFR12** *(rev. 3)* — A geração de `dados.duckdb` por `Adito/scripts/gerar_duckdb.py` é determinística e idempotente a partir de `Adito/etl/saida/json/`.
+- **NFR09** *(rev. 2)* — Há testes unitários em `Muninn/etl/tests/test_exportar_json.py` (rodando sem depender de Docker, apenas com dados sintéticos como `"Maria Exemplo"`, nunca nomes reais do banco) cobrindo: geração do SQL com ordem por PK e por todas as colunas quando sem PK; recusa de tabela fora da constante de 41 tabelas; ausência de comandos SQL de escrita no código-fonte de `exportar_json.py`; recusa de pasta não ignorada pelo git; detecção de CPF e e-mail nos JSONs gerados; e `--so-validar` (aceita conjunto coerente e rejeita contagem divergente, coluna faltando/fora de ordem e FK quebrada).
+- **NFR10** *(rev. 2)* — `Muninn/scripts/README.md` inclui a seção `"Exportar JSON para o DuckDB"` documentando propósito, pré-requisitos, modos `docker` e `conexao`, lista das 41 tabelas e como atualizá-la, formato dos arquivos e do `manifesto.json`, tabela de tipos PostgreSQL → JSON, aviso de LGPD e exemplo ilustrativo de leitura no DuckDB com `read_json`.
+- **NFR11** *(rev. 3)* — `duckdb>=1.2.0` é adicionado em `Muninn/app/backend/requirements.txt`, mantendo o `app.db` em SQLite inalterado.
+- **NFR12** *(rev. 3)* — A geração de `dados.duckdb` por `Muninn/scripts/gerar_duckdb.py` é determinística e idempotente a partir de `Muninn/etl/saida/json/`.
 - **NFR13** *(rev. 3)* — Há testes automatizados validando: (a) geração do `.duckdb` e contagens das 6 tabelas fato materializadas; (b) `validate_read_only_sql` no dialeto `duckdb` (bloqueio de escrita, funções `read_*`, tabelas fora da whitelist e `sensitive_columns`); (c) carregamento de contextos (`pesquisa-extensao-ifes` ativo e `exemplo-vendas` desativado) e execução de queries via `connect_dados` / `BIAgent.execute_query`.
 
 ## User Scenarios
@@ -87,8 +87,8 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 2. Roda o extrator de participações do SRC sobre o `_index.json` gerado.
 3. Roda o extrator do SigPesq, depois o do CNPq e o do Lattes.
 4. Roda o cruzamento, lê o relatório e confere os ambíguos e os sem par.
-5. *(rev. 2)* Popula o banco PostgreSQL `unificado` com `Adito/scripts/popular_banco.py` e roda `python3 Adito/scripts/exportar_json.py`, gerando em `Adito/etl/saida/json/` os 41 arquivos `<tabela>.json` e o `manifesto.json` já validados quanto a JSON, colunas, contagens, integridade referencial e ausência de CPF/e-mail.
-6. *(rev. 3)* Executa `python Adito/scripts/gerar_duckdb.py`, que lê o manifesto e os 41 arquivos JSON e materializa as 6 tabelas fato colunares em `Adito/app/data/dados.duckdb`.
+5. *(rev. 2)* Popula o banco PostgreSQL `unificado` com `Muninn/scripts/popular_banco.py` e roda `python3 Muninn/scripts/exportar_json.py`, gerando em `Muninn/etl/saida/json/` os 41 arquivos `<tabela>.json` e o `manifesto.json` já validados quanto a JSON, colunas, contagens, integridade referencial e ausência de CPF/e-mail.
+6. *(rev. 3)* Executa `python Muninn/scripts/gerar_duckdb.py`, que lê o manifesto e os 41 arquivos JSON e materializa as 6 tabelas fato colunares em `Muninn/app/data/dados.duckdb`.
 
 ### Alternative / Error / Edge cases
 - Credencial errada ou sessão expirada no SRC: o extrator para com mensagem clara, sem gravar arquivo parcial do processo em curso, e a próxima execução retoma.
@@ -108,7 +108,7 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 - O SRCEtl já tem a extração do SRC funcionando (194 ações do Serra em `data/serra/`).
 - No horizon_etl, a extração está misturada com carga em banco: o CNPq lê as URLs dos grupos do banco, e a lista do Lattes está fixa no código (`flows/lattes/download.py`).
 - *(rev. 2)* O schema `unificado` em 3FN no PostgreSQL é a base relacional oficial; as 6 views analíticas desnormalizadas (`vfact_*_resolved` de `Docs/Fatos/PropostaFatos.md`) são exportadas para JSON.
-- *(rev. 3)* As 6 tabelas fato são materializadas no arquivo DuckDB (`dados.duckdb`) pelo script `gerar_duckdb.py`, provendo alta performance para consultas OLAP executadas pelo backend do Adito.
+- *(rev. 3)* As 6 tabelas fato são materializadas no arquivo DuckDB (`dados.duckdb`) pelo script `gerar_duckdb.py`, provendo alta performance para consultas OLAP executadas pelo backend do Muninn.
 
 ## Technical Context & Constraints
 
@@ -116,14 +116,14 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 - Origem do SigPesq: `horizon_etl/src/adapters/sources/sigpesq/` (o download é feito pela `sigpesq-agent` e gera XLSX; a credencial hoje vem do Infisical).
 - Origem do CNPq: `horizon_etl/src/adapters/sources/cnpq_crawler.py` (sobre a `dgp-cnpq-lib`) e a validação do espelho em `flows/cnpq/groups.py`.
 - Origem do Lattes: `horizon_etl/src/flows/lattes/download.py` e `lattes_parser.py` (sobre o `scriptLattes`).
-- *(rev. 2)* Banco PostgreSQL `unificado`: serviço `oraculo-postgres` em `Adito/scripts/docker-compose.yml` (banco `oraculo_db`, usuário `oraculo`, porta `5435`), DDL em `Adito/scripts/sql/01_tipos_e_dominios.sql`, `02_tabelas.sql` e `03_relacionamentos_e_juncoes.sql`, populado por `Adito/scripts/popular_banco.py`.
+- *(rev. 2)* Banco PostgreSQL `unificado`: serviço `muninn-postgres` em `Muninn/scripts/docker-compose.yml` (banco `muninn_db`, usuário `muninn`, porta `5435`), DDL em `Muninn/scripts/sql/01_tipos_e_dominios.sql`, `02_tabelas.sql` e `03_relacionamentos_e_juncoes.sql`, populado por `Muninn/scripts/popular_banco.py`.
 - Python: o SRCEtl usa 3.14. As bibliotecas do horizon_etl precisam ser conferidas na mesma versão. `exportar_json.py` requer Python 3.10+ (apenas biblioteca padrão).
 - A equipe roda o ETL no Linux; Windows não é exigido para o ETL.
 
 ## Quality Attributes
 
-- **Segurança/LGPD:** BR01, BR10, BR12, BR13, NFR02, NFR06 e FR19 são o centro; dado pessoal fora do nome é defeito bloqueante, e `Adito/etl/saida/json/` e `dados.duckdb` jamais entram no git.
-- **Manutenibilidade:** um módulo por fonte, sem acoplamento entre extratores além do arquivo bruto do SigPesq lido pelo CNPq; `exportar_json.py` isolado em `Adito/scripts/` sem dependências de terceiros; `gerar_duckdb.py` isolado com checagem de tipos.
+- **Segurança/LGPD:** BR01, BR10, BR12, BR13, NFR02, NFR06 e FR19 são o centro; dado pessoal fora do nome é defeito bloqueante, e `Muninn/etl/saida/json/` e `dados.duckdb` jamais entram no git.
+- **Manutenibilidade:** um módulo por fonte, sem acoplamento entre extratores além do arquivo bruto do SigPesq lido pelo CNPq; `exportar_json.py` isolado em `Muninn/scripts/` sem dependências de terceiros; `gerar_duckdb.py` isolado com checagem de tipos.
 - **Observabilidade:** `_extracao.json` por fonte, relatório do cruzamento, `manifesto.json` + resumo por tabela na exportação JSON e validação de contagens no DuckDB.
 
 ## Assumptions
@@ -161,7 +161,7 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 - *(rev. 2)* A chave primária e as chaves estrangeiras não são inferidas pelo nome da coluna: são lidas diretamente de `pg_catalog` (`pg_index` e `pg_constraint`) e registradas em `manifesto.json`.
 - *(rev. 3)* DuckDB OLAP armazena as 6 tabelas fato fisicamente (`CREATE TABLE`) com índices colunares nativos, consultadas em modo `read_only=True` via dialeto DuckDB com validação estrita de segurança SQL.
 
-## Rastreabilidade → Stories (backlog aprovado em 2026-11-10; US-ETL-08 proposta na rev. 2; US-ADITO-DUCKDB-01 proposta na rev. 3)
+## Rastreabilidade → Stories (backlog aprovado em 2026-11-10; US-ETL-08 proposta na rev. 2; US-MUNINN-DUCKDB-01 proposta na rev. 3)
 
 | Story | Requisitos |
 |---|---|
@@ -173,7 +173,7 @@ A equipe de dados roda, na própria máquina, um extrator por fonte que baixa o 
 | US-ETL-06 | FR10, FR11, FR13, BR02, BR03, BR05, NFR06 (normalização, ambíguos) |
 | US-ETL-07 | FR12 |
 | US-ETL-08 *(rev. 2)* | FR14, FR15, FR16, FR17, FR18, FR19, FR20, BR07, BR08, BR09, BR10, NFR07, NFR08, NFR09, NFR10, A06, A07 |
-| US-ADITO-DUCKDB-01 *(rev. 3)* | FR21, FR22, FR23, FR24, FR25, BR11, BR12, BR13, NFR11, NFR12, NFR13 |
+| US-MUNINN-DUCKDB-01 *(rev. 3)* | FR21, FR22, FR23, FR24, FR25, BR11, BR12, BR13, NFR11, NFR12, NFR13 |
 
 FR07–FR09, BR01, NFR01 e NFR03 valem para todos os extratores (US-ETL-01 a 05).
 
@@ -189,8 +189,8 @@ Rev. 2 e Rev. 3:
 
 ### User adjustments
 - 2026-11-10 (rev. 1): aprovado sem ajustes.
-- 2026-11-12 (rev. 2): adicionados FR14–FR20, BR07–BR10, NFR07–NFR10 e A06–A07 para `Adito/scripts/exportar_json.py`. Aprovado sem ajustes.
-- 2026-11-13 (rev. 3): adicionados FR21–FR25, BR11–BR13 e NFR11–NFR13 para o banco analítico DuckDB OLAP com as 6 tabelas fato materializadas e adaptação do `Adito/app` (US-ADITO-DUCKDB-01).
+- 2026-11-12 (rev. 2): adicionados FR14–FR20, BR07–BR10, NFR07–NFR10 e A06–A07 para `Muninn/scripts/exportar_json.py`. Aprovado sem ajustes.
+- 2026-11-13 (rev. 3): adicionados FR21–FR25, BR11–BR13 e NFR11–NFR13 para o banco analítico DuckDB OLAP com as 6 tabelas fato materializadas e adaptação do `Muninn/app` (US-MUNINN-DUCKDB-01).
 
 ## Gate G1 — REQUIREMENTS READY
 

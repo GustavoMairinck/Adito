@@ -1,3 +1,5 @@
+> **Nota:** documento histórico. O projeto se chamava Adito na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
+
 # Sprint Planning: Sprint 01 — Migração 100% SQLite e Camada Analítica em Views Dinâmicas
 
 **Sprint:** 01  
