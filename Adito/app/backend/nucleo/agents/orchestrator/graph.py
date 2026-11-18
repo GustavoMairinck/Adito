@@ -10,13 +10,14 @@ from langchain_core.messages import AIMessage
 from .state import MultiAgentState
 from .router import orchestrator_node
 from .conversational_agent import conversational_node
-from agents.config import CHECKPOINT_DB_PATH
+from agents.config import checkpoint_db_path
 
 mcp_tools = []
 
 
 _compiled = None
 _saver_cm = None
+_path: str | None = None
 _lock: asyncio.Lock | None = None
 
 
@@ -25,27 +26,32 @@ async def get_graph():
     """
     Grafo compilado com checkpointer SQLite (no app.db por padrão); o histórico fica isolado por thread_id.
 
-    Compilado e conectado uma vez por processo (antes era a cada pergunta).
+    Compilado e conectado uma vez por processo (antes era a cada pergunta); reaberto se o caminho
+    do banco mudar.
     """
-    global _compiled, _saver_cm, _lock
+    global _compiled, _saver_cm, _path, _lock
     if _lock is None:
         _lock = asyncio.Lock()
     async with _lock:
+        path = checkpoint_db_path()
+        if _compiled is not None and _path != path:
+            await _saver_cm.__aexit__(None, None, None)
+            _compiled = _saver_cm = None
         if _compiled is None:
-            saver_cm = AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+            saver_cm = AsyncSqliteSaver.from_conn_string(path)
             checkpointer = await saver_cm.__aenter__()
             await checkpointer.setup()
-            _compiled, _saver_cm = builder.compile(checkpointer=checkpointer), saver_cm
-            print(f"[Graph] Compilado com checkpointer SQLite ({CHECKPOINT_DB_PATH}).")
+            _compiled, _saver_cm, _path = builder.compile(checkpointer=checkpointer), saver_cm, path
+            print(f"[Graph] Compilado com checkpointer SQLite ({path}).")
     yield _compiled
 
 
 async def close_graph():
     """Fecha a conexão do checkpointer ao encerrar o núcleo."""
-    global _compiled, _saver_cm, _lock
+    global _compiled, _saver_cm, _path, _lock
     if _saver_cm is not None:
         await _saver_cm.__aexit__(None, None, None)
-    _compiled = _saver_cm = _lock = None
+    _compiled = _saver_cm = _path = _lock = None
 
 
 async def mcp_tool_node(state: MultiAgentState):

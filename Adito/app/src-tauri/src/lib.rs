@@ -13,7 +13,7 @@
 //! trocar a chave reinicia o núcleo.
 
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -165,7 +165,8 @@ impl Core {
             guard.0 = Status::Starting;
             guard.1
         };
-        let log = File::create(&self.log_path).map_err(|e| e.to_string())?;
+        // Acrescenta ao log: um reinício (troca da chave) não apaga o que a sessão já registrou.
+        let log = OpenOptions::new().create(true).append(true).open(&self.log_path).map_err(|e| e.to_string())?;
         let mut cmd = core_command();
         cmd.env("ORACULO_DATA_DIR", &self.data_dir)
             .env("PYTHONUNBUFFERED", "1")
@@ -425,6 +426,8 @@ fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>>
         status: Mutex::new((Status::Starting, 0)),
         status_changed: Condvar::new(),
     });
+    // O log começa limpo a cada abertura do app; os reinícios só acrescentam.
+    File::create(&core.log_path)?;
     // Falha ao iniciar não derruba a janela: o front mostra a mensagem que vem de core_ready.
     if let Err(e) = core.spawn() {
         eprintln!("[núcleo] {e}");

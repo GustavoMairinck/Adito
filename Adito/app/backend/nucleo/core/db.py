@@ -30,6 +30,8 @@ def connect() -> sqlite3.Connection:
     path = str(app_db_path())
     conn = getattr(_local, "conn", None)
     if conn is None or getattr(_local, "path", None) != path:
+        if conn is not None:
+            conn.close()  # o caminho mudou: não deixa a conexão antiga aberta
         conn = sqlite3.connect(path, timeout=20, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")

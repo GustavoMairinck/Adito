@@ -36,7 +36,11 @@ def get_embeddings():
 # ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
 # Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
 from core.datastore import app_db_path
-CHECKPOINT_DB_PATH = os.getenv("ORACULO_CHECKPOINT_DB") or app_db_path()
+
+
+def checkpoint_db_path() -> str:
+    """Resolvido a cada chamada, como o app_db_path(): segue ORACULO_CHECKPOINT_DB / ORACULO_DATA_DIR atuais."""
+    return str(os.getenv("ORACULO_CHECKPOINT_DB") or app_db_path())
 
 # ─── Langfuse (telemetria externa; desligada se as chaves não estiverem definidas) ─
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")

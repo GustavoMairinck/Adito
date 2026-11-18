@@ -32,7 +32,9 @@ export interface CallOptions {
   signal?: AbortSignal
 }
 
-let lastId = 0
+// Começa num ponto aleatório: se a página recarregar (Ctrl+R, Vite) com pedidos ainda abertos no
+// Rust, os ids novos não colidem com os antigos ("Pedido já está em andamento").
+let lastId = Math.floor(Math.random() * 2 ** 40)
 const nextId = () => ++lastId
 
 function canceled(): CoreError {

@@ -20,7 +20,9 @@ from typing import Any, Iterator, Sequence
 
 import duckdb
 
-APP_DIR_NAME = "oraculo-esx"
+# Mesmo nome da pasta que o Tauri usa (identifier do tauri.conf.json): rodar o núcleo ou o core.cli
+# pelo terminal, sem ORACULO_DATA_DIR, mexe nos mesmos arquivos que o app.
+APP_DIR_NAME = "br.edu.ifes.leds.oraculo-esx"
 REPO_APP_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_REPO_DUCKDB = REPO_APP_DIR / "data" / "dados.duckdb"
 

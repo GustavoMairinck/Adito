@@ -555,6 +555,38 @@ class DuckDBAbertoTests(unittest.TestCase):
                 conn.execute("CREATE TABLE z (i INTEGER)")
 
 
+class CaminhosTests(unittest.TestCase):
+    """Os caminhos acompanham o ambiente atual, como no app (sem valores fixados no import)."""
+
+    def test_pasta_padrao_e_a_mesma_do_tauri(self):
+        from core.datastore import data_dir
+
+        with tempfile.TemporaryDirectory() as base, patch.dict(os.environ, {"XDG_DATA_HOME": base}):
+            os.environ.pop("ORACULO_DATA_DIR", None)
+            self.assertEqual(data_dir(), Path(base) / "br.edu.ifes.leds.oraculo-esx")
+
+    def test_checkpointer_segue_o_caminho_atual_e_reabre_o_grafo(self):
+        from agents.config import checkpoint_db_path
+        from agents.orchestrator import graph
+
+        async def caminho_do_grafo():
+            async with graph.get_graph():
+                return graph._path
+
+        async def roteiro(a, b):
+            with patch.dict(os.environ, {"ORACULO_CHECKPOINT_DB": a}):
+                self.assertEqual(checkpoint_db_path(), a)
+                primeiro = await caminho_do_grafo()
+            with patch.dict(os.environ, {"ORACULO_CHECKPOINT_DB": b}):
+                segundo = await caminho_do_grafo()
+            await graph.close_graph()
+            return primeiro, segundo
+
+        with tempfile.TemporaryDirectory() as pasta:
+            a, b = str(Path(pasta) / "a.db"), str(Path(pasta) / "b.db")
+            self.assertEqual(asyncio.run(roteiro(a, b)), (a, b))
+
+
 class PersistenciaTests(AppDbTestCase):
     """O que o ORM fazia sozinho e agora é feito à mão."""
 

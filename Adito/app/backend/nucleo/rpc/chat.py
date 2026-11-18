@@ -392,6 +392,8 @@ def message_rows(params):
         return {"data": []}
 
     conversation = Conversation.first("id = ?", [to_db_id(message.conversation_id)])
+    if conversation is None:
+        raise not_found("Conversation")
     rows = execute_query(sql, contexto_id=conversation.contexto_id)
     if rows and isinstance(rows[0], dict) and "error" in rows[0]:
         raise ApiError(409, {"message": "os dados mudaram desde esta pergunta; refaça a pergunta", "error": rows[0]["error"]})

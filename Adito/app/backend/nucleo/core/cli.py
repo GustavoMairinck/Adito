@@ -86,7 +86,7 @@ def embeddings(args) -> None:
 
 def flush_data(args) -> None:
     """Apaga conversas, mensagens, auditoria de SQL e o estado do LangGraph (preserva contextos, RAG e widgets)."""
-    from agents.config import CHECKPOINT_DB_PATH
+    from agents.config import checkpoint_db_path
 
     preservados = {r[0] for r in db.execute("SELECT id FROM core_user WHERE is_superuser = 1 OR username = 'local'")}
     if args.keep_email:
@@ -111,7 +111,7 @@ def flush_data(args) -> None:
         conn.execute(f"DELETE FROM dashboard_widget WHERE dashboard_id IN (SELECT id FROM dashboard_dashboard WHERE user_id IN {apagar})", list(preservados))
         conn.execute(f"DELETE FROM dashboard_dashboard WHERE user_id IN {apagar}", list(preservados))
         conn.execute(f"DELETE FROM core_user WHERE id NOT IN ({marcas})", list(preservados))
-    with sqlite3.connect(CHECKPOINT_DB_PATH) as conn:
+    with sqlite3.connect(checkpoint_db_path()) as conn:
         existentes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         removidos = sum(conn.execute(f"DELETE FROM {t}").rowcount for t in ("writes", "checkpoints") if t in existentes)
     print(f"Dados removidos. Checkpoints: {removidos} registro(s).")
