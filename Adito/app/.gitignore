@@ -1,7 +1,7 @@
 /backend/.venv
 venv/
-/backend/api/venv/
-/backend/api/staticfiles/
+/backend/nucleo/venv/
+/backend/nucleo/staticfiles/
 .env*
 !.env.example
 !env.prod

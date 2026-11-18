@@ -237,7 +237,7 @@ Compara cada chamada que as telas fazem (status e JSON) com a referência gravad
 
 Sobe o núcleo como o Tauri faz e testa o protocolo stdin/stdout: evento de pronto, pedidos simultâneos, erros, cancelamento e encerramento quando o stdin fecha.
 
-A partir de `backend/api`:
+A partir de `backend/nucleo`:
 
 ```bash
 ../../.venv/bin/python -m unittest core.tests
@@ -247,7 +247,7 @@ Cobre a segurança do SQL no DuckDB, contextos, a tela Explorar (catálogo, busc
 
 ### Manutenção
 
-A partir de `backend/api`, com o mesmo `app.db` do app (ou outro, via `ORACULO_DATA_DIR`):
+A partir de `backend/nucleo`, com o mesmo `app.db` do app (ou outro, via `ORACULO_DATA_DIR`):
 
 ```bash
 ../../.venv/bin/python -m core.cli --help
@@ -262,7 +262,7 @@ Comandos `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data` 
 ```text
 src-tauri/          janela Tauri: inicia o núcleo e fala com ele por stdin/stdout; guarda a chave no cofre do SO
 frontend-vue/       front Vue/Vite
-backend/api/        núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, DuckDB), agentes (LangGraph)
+backend/nucleo/     núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, DuckDB), agentes (LangGraph)
 contexts/           contexto de exemplo (demo de vendas)
 scripts/            geração da demo e testes do núcleo
 backend/training/   schema da demo de vendas (lido por scripts/gerar_dados_demo.py)

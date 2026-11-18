@@ -102,7 +102,7 @@ Rotas que o front não usava saíram sem substituto:
 
 ## Como adicionar um método
 
-1. Escreva a função num módulo de `backend/api/rpc/`. Ela recebe `params` (dict) e devolve algo serializável em JSON.
+1. Escreva a função num módulo de `backend/nucleo/rpc/`. Ela recebe `params` (dict) e devolve algo serializável em JSON.
 2. Decore com `@rpc("area.acao")`. Um método com eventos usa `@rpc("…", stream=True)` e recebe também `emit(event, data)`.
 3. Para erro, use `raise ApiError(status, corpo)` (`rpc/errors.py`). Para validar, use `validate(spec, params)` (`rpc/params.py`).
 4. Se o módulo for novo, importe-o em `load_handlers()` (`rpc/registry.py`).
@@ -114,8 +114,8 @@ Rotas que o front não usava saíram sem substituto:
 - **Testes**, a partir de `Adito/app`; nenhum usa rede nem chave:
   - `.venv/bin/python scripts/teste_contrato.py` compara as respostas com a referência gravada no Django;
   - `.venv/bin/python scripts/teste_stdio.py` testa o processo real e o protocolo;
-  - `cd backend/api && ../../.venv/bin/python -m unittest core.tests` roda os testes do núcleo.
-- **Manutenção:** `cd backend/api && ../../.venv/bin/python -m core.cli --help` mostra `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data`. O `flush-data` agora preserva o usuário local e os seus widgets; antes, ele apagava o usuário local.
+  - `cd backend/nucleo && ../../.venv/bin/python -m unittest core.tests` roda os testes do núcleo.
+- **Manutenção:** `cd backend/nucleo && ../../.venv/bin/python -m core.cli --help` mostra `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data`. O `flush-data` agora preserva o usuário local e os seus widgets; antes, ele apagava o usuário local.
 
 ### Desempenho medido
 

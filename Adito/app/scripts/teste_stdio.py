@@ -41,7 +41,7 @@ class Nucleo:
         env.pop("GOOGLE_API_KEY", None)
         self.t0 = time.monotonic()
         self.proc = subprocess.Popen(
-            [sys.executable, str(APP_DIR / "backend" / "api" / "desktop_server.py")],
+            [sys.executable, str(APP_DIR / "backend" / "nucleo" / "desktop_server.py")],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(data_dir / "nucleo.log", "w"),
             env=env, text=True, encoding="utf-8",
         )

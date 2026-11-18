@@ -41,7 +41,7 @@ N/A
 ## 🔧 Notas Técnicas
 
 ### Arquitetura
-- **Componentes afetados:** `src-tauri/src/lib.rs`, `backend/api/rpc/` (novo), `backend/api/core/db.py`, `core/records.py`, `core/schema.py`, `core/schema.sql`, `core/cli.py` (novos), `frontend-vue/src/common/api/core.ts` (novo) e as telas que chamavam a API.
+- **Componentes afetados:** `src-tauri/src/lib.rs`, `backend/nucleo/rpc/` (novo), `backend/nucleo/core/db.py`, `core/records.py`, `core/schema.py`, `core/schema.sql`, `core/cli.py` (novos), `frontend-vue/src/common/api/core.ts` (novo) e as telas que chamavam a API.
 - **APIs necessárias:** comandos Tauri `core_ready`, `core_call`, `core_stream`, `core_cancel`.
 - **Database changes:** nenhuma no esquema; `PRAGMA user_version = 1` marca o esquema herdado.
 
@@ -60,7 +60,7 @@ N/A
 ## 🧪 Plano de Testes
 
 ### Testes Unitários
-- [x] `backend/api/core/tests.py` (`unittest`): segurança do SQL, contextos, Explorar e persistência no `app.db`.
+- [x] `backend/nucleo/core/tests.py` (`unittest`): segurança do SQL, contextos, Explorar e persistência no `app.db`.
 
 ### Testes de Integração
 - [x] `scripts/teste_contrato.py`: contrato das 51 chamadas contra a referência gravada no Django.

@@ -1,4 +1,4 @@
-"""Testes do núcleo (sem Django): rodar de backend/api com `python -m unittest core.tests`."""
+"""Testes do núcleo (sem Django): rodar de backend/nucleo com `python -m unittest core.tests`."""
 from __future__ import annotations
 
 import asyncio

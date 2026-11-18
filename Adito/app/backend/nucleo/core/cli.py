@@ -1,5 +1,5 @@
 """
-Comandos de manutenção do Adito (substituem os do manage.py). Rodar de backend/api:
+Comandos de manutenção do Adito (substituem os do manage.py). Rodar de backend/nucleo:
 
     python -m core.cli load-context <pasta> [--index]
     python -m core.cli sync-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]

@@ -25,7 +25,7 @@ from decimal import Decimal
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1]
-API_DIR = APP_DIR / "backend" / "api"
+API_DIR = APP_DIR / "backend" / "nucleo"
 REFERENCIA = Path(__file__).resolve().parent / "contrato" / "referencia.json"
 
 DATA_DIR = Path(tempfile.mkdtemp(prefix="adito-contrato-"))

@@ -1,7 +1,7 @@
 //! Casca desktop do Adito.
 //!
 //! Ao abrir, sobe o núcleo Python (`desktop_server.py`) como processo filho, sem porta de rede.
-//! A conversa é por stdin/stdout, uma mensagem JSON por linha (formato em `backend/api/rpc/server.py`):
+//! A conversa é por stdin/stdout, uma mensagem JSON por linha (formato em `backend/nucleo/rpc/server.py`):
 //!
 //! - o front chama `core_call` / `core_stream` com um id; o Rust escreve o pedido no stdin do núcleo;
 //! - uma thread lê o stdout do núcleo e entrega cada resposta a quem espera aquele id
@@ -130,9 +130,9 @@ fn core_command() -> Command {
                 repo.join(".venv").join("bin").join("python")
             }
         });
-        let api_dir = repo.join("backend").join("api");
+        let nucleo_dir = repo.join("backend").join("nucleo");
         let mut cmd = Command::new(python);
-        cmd.arg(api_dir.join("desktop_server.py")).current_dir(api_dir);
+        cmd.arg(nucleo_dir.join("desktop_server.py")).current_dir(nucleo_dir);
         cmd
     } else {
         let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
