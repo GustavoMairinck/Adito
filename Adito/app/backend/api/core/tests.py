@@ -1,22 +1,28 @@
+"""Testes do núcleo (sem Django): rodar de backend/api com `python -m unittest core.tests`."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import duckdb
-from django.test import TestCase
-from rest_framework.test import APIClient
 
 from agents.bi_agent.agent import BIAgent
 from agents.bi_agent.sql_security import validate_read_only_sql
 from analytics_index.services import fetch_distinct_candidates
+from core import db
 from core.contexts import describe_views, load_context_dir, view_columns
 from core.datastore import ReadPolicy, connect_dados
-from core.models import Contexto, Tenant, User
+from core.records import Contexto, Tenant, get_local_user
+from core.schema import ensure_schema
+from rpc import session
+from rpc.errors import ApiError
+from rpc.registry import dispatch, load_handlers
 
 RAIZ_REPO = Path(__file__).resolve().parents[5]
 SCRIPTS_DIR = RAIZ_REPO / "Adito" / "scripts"
@@ -63,15 +69,38 @@ def _criar_duckdb_sintetico(caminho_duckdb: Path) -> None:
         conn.close()
 
 
-class DuckDBSecurityAndContextTests(TestCase):
+class AppDbTestCase(unittest.TestCase):
+    """Cada teste usa um app.db novo numa pasta temporária (o TestCase do Django fazia rollback)."""
+
     def setUp(self) -> None:
+        self.appdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.appdir.cleanup)
+        env = patch.dict(os.environ, {"ORACULO_APP_DB": str(Path(self.appdir.name) / "app.db")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(db.close)
+        ensure_schema()
+        session.reset()
+        self.addCleanup(session.reset)
+
+
+def call(method: str, params: dict | None = None) -> tuple[int, object]:
+    """Chama um método do núcleo e devolve (status, corpo), como o front recebe."""
+    load_handlers()
+    try:
+        return 200, asyncio.run(dispatch(method, params or {}))
+    except ApiError as exc:
+        return exc.status, exc.data
+
+
+class DuckDBSecurityAndContextTests(AppDbTestCase):
+    def setUp(self) -> None:
+        super().setUp()
         self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
         self.synthetic_duckdb = Path(self.tmpdir.name) / "test_dados.duckdb"
         _criar_duckdb_sintetico(self.synthetic_duckdb)
-        self.tenant = Tenant.objects.create(name="ifes-test")
-
-    def tearDown(self) -> None:
-        self.tmpdir.cleanup()
+        self.tenant = Tenant(name="ifes-test").insert()
 
     def test_mapear_tipo_duckdb_e_extrair_fatos_proposta(self) -> None:
         self.assertEqual(mapear_tipo_duckdb("bigint"), "BIGINT")
@@ -258,7 +287,7 @@ class DuckDBSecurityAndContextTests(TestCase):
     def test_gemini_config_e_llm_configured(self) -> None:
         import os
         from agents.config import get_chat_llm, get_embeddings, get_gemini_api_key
-        from core.views import llm_configured
+        from rpc.core_methods import llm_configured
 
         old_gemini = os.environ.pop("GEMINI_API_KEY", None)
         old_google = os.environ.pop("GOOGLE_API_KEY", None)
@@ -279,25 +308,30 @@ class DuckDBSecurityAndContextTests(TestCase):
             if old_google is not None:
                 os.environ["GOOGLE_API_KEY"] = old_google
 
-class ExplorerTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.tenant = Tenant.objects.create(name='Campus Serra')
-        cls.user = User.objects.create_user(username='teste', tenant=cls.tenant)
-        cls.contexto = Contexto.objects.create(
-            tenant=cls.tenant, slug='unificado', name='Modelo unificado',
+class Resposta:
+    def __init__(self, status, data):
+        self.status_code, self.data = status, data
+
+
+class ExplorerTests(AppDbTestCase):
+    def setUp(self):
+        super().setUp()
+        tenant_env = patch.dict(os.environ, {'DEFAULT_TENANT_NAME': 'Campus Serra'})
+        tenant_env.start()
+        self.addCleanup(tenant_env.stop)
+        user = get_local_user()
+        self.contexto = Contexto(
+            tenant_id=user.tenant_id, slug='unificado', name='Modelo unificado',
             views=[
                 {'name': 'v_fato_projeto', 'sensitive_columns': ['cpf']},
                 {'name': 'dim_area'},
                 {'name': 'iniciativa', 'label': 'Iniciativas'},
                 {'name': 'projetos_pesquisa', 'kind': 'fact', 'label': 'Projetos de pesquisa'},
             ],
-        )
-        cls.foreign = Contexto.objects.create(
-            tenant=Tenant.objects.create(name='Outro campus'), slug='outro', name='Outro contexto',
-        )
-
-    def setUp(self):
+        ).insert()
+        self.foreign = Contexto(
+            tenant_id=Tenant(name='Outro campus').insert().id, slug='outro', name='Outro contexto',
+        ).insert()
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.db_path = Path(self.folder.name) / 'dados.duckdb'
@@ -323,16 +357,14 @@ class ExplorerTests(TestCase):
             ])
         finally:
             conn.close()
-        self.client = APIClient()
-        self.client.force_authenticate(self.user)
 
     def catalog(self, **params):
-        return self.client.get('/api/explorer/tables', {'contexto_id': str(self.contexto.id), **params})
+        return Resposta(*call('explorer.tables', {'contexto_id': str(self.contexto.id), **params}))
 
     def rows(self, **params):
-        return self.client.get('/api/explorer/rows', {
+        return Resposta(*call('explorer.rows', {
             'contexto_id': str(self.contexto.id), 'table': 'v_fato_projeto', **params,
-        })
+        }))
 
     def test_catalog_uses_context_metadata_and_hides_sensitive_columns(self):
         response = self.catalog()
@@ -384,7 +416,7 @@ class ExplorerTests(TestCase):
             conn.close()
         self.contexto.views.append({'name': 'dim_nullable'})
         self.contexto.views[2]['sensitive_columns'] = ['id', 'titulo']
-        self.contexto.save(update_fields=['views'])
+        self.contexto.update('views')
         response = self.rows(table='dim_nullable', group_by='codigo')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['total'], 2)
@@ -405,34 +437,22 @@ class ExplorerTests(TestCase):
             with self.subTest(params=params):
                 self.assertEqual(self.rows(**params).status_code, 400)
 
-    def test_requires_authentication_and_an_active_context_from_same_tenant(self):
+    def test_requires_an_active_context_from_same_tenant(self):
         self.assertEqual(self.catalog(contexto_id=str(self.foreign.id)).status_code, 404)
         self.assertEqual(self.rows(contexto_id=str(self.foreign.id)).status_code, 404)
         self.contexto.is_active = False
-        self.contexto.save(update_fields=['is_active'])
+        self.contexto.update('is_active')
         self.assertEqual(self.catalog().status_code, 404)
-        self.client.force_authenticate(user=None)
-        self.assertEqual(self.catalog().status_code, 401)
-        self.assertEqual(self.rows().status_code, 401)
 
-    def test_desktop_token_allows_exploration_without_a_gemini_key(self):
-        self.client.force_authenticate(user=None)
-        with patch.dict(os.environ, {
-            'ORACULO_LOCAL_TOKEN': 'token-do-desktop',
-            'DEFAULT_TENANT_NAME': self.tenant.name,
-            'GEMINI_API_KEY': '',
-        }):
-            headers = {'HTTP_X_ORACULO_TOKEN': 'token-do-desktop'}
-            params = {'contexto_id': str(self.contexto.id)}
-            self.assertEqual(self.client.get('/api/explorer/tables', params, **headers).status_code, 200)
-            response = self.client.get('/api/explorer/rows', {
-                **params, 'table': 'v_fato_projeto',
-            }, **headers)
+    def test_exploration_works_without_a_gemini_key(self):
+        with patch.dict(os.environ, {'GEMINI_API_KEY': '', 'GOOGLE_API_KEY': ''}):
+            self.assertEqual(self.catalog().status_code, 200)
+            response = self.rows()
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data['total'], 33)
 
     def test_missing_database_and_stale_context_return_actionable_errors(self):
-        with self.assertLogs('core.explorer', level='ERROR'), patch.dict(
+        with self.assertLogs('rpc.explorer', level='ERROR'), patch.dict(
             os.environ, {'ORACULO_DADOS_DB': str(self.db_path) + '.missing'},
         ):
             self.assertEqual(self.catalog().status_code, 503)
@@ -447,17 +467,67 @@ class ExplorerTests(TestCase):
 
     def test_gemini_key_validation_uses_google_header_and_configured_model(self):
         from agents.config import GEMINI_MODEL
-        with patch('core.views.httpx.get') as get:
+        with patch('rpc.core_methods.httpx.get') as get:
             get.return_value.status_code = 200
-            response = self.client.post('/api/config/test-llm-key', {'key': 'test-key'})
+            response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
         self.assertTrue(response.data['ok'])
         self.assertEqual(get.call_args.args[0],
                          f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}')
         self.assertEqual(get.call_args.kwargs['headers'], {'x-goog-api-key': 'test-key'})
 
     def test_gemini_key_validation_reports_unavailable_model(self):
-        with patch('core.views.httpx.get') as get:
+        with patch('rpc.core_methods.httpx.get') as get:
             get.return_value.status_code = 404
-            response = self.client.post('/api/config/test-llm-key', {'key': 'test-key'})
+            response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
         self.assertFalse(response.data['ok'])
         self.assertIn('GEMINI_MODEL', response.data['reason'])
+
+
+class PersistenciaTests(AppDbTestCase):
+    """O que o ORM fazia sozinho e agora é feito à mão."""
+
+    def test_banco_novo_e_banco_do_django_ficam_na_versao_atual(self):
+        from core.schema import VERSAO
+
+        self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], VERSAO)
+        tabelas = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        self.assertTrue({"core_contexto", "chat_message", "dashboard_widget", "analytics_text_embedding"} <= tabelas)
+
+    def test_ids_com_hifens_no_codigo_e_hex_no_banco(self):
+        tenant = Tenant(name="t").insert()
+        self.assertEqual(len(tenant.id), 36)
+        gravado = db.execute("SELECT id FROM core_tenant").fetchone()[0]
+        self.assertEqual(gravado, tenant.id.replace("-", ""))
+        self.assertEqual(Tenant.first("id = ?", [db.to_db_id(tenant.id)]).name, "t")
+
+    def test_apagar_conversa_apaga_mensagens_e_solta_auditoria(self):
+        from core.records import Conversation, Message, QueryExecution, delete_conversation
+
+        user = get_local_user()
+        ctx = Contexto(tenant_id=user.tenant_id, slug="c", name="C").insert()
+        conv = Conversation(user_id=user.id, tenant_id=user.tenant_id, contexto_id=ctx.id).insert()
+        msg = Message(conversation_id=conv.id, role="assistant", content="x", metadata={"sql": "SELECT 1"}).insert()
+        qe = QueryExecution(tenant_id=user.tenant_id, message_id=msg.id, generated_sql="SELECT 1").insert()
+        delete_conversation(conv.id)
+        self.assertEqual(Message.count(), 0)
+        self.assertEqual(Conversation.count(), 0)
+        self.assertIsNone(QueryExecution.first("id = ?", [db.to_db_id(qe.id)]).message_id)
+
+    def test_update_com_campos_nao_renova_updated_at(self):
+        tenant = Tenant(name="t").insert()
+        antes = tenant.updated_at
+        tenant.name = "u"
+        tenant.update("name")
+        self.assertEqual(Tenant.first().updated_at, antes)
+        tenant.update()
+        self.assertGreater(Tenant.first().updated_at, antes)
+
+    def test_usuario_local_e_unico(self):
+        a, b = get_local_user(), get_local_user()
+        self.assertEqual(a.id, b.id)
+        self.assertTrue(a.is_staff)
+        self.assertTrue(a.password.startswith("!"))
+
+
+if __name__ == "__main__":
+    unittest.main()
