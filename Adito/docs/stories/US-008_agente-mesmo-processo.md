@@ -92,6 +92,7 @@ N/A
 ## 📝 Notas e Comentários
 
 - 2026-11-03: MCP no mesmo processo; backend ASGI (`daphne`) em `127.0.0.1`.
+- 2026-11-17: o daphne e o Django saíram; o núcleo fala com o Tauri por stdin/stdout ([US-016](US-016_nucleo-local-sem-http.md)). A ferramenta `bi_agent` continua local.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

@@ -4,11 +4,13 @@ Compilado em 2026-11-03 a partir da conversa de planejamento e atualizado durant
 
 Objetivo: gerar o Oráculo-ESX como aplicativo desktop (Windows e Linux). O app não depende de nenhuma fonte de dados específica: os dados e as views serão fornecidos depois pelo usuário e não têm relação com SigPesq nem Horizon. Ordem de grandeza a suportar: cerca de 50 mil registros de alunos. (Versão anterior deste documento amarrava várias decisões ao SigPesq/Horizon; isso foi removido em 2026-11-03.)
 
+> **Atualização de 2026-11-17:** o backend deixou de ser um servidor web. Saíram Django, DRF, daphne, a porta em `127.0.0.1` e o token; o núcleo Python fala com o Tauri por stdin/stdout e usa o mesmo `app.db` sem ORM. As linhas "Casca" e "Processos" abaixo e as menções a Django, `daphne`, `X-Oraculo-Token` e `backend_info` neste documento são históricas. Ver [NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md) e [US-016](stories/US-016_nucleo-local-sem-http.md).
+
 ## 1. Decidido
 
 | Tema | Decisão |
 |---|---|
-| Casca | Tauri, front Vue existente e backend Python como sidecar |
+| Casca | Tauri, front Vue existente e backend Python como sidecar. *(2026-11-17: o sidecar é o núcleo Python sem servidor web, falando por stdin/stdout.)* |
 | Sistemas | Windows e Linux (sem macOS) |
 | Banco | SQLite para tudo (metadados Django, dados analíticos fornecidos pelo usuário, vetores) |
 | Vetores | sqlite-vec ou numpy; decidir após contar os `KnowledgeItem` |
@@ -21,6 +23,7 @@ Objetivo: gerar o Oráculo-ESX como aplicativo desktop (Windows e Linux). O app 
 | Dados enviados ao LLM | **Mascarar e limitar** (decidido em 2026-11-03): views por contexto sem colunas sensíveis, limite de linhas no prompt, embeddings só de campos não pessoais (nomes de pessoas por busca local) e aviso ao usuário. Detalhes na seção "Política de dados enviados ao LLM" |
 | Arquivos de banco | **Separados** (decidido em 2026-11-03): `app.db` (Django, conversas, dashboards, checkpoints, cache, índices derivados) e `dados.db` (dados do usuário, aberto só para leitura, nunca escrito pelo app) |
 | Processos | **Servidor MCP no mesmo processo** (decidido em 2026-11-03): a ferramenta `bi_agent` vira função local, some a porta 8005. Backend ASGI (`daphne`) em `127.0.0.1`, porta livre, com token efêmero do Tauri (consequência de "sem login") |
+| Núcleo sem HTTP | **Sem servidor web** (decidido em 2026-11-17): o núcleo Python é um processo filho que conversa com o Tauri por stdin/stdout, uma mensagem JSON por linha. Saem Django, DRF, daphne, CORS, porta e token; o `app.db` mantém as tabelas e é acessado com `sqlite3`. Substitui a parte "Backend ASGI (`daphne`)" da linha acima. Ver [NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md) |
 | Criptografia | **Só criptografia de disco do SO na primeira versão** (decidido em 2026-11-03): BitLocker no Windows e LUKS no Linux. Sem SQLCipher por ora. O app avisa no primeiro uso e a documentação diz que a proteção é a conta do SO mais a criptografia de disco. Revisar se a política da instituição exigir cifra no próprio arquivo |
 | Histórico do chat | **Guarda só o SQL** (decidido em 2026-11-03): as linhas de resultado não são gravadas; ao abrir a conversa o app reexecuta o SQL no `dados.db` (só leitura), sob demanda |
 | Entrada de dados | **Arquivo SQLite pronto** (decidido em 2026-11-03): o usuário aponta um `.db` que já tem as views, junto com o `views.json` de cada contexto. Importar CSV/XLSX fica para depois. O app **copia** o arquivo para a pasta de dados do usuário (decidido em 2026-11-03); a cópia vira o `dados.db`, identificada por hash |

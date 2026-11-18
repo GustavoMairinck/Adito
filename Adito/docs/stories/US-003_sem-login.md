@@ -22,10 +22,10 @@ Na web o login passava pelo Acesso Cidadão, um gateway C# e JWT. No desktop há
 ## ✅ Critérios de Aceitação
 
 - [x] **Critério 1:** No primeiro start o backend cria um usuário local único e um tenant fixo; o app abre direto no chat.
-- [x] **Critério 2:** Toda chamada à API exige o token efêmero gerado pelo Tauri no header `X-Oraculo-Token`; sem ele, a API recusa.
-- [x] **Critério 3:** O backend escuta só em `127.0.0.1`, com `ALLOWED_HOSTS` limitado a `127.0.0.1`/`localhost`.
+- [x] **Critério 2:** Toda chamada à API exige o token efêmero gerado pelo Tauri no header `X-Oraculo-Token`; sem ele, a API recusa. *(Substituído em 2026-11-17 pela US-016: sem servidor HTTP não há API a proteger; só o Tauri fala com o núcleo, pelo pipe.)*
+- [x] **Critério 3:** O backend escuta só em `127.0.0.1`, com `ALLOWED_HOSTS` limitado a `127.0.0.1`/`localhost`. *(Substituído em 2026-11-17 pela US-016: o núcleo não escuta em porta nenhuma.)*
 - [x] **Critério 4:** Saíram JWT, `simplejwt`, as rotas e a tela de login e o botão de sair.
-- [x] **Critério 5:** `SECRET_KEY` é gerada por instalação e `DEBUG` fica desligado por padrão.
+- [x] **Critério 5:** `SECRET_KEY` é gerada por instalação e `DEBUG` fica desligado por padrão. *(Sem Django desde 2026-11-17: não há mais `SECRET_KEY` nem `DEBUG`.)*
 
 ---
 

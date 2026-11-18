@@ -22,8 +22,8 @@ A versão web roda em Docker (Django, Vue/nginx, servidor MCP, Postgres/pgvector
 ## ✅ Critérios de Aceitação
 
 - [x] **Critério 1:** O app abre uma janela nativa e carrega o front Vue dentro dela.
-- [x] **Critério 2:** Ao abrir, o app inicia o backend Python numa porta livre de `127.0.0.1`, com um token aleatório por execução.
-- [x] **Critério 3:** O front recebe URL e token do Tauri (`invoke('backend_info')`), que espera o `/health` responder antes de liberar a tela.
+- [x] **Critério 2:** Ao abrir, o app inicia o backend Python numa porta livre de `127.0.0.1`, com um token aleatório por execução. *(Substituído em 2026-11-17 pela US-016: o núcleo sobe sem porta e fala por stdin/stdout.)*
+- [x] **Critério 3:** O front recebe URL e token do Tauri (`invoke('backend_info')`), que espera o `/health` responder antes de liberar a tela. *(Substituído em 2026-11-17 pela US-016: o front espera `core_ready`.)*
 - [x] **Critério 4:** Fechar a janela encerra o backend.
 - [x] **Critério 5:** Dados e log ficam na pasta de dados do usuário (`~/.local/share/br.edu.ifes.leds.oraculo-esx/` no Linux, `%LOCALAPPDATA%\br.edu.ifes.leds.oraculo-esx\` no Windows).
 - [ ] **Critério 6:** O mesmo fluxo foi verificado no Windows (até agora só no Linux).
