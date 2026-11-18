@@ -28,7 +28,7 @@ Dar ao Campus Serra um painel generalista de documentos e informações de pesqu
 
 ## Current Situation
 
-- O porte desktop em `Adito/app` já tem: casca Tauri compilando no Linux, backend Django como sidecar, `app.db` SQLite, checkpointer LangGraph em SQLite (Redis já removido), sem login, chave da Mistral no cofre do SO, modelo `Contexto` com `views.json`, validador com lista de views, histórico só com SQL.
+- O porte desktop em `Adito/app` já tem: casca Tauri compilando no Linux, backend Django como sidecar *(desde 2026-11-17, núcleo Python sem servidor web, por stdin/stdout: [US-016](../stories/US-016_nucleo-local-sem-http.md))*, `app.db` SQLite, checkpointer LangGraph em SQLite (Redis já removido), sem login, chave da Mistral no cofre do SO, modelo `Contexto` com `views.json`, validador com lista de views, histórico só com SQL.
 - O dado consultado hoje é um `dados.db` **SQLite** aberto só para leitura com `set_authorizer`; a demo de vendas está em `Adito/app/contexts/exemplo-vendas/`. Os arquivos citados no escopo (`exemples.json` e `schema-ddl.sql`, em `Adito/app/mudanças/mudanca/`) são da demo de vendas.
 - Os modelos Astah de SigPesq, Lattes, CNPq (DGP) e SRC, mais o unificado, estão em `Docs/ModelosClasses/`.
 - Teste do usuário: abrir o pacote e criar as views no DuckDB levou cerca de 25 ms.
@@ -134,7 +134,7 @@ O usuário abre o Adito no Windows ou no Linux, aponta o pacote recebido e pergu
 - Só a versão mais recente dos dados importa.
 - Por enquanto, entregar nomes em claro é aceitável para quem recebe.
 - O volume é pequeno (dezenas de milhares de linhas), então desempenho não decide nada.
-- [ASSUMPTION — agente] Como a base é o porte em `Adito/app` (confirmado na rev. 3), continuam valendo as decisões do porte que o escopo não cita: casca Tauri, sem login, chave da Mistral do usuário no cofre do SO, `app.db` SQLite para Django/conversas/dashboards, histórico só com SQL, modelo `Contexto`.
+- [ASSUMPTION — agente] Como a base é o porte em `Adito/app` (confirmado na rev. 3), continuam valendo as decisões do porte que o escopo não cita: casca Tauri, sem login, chave da Mistral do usuário no cofre do SO, `app.db` SQLite para conversas/dashboards (sem Django desde 2026-11-17), histórico só com SQL, modelo `Contexto`.
 - [ASSUMPTION — agente] O `manifesto.json` marca quais colunas são nomes de pessoas, para o app tirá-las do que vai ao LLM.
 - [ASSUMPTION — agente] "Redis vira cache em memória" vale para cache de consultas; o estado das conversas continua no checkpointer SQLite que já existe (em memória ele se perderia ao fechar o app).
 - [ASSUMPTION — agente] O `manifesto.json` faz o papel do `views.json` atual (lista de views expostas, descrições, versão do pacote, modelo de embedding).

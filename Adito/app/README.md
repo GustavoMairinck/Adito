@@ -3,13 +3,13 @@
 Assistente de BI: você pergunta em português, o agente gera o SQL, executa nos seus dados e devolve resposta, tabela e gráfico. Esta é a versão desktop (Tauri) do Oráculo-ESX web: roda inteira na máquina, sem Docker, Postgres ou Redis.
 
 - **Janela:** Tauri (Rust) carregando o front Vue.
-- **Backend:** Django + LangGraph, iniciado pelo próprio app numa porta livre de `127.0.0.1`.
+- **Núcleo:** Python + LangGraph, iniciado pelo próprio app como processo filho. Não abre porta de rede: conversa com a janela por stdin/stdout ([../docs/NUCLEO_LOCAL_SEM_HTTP.md](../docs/NUCLEO_LOCAL_SEM_HTTP.md)).
 - **Dados:** dois arquivos SQLite na pasta do usuário — `app.db` (conversas, dashboards, contextos) e `dados.db` (seus dados, aberto só para leitura).
 - **LLM:** Gemini; cada usuário informa a própria chave, guardada no cofre do sistema.
 
 As decisões do porte estão em [../docs/](../docs/): as user stories em [../docs/stories/](../docs/stories/) e o registro completo em [../docs/PORTE_DESKTOP_DECISOES.md](../docs/PORTE_DESKTOP_DECISOES.md).
 
-> **Este guia é para desenvolvimento.** Por enquanto o app roda só a partir do código, por isso pede Python, Node e Rust (e, no Windows, o Visual Studio Build Tools). Quando o projeto estiver completo, haverá instaladores (`.exe` no Windows; `.deb`/`.AppImage` no Linux) que rodam sem nenhuma dessas ferramentas. Antes disso é preciso empacotar o backend Python com PyInstaller.
+> **Este guia é para desenvolvimento.** Por enquanto o app roda só a partir do código, por isso pede Python, Node e Rust (e, no Windows, o Visual Studio Build Tools). Quando o projeto estiver completo, haverá instaladores (`.exe` no Windows; `.deb`/`.AppImage` no Linux) que rodam sem nenhuma dessas ferramentas. Antes disso é preciso empacotar o núcleo Python com PyInstaller.
 
 ---
 
@@ -158,7 +158,9 @@ Ele precisa ficar na porta **5173**. Se acusar porta ocupada, feche o outro Vite
 cd src-tauri && cargo run
 ```
 
-A janela abre em alguns segundos, e o backend sobe junto. Fechar a janela encerra o backend.
+A janela abre em alguns segundos, e o núcleo sobe junto. Fechar a janela (ou o app morrer) encerra o núcleo.
+
+Atalho: `../../rodar_desktop.sh` (na raiz do repositório) sobe o Vite e a janela de uma vez.
 
 ### Primeira vez no app
 
@@ -209,43 +211,62 @@ o modelo unificado. Para consultá-lo nesta versão, disponibilize suas relaçõ
 | Sintoma | Causa e solução |
 |---|---|
 | Janela branca ou "não abriu nada" | O Vite não está na porta 5173. Confira o terminal 1. |
-| "O backend encerrou" / "não respondeu em 90 s" | Veja o log: `~/.local/share/br.edu.ifes.leds.oraculo-esx/logs/backend.log` (Linux) ou `%LOCALAPPDATA%\br.edu.ifes.leds.oraculo-esx\logs\backend.log` (Windows). Em geral falta o `.venv` ou alguma dependência do `pip`. |
+| "O Adito não conseguiu iniciar" / "O núcleo do Adito encerrou" / "não respondeu em 90 s" | Veja o log: `~/.local/share/br.edu.ifes.leds.oraculo-esx/logs/backend.log` (Linux) ou `%LOCALAPPDATA%\br.edu.ifes.leds.oraculo-esx\logs\backend.log` (Windows). Em geral falta o `.venv` ou alguma dependência do `pip`. |
 | Chat desativado com aviso de chave | Salve a chave em **Configurações**. |
 | Não salva a chave no Linux | O Secret Service não está rodando. Abra o "Senhas e chaves" (Seahorse) uma vez ou instale `gnome-keyring`. |
 | Agente diz que não há contexto | Faltou `contexts/<nome>/views.json` na pasta de dados ou rodar **Carregar Contextos**. |
 | `cargo: comando não encontrado` | Abra um terminal novo depois de instalar o Rust, ou rode `source ~/.cargo/env`. |
 
-Se o app for morto à força (sem fechar a janela), o backend pode ficar rodando. No Linux, encerre com `pkill -f desktop_server.py`.
-
 ---
 
 ## 6. Testes do núcleo
 
-Linux, a partir de `backend/api` (usa uma pasta de dados temporária, sem tocar na do app):
+Nenhum chama o Gemini nem usa rede: os dados são sintéticos e o LLM é falso. Todos usam pastas temporárias, sem tocar na pasta de dados do app.
+
+A partir de `Adito/app`:
 
 ```bash
-export ORACULO_DATA_DIR=/tmp/oraculo-teste JWT_SECRET=x GEMINI_API_KEY=x && mkdir -p $ORACULO_DATA_DIR && ../../.venv/bin/python manage.py migrate -v0 && ../../.venv/bin/python ../../scripts/teste_nucleo_sqlite.py "$PWD"
+.venv/bin/python scripts/teste_contrato.py
 ```
 
-Não chama o Gemini: a chave `x` e os embeddings são falsos. Verifica leitura só-leitura do `dados.db`, bloqueio de colunas sensíveis, validação de SQL, contextos e a demo. Deve terminar em `0 falha(s)`.
+Compara cada chamada que as telas fazem (status e JSON) com a referência gravada quando o núcleo ainda era um servidor Django. Deve terminar em `51/51 chamadas iguais à referência.`
 
-Os testes da exploração ficam em `core/tests.py`. Após definir `ORACULO_DATA_DIR`
-para uma pasta temporária, execute `python manage.py test core` em `backend/api`
-com o Python do ambiente virtual. Eles cobrem catálogo, busca, filtros, paginação,
-agrupamentos, isolamento de contextos e bloqueio de colunas sensíveis.
+```bash
+.venv/bin/python scripts/teste_stdio.py
+```
+
+Sobe o núcleo como o Tauri faz e testa o protocolo stdin/stdout: evento de pronto, pedidos simultâneos, erros, cancelamento e encerramento quando o stdin fecha.
+
+A partir de `backend/nucleo`:
+
+```bash
+../../.venv/bin/python -m unittest core.tests
+```
+
+Cobre a segurança do SQL no DuckDB, contextos, a tela Explorar (catálogo, busca, filtros, paginação, agrupamentos, isolamento de contextos, colunas sensíveis) e a persistência no `app.db`.
+
+### Manutenção
+
+A partir de `backend/nucleo`, com o mesmo `app.db` do app (ou outro, via `ORACULO_DATA_DIR`):
+
+```bash
+../../.venv/bin/python -m core.cli --help
+```
+
+Comandos `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data` (substituem os antigos do `manage.py`).
 
 ---
 
 ## Estrutura
 
 ```text
-src-tauri/          janela Tauri: inicia o backend, guarda a chave no cofre do SO
+src-tauri/          janela Tauri: inicia o núcleo e fala com ele por stdin/stdout; guarda a chave no cofre do SO
 frontend-vue/       front Vue/Vite
-backend/api/        Django, agentes (LangGraph), chat, dashboard
+backend/nucleo/     núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, DuckDB), agentes (LangGraph)
 contexts/           contexto de exemplo (demo de vendas)
 scripts/            geração da demo e testes do núcleo
 backend/training/   schema da demo de vendas (lido por scripts/gerar_dados_demo.py)
 mudanças/mudanca/   dados da demo de vendas (lidos por scripts/gerar_dados_demo.py)
 ```
 
-Ao atualizar da integração Mistral, execute as migrações do backend e carregue os contextos novamente para gerar os índices com Gemini. Use `GEMINI_API_KEY` no `.env` para desenvolvimento. O modelo padrão é `gemini-3.5-flash-lite`, ajustável com `GEMINI_MODEL`.
+Ao atualizar da integração Mistral, o núcleo zera os vetores antigos na primeira abertura; carregue os contextos novamente para gerar os índices com Gemini. Use `GEMINI_API_KEY` no `.env` para desenvolvimento. O modelo padrão é `gemini-3.5-flash-lite`, ajustável com `GEMINI_MODEL`.

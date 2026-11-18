@@ -1,5 +1,5 @@
 import { ref, reactive, onUnmounted } from 'vue'
-import httpClient from '@/common/api/httpClient'
+import { call } from '@/common/api/core'
 
 export interface Filters {
   ano: string
@@ -43,22 +43,22 @@ export function useDashboardData() {
 
     loading.value = true
 
-    const params = new URLSearchParams()
+    const params: Record<string, string> = {}
     Object.entries(filtros).forEach(([key, value]) => {
-      if (value) params.set(key, value)
+      if (value) params[key] = value
     })
-    const qs = params.toString() ? `?${params.toString()}` : ''
+    const signal = abortController.signal
 
     try {
       const [kpiRes, projRes, chartRes] = await Promise.all([
-        httpClient.get(`/api/kpis${qs}`, { signal: abortController.signal }),
-        httpClient.get(`/api/projects/top${qs}`, { signal: abortController.signal }),
-        httpClient.get(`/api/charts${qs}`, { signal: abortController.signal })
+        call('dashboard.kpis', params, { signal }),
+        call('dashboard.top_projects', params, { signal }),
+        call('dashboard.charts', params, { signal })
       ])
 
-      kpis.value = kpiRes.data
-      projects.value = projRes.data
-      charts.value = chartRes.data
+      kpis.value = kpiRes
+      projects.value = projRes
+      charts.value = chartRes
     } catch (err: any) {
       if (err.name !== 'CanceledError' && err.message !== 'canceled') {
         console.error('Dashboard fetch error:', err)

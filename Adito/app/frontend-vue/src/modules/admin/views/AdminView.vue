@@ -28,7 +28,7 @@ import {
   ChevronRight
 } from 'lucide-vue-next'
 
-import httpClient from '@/common/api/httpClient'
+import { call } from '@/common/api/core'
 import TrainingItemCard from '@/modules/admin/components/TrainingItemCard.vue'
 import AddTrainingModal from '@/modules/admin/components/AddTrainingModal.vue'
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
@@ -476,14 +476,11 @@ async function handleSync() {
   stopEtlPolling()
   etlSyncing.value = true
   try {
-    const response = await httpClient.post(
-      '/api/admin/data/bootstrap',
-      {},
-      { timeout: 1000 * 900 }
-    )
+    // Sem limite de tempo: a indexação roda no núcleo local e pode levar minutos.
+    const response = await call('admin.bootstrap')
 
-    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.db e indexação do RAG).
-    const data = response.data || {}
+    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.duckdb e indexação do RAG).
+    const data = response || {}
     const contextos: any[] = data.contextos || []
     const triggeredAt = new Date().toISOString()
     const stages: EtlTriggeredRun[] = contextos.map((ctx) => ({
@@ -547,15 +544,15 @@ const loadingSystem = ref(true)
 
 async function fetchSystemStatus() {
   try {
-    const res = await httpClient.get('/api/admin/system-status')
-    if (res.data) {
-      services.value = (res.data.services || []).map((s: any) => ({
+    const res = await call('admin.system_status')
+    if (res) {
+      services.value = (res.services || []).map((s: any) => ({
         name: s.name,
         status: s.status,
         url: s.url,
         latency: s.latency_ms ? `${s.latency_ms}ms` : '-'
       }))
-      systemStats.value = res.data.systemStats || systemStats.value
+      systemStats.value = res.systemStats || systemStats.value
     }
   } catch (error) {
     console.error('Erro ao buscar status do sistema:', error)
@@ -581,8 +578,8 @@ async function fetchQueryExecutions() {
     const params: Record<string, string> = { limit: '100' }
     if (auditFilter.value === 'valid') params.is_valid = 'true'
     if (auditFilter.value === 'invalid') params.is_valid = 'false'
-    const response = await httpClient.get('/api/chat/query-executions', { params })
-    queryExecutions.value = Array.isArray(response.data) ? response.data : []
+    const response = await call('admin.query_executions', params)
+    queryExecutions.value = Array.isArray(response) ? response : []
   } catch (error) {
     queryExecutions.value = []
     auditError.value = 'Não foi possível carregar o histórico de SQL.'
@@ -596,7 +593,7 @@ async function promoteAuditRow(row: any) {
   if (!row.generated_sql) return
   auditError.value = ''
   try {
-    const { data } = await httpClient.post('/api/admin/trainings', {
+    const data = await call('admin.trainings.create', {
       type: 'sql',
       question: row.question_original || 'Consulta auditada',
       content: row.generated_sql

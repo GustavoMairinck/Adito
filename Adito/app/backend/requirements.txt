@@ -1,6 +1,3 @@
-django
-whitenoise
-djangorestframework
 numpy
 sqlglot
 duckdb>=1.2.0
@@ -12,14 +9,12 @@ langgraph
 langfuse
 pydantic
 python-dotenv
-bcrypt
-python-jose[cryptography]
 sqlalchemy
 pandas
 langgraph-checkpoint-sqlite
-django-cors-headers
 rich
 
+# O núcleo fala com o Tauri por stdin/stdout (rpc/server.py): sem servidor HTTP nem Django.
 # O bi_agent roda no mesmo processo (agents/bi_agent/tool.py); sem servidor MCP.
+# httpx: só para validar a chave do Gemini (rpc/core_methods.py).
 httpx
-daphne

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Sobe o Oráculo ESX desktop (Tauri) em modo desenvolvimento:
-# Vite na 5173 -> janela Tauri -> backend Django (iniciado pela própria janela).
-# Fechar a janela encerra o backend e o Vite iniciado por este script.
+# Sobe o Adito desktop (Tauri) em modo desenvolvimento:
+# Vite na 5173 -> janela Tauri -> núcleo Python (iniciado pela própria janela, sem porta de rede;
+# conversa com a janela por stdin/stdout).
+# Fechar a janela encerra o núcleo e o Vite iniciado por este script.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,7 +43,7 @@ if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
   export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
 fi
 
-echo "→ Abrindo a janela do Oráculo ESX (o backend sobe junto)."
-echo "  Log do backend: $DATA/logs/backend.log"
+echo "→ Abrindo a janela do Adito (o núcleo sobe junto)."
+echo "  Log do núcleo: $DATA/logs/backend.log"
 cd "$APP/src-tauri"
 cargo run

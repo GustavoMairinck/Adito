@@ -4,6 +4,7 @@ Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo 
 
 - **[stories/](stories/)**: user stories no template do Oráculo, uma por decisão ou entrega.
 - **[PORTE_DESKTOP_DECISOES.md](PORTE_DESKTOP_DECISOES.md)**: registro completo, com datas, consequências, achados no código e o que não foi verificado.
+- **[NUCLEO_LOCAL_SEM_HTTP.md](NUCLEO_LOCAL_SEM_HTTP.md)**: como o app fala com o núcleo Python por stdin/stdout, sem servidor HTTP (2026-11-17).
 
 ## Documentação da interface do Adito
 
@@ -28,9 +29,10 @@ Decisões tomadas para levar o Oráculo-ESX (web, em Docker) para um aplicativo 
 | [US-010](stories/US-010_telas-herdadas.md) | Tirar do app as telas que só faziam sentido na web | Done |
 | [US-011](stories/US-011_instalador.md) | Instalar o app sem ferramentas de desenvolvimento | Backlog |
 | [US-012](stories/US-012_limite-linhas-llm.md) | Respeitar o limite de linhas do contexto no envio ao LLM | Backlog |
-| [US-013](stories/US-013_backend-orfao.md) | Não deixar o backend rodando quando o app morre | Backlog |
+| [US-013](stories/US-013_backend-orfao.md) | Não deixar o backend rodando quando o app morre | Done |
 | [US-014](stories/US-014_busca-local-nomes.md) | Resolver nomes de pessoas sem enviá-los à nuvem | Backlog |
 | [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard e Explorar Dados por contexto | Backlog |
+| [US-016](stories/US-016_nucleo-local-sem-http.md) | Núcleo local sem servidor HTTP | In Review |
 
 ## ETL do Adito (EPIC-07)
 

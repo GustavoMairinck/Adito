@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import httpClient from '@/common/api/httpClient'
+import { call } from '@/common/api/core'
 
 export interface Widget {
   id: string
@@ -28,11 +28,7 @@ export interface CreateWidgetPayload {
   cache_ttl_hours?: number
 }
 
-function authHeaders(token?: string | null) {
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-export function usePersonalDashboard(token?: string | null) {
+export function usePersonalDashboard() {
   const widgets = ref<Widget[]>([])
   const widgetData = ref<Record<string, any>>({})
   const loading = ref(false)
@@ -40,11 +36,7 @@ export function usePersonalDashboard(token?: string | null) {
   async function fetchWidgets() {
     loading.value = true
     try {
-      const res = await httpClient.get('/api/dashboard/widgets', {
-        headers: authHeaders(token),
-        params: { dashboard_id: 'principal' }
-      })
-      const data = res.data
+      const data = await call<Widget[]>('widgets.list', { dashboard_id: 'principal' })
 
       if (Array.isArray(data)) {
         widgets.value = data
@@ -60,15 +52,13 @@ export function usePersonalDashboard(token?: string | null) {
 
   async function refreshWidgetData(widgetId: string) {
     try {
-      const res = await httpClient.get(`/api/dashboard/widgets/${widgetId}/refresh`, {
-        headers: authHeaders(token)
-      })
-      widgetData.value[widgetId] = res.data.data || res.data
+      const res = await call('widgets.refresh', { id: widgetId })
+      widgetData.value[widgetId] = res.data || res
 
       // Update widget status if returned
       const widget = widgets.value.find(w => w.id === widgetId)
-      if (widget && res.data.widget_status) {
-        widget.status = res.data.widget_status
+      if (widget && res.widget_status) {
+        widget.status = res.widget_status
       }
     } catch (err) {
       console.error(`Failed to refresh widget ${widgetId}:`, err)
@@ -77,9 +67,7 @@ export function usePersonalDashboard(token?: string | null) {
 
   async function updateWidget(widgetId: string, updates: Partial<Widget>) {
     try {
-      await httpClient.put(`/api/dashboard/widgets/${widgetId}`, updates, {
-        headers: authHeaders(token)
-      })
+      await call('widgets.update', { ...updates, id: widgetId })
       const index = widgets.value.findIndex(w => w.id === widgetId)
       if (index !== -1) {
         widgets.value[index] = { ...widgets.value[index], ...updates }
@@ -92,9 +80,7 @@ export function usePersonalDashboard(token?: string | null) {
 
   async function deleteWidget(widgetId: string) {
     try {
-      await httpClient.delete(`/api/dashboard/widgets/${widgetId}`, {
-        headers: authHeaders(token)
-      })
+      await call('widgets.delete', { id: widgetId })
       widgets.value = widgets.value.filter(w => w.id !== widgetId)
       delete widgetData.value[widgetId]
     } catch (err) {
@@ -104,10 +90,7 @@ export function usePersonalDashboard(token?: string | null) {
   }
 
   async function createWidget(payload: CreateWidgetPayload) {
-    const res = await httpClient.post('/api/dashboard/widgets', payload, {
-      headers: authHeaders(token)
-    })
-    return res.data
+    return call<Widget>('widgets.create', { ...payload })
   }
 
   async function updateWidgetsBulk(updatesList: Array<{ id: string; updates: Partial<Widget> }>) {

@@ -21,7 +21,7 @@ Hoje o app roda só a partir do código (README de desenvolvimento). O Tauri ger
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1:** O backend vira o executável `oraculo-backend` (PyInstaller ou Nuitka), declarado como `externalBin` no `tauri.conf.json`.
+- [ ] **Critério 1:** O backend vira o executável `oraculo-backend` (PyInstaller ou Nuitka), declarado como `externalBin` no `tauri.conf.json`. Desde 2026-11-17 (US-016) ele não recebe argumentos e usa stdin/stdout: empacotar como aplicativo de console, sem `--port`, e sem Django/daphne no bundle.
 - [ ] **Critério 2:** `tauri build` gera `.exe` (NSIS) e `.msi` no Windows e `.deb`/`.AppImage` no Linux.
 - [ ] **Critério 3:** Um workflow do GitHub Actions com matriz Windows e Linux gera os instaladores a cada tag.
 - [ ] **Critério 4:** O app instalado roda num PC limpo, sem nenhuma ferramenta de desenvolvimento.

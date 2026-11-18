@@ -4,7 +4,7 @@
 **Prioridade:** Média
 **Story Points:** -
 **Sprint:** -
-**Status:** Backlog
+**Status:** Done
 
 ---
 
@@ -21,9 +21,9 @@ Fechar a janela encerra o backend. Se o app for morto à força (sinal, gerencia
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1:** No Linux, o backend morre junto com o app (por exemplo `PR_SET_PDEATHSIG` ou o backend vigiando o PID do pai).
-- [ ] **Critério 2:** No Windows, o backend fica num Job Object que é encerrado com o app.
-- [ ] **Critério 3:** Matar o app com `kill -9` não deixa processo `desktop_server.py`.
+- [x] **Critério 1:** No Linux, o backend morre junto com o app (por exemplo `PR_SET_PDEATHSIG` ou o backend vigiando o PID do pai). *(Resolvido de outro jeito na US-016: o núcleo lê o stdin e encerra quando o pipe fecha.)*
+- [x] **Critério 2:** No Windows, o backend fica num Job Object que é encerrado com o app. *(Dispensado: o fim do stdin vale também no Windows; falta verificar num Windows real.)*
+- [x] **Critério 3:** Matar o app com `kill -9` não deixa processo `desktop_server.py`. *(Verificado no Linux em 2026-11-17.)*
 
 ---
 
@@ -87,7 +87,7 @@ N/A
 
 ## 📝 Notas e Comentários
 
-- Hoje o README orienta `pkill -f desktop_server.py` no Linux.
+- Até 2026-11-16 o README orientava `pkill -f desktop_server.py` no Linux; com a US-016 isso deixou de ser necessário.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

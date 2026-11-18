@@ -1,6 +1,5 @@
 import { ref } from 'vue'
-import httpClient from '@/common/api/httpClient'
-import { apiBase, authHeaders } from '@/common/api/config'
+import { call, stream } from '@/common/api/core'
 import type { ChatMessage } from '@/modules/chat/types'
 
 function parseNumeric(value: unknown) {
@@ -86,64 +85,15 @@ function mapResponseToMessage(data: any): ChatMessage {
   }
 }
 
-function parseSseEvent(rawEvent: string) {
-  let event = 'message'
-  const dataLines: string[] = []
-
-  for (const line of rawEvent.split('\n')) {
-    if (line.startsWith('event:')) {
-      event = line.slice(6).trim()
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trimStart())
-    }
-  }
-
-  if (dataLines.length === 0) return null
-
-  return {
-    event,
-    data: JSON.parse(dataLines.join('\n'))
-  }
-}
-
 export function useChatApi() {
   const isLoading = ref(false)
 
   const checkHealth = async (): Promise<boolean> => {
     try {
-      const { data } = await httpClient.get('/health')
+      const data = await call('health')
       return !!data
     } catch {
       return false
-    }
-  }
-
-  const askQuestion = async (
-    questionText: string,
-    conversationId?: string | null,
-    contextoId?: string | null
-  ): Promise<ChatMessage> => {
-    isLoading.value = true
-    try {
-      const payload: Record<string, any> = { question: questionText }
-      if (conversationId && !conversationId.startsWith('local-')) {
-        payload.conversation_id = conversationId
-      } else if (contextoId) {
-        // Conversa nova: o backend fixa este contexto nela.
-        payload.contexto_id = contextoId
-      }
-      const { data } = await httpClient.post('/api/chat', payload)
-      return mapResponseToMessage(data)
-    } catch (error: any) {
-      return {
-        id: `${Date.now() + 1}`,
-        type: 'ai',
-        text: `Erro ao processar sua pergunta: ${error?.message || 'erro desconhecido'}. Verifique se o backend esta rodando.`,
-        timestamp: new Date().toISOString(),
-        error: true
-      }
-    } finally {
-      isLoading.value = false
     }
   }
 
@@ -164,55 +114,24 @@ export function useChatApi() {
         payload.contexto_id = contextoId
       }
 
-      const response = await fetch(`${apiBase()}/api/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders()
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok || !response.body) {
-        let detail = `status ${response.status}`
-        try {
-          detail = (await response.json()).error || detail
-        } catch {
-          // corpo não é JSON
-        }
-        throw new Error(detail)
-      }
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
       let lastResult: ChatMessage | null = null
+      let streamError: string | null = null
 
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const parsed = parseSseEvent(part)
-          if (!parsed) continue
-
-          if (parsed.event === 'token') {
-            handlers.onToken?.(parsed.data.text || '')
-          } else if (parsed.event === 'status') {
-            handlers.onStatus?.(parsed.data.message || 'Processando...', parsed.data)
-          } else if (parsed.event === 'error') {
-            throw new Error(parsed.data.message || 'erro desconhecido')
-          } else if (parsed.event === 'result') {
-            lastResult = mapResponseToMessage(parsed.data)
-            handlers.onResult?.(lastResult)
-          }
+      await stream('chat.stream', payload, (event, data) => {
+        // Depois de um erro, o resto do stream é ignorado (como no SSE).
+        if (streamError) return
+        if (event === 'token') {
+          handlers.onToken?.(data.text || '')
+        } else if (event === 'status') {
+          handlers.onStatus?.(data.message || 'Processando...', data)
+        } else if (event === 'error') {
+          streamError = data.message || 'erro desconhecido'
+        } else if (event === 'result') {
+          lastResult = mapResponseToMessage(data)
+          handlers.onResult?.(lastResult)
         }
-      }
+      })
+      if (streamError) throw new Error(streamError)
 
       if (lastResult) return lastResult
       throw new Error('stream finalizado sem resultado')
@@ -229,5 +148,5 @@ export function useChatApi() {
     }
   }
 
-  return { askQuestion, askQuestionStream, checkHealth, isLoading }
+  return { askQuestionStream, checkHealth, isLoading }
 }
