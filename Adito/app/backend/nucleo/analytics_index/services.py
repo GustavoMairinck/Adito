@@ -93,12 +93,12 @@ def fetch_distinct_candidates(contexto, source_table: str) -> list[TextEmbedding
 
     with connect_dados() as conn:
         found = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE LOWER(table_name) = LOWER(?)",
+            "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND LOWER(name) = LOWER(?)",
             [source_table],
         ).fetchone()
         if found is None:
             raise ValueError(
-                f"Tabela/view analítica '{source_table}' não encontrada no dados.duckdb. "
+                f"Tabela/view analítica '{source_table}' não encontrada no dados.db. "
                 "Carregue os dados antes de sincronizar embeddings."
             )
         rows = conn.execute(f"SELECT DISTINCT {quoted_fields} FROM {_quote_name(source_table)} WHERE {where}").fetchall()

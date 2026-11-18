@@ -114,14 +114,14 @@ def _extract_func_names(parsed: exp.Expression) -> set[str]:
 def validate_read_only_sql(
     sql: str,
     allowed_tables: set[str] | frozenset[str] | list[str],
-    dialect: str = "duckdb",
+    dialect: str = "sqlite",
     sensitive_columns: Iterable[tuple[str, str] | str] | None = None,
 ) -> tuple[bool, str | None]:
-    """Primeira barreira (sintática via AST do sqlglot no dialeto DuckDB).
+    """Primeira barreira (sintática via AST do sqlglot no dialeto SQLite).
 
     Garante:
     - Apenas uma instrução `SELECT` / `UNION`.
-    - Nenhum comando de escrita, administração ou leitura de arquivos externos do DuckDB.
+    - Nenhum comando de escrita, administração ou leitura de arquivos externos.
     - Apenas as tabelas/views fato listadas em `allowed_tables` (sem prefixo de schema proibido).
     - Nenhuma coluna sensível (`sensitive_columns`, CPF ou e-mail).
     """
@@ -134,8 +134,11 @@ def validate_read_only_sql(
     allowed = {name.lower() for name in allowed_tables}
     try:
         expressions = sqlglot.parse(sql, read=dialect)
-    except Exception as exc:
-        return False, f"Sintaxe Inválida: {exc}"
+    except Exception:
+        try:
+            expressions = sqlglot.parse(sql, read="duckdb")
+        except Exception as exc:
+            return False, f"Sintaxe Inválida: {exc}"
 
     if len(expressions) != 1 or expressions[0] is None:
         return False, "A consulta deve conter exatamente uma instrução SQL."

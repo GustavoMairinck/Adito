@@ -34,7 +34,7 @@ class BIAgent:
         llm_model: BaseChatModel,
         embedder: Embeddings,
         dados_path: str | None = None,
-        dialect: str = "duckdb",
+        dialect: str = "sqlite",
         validate_sql: bool = True,
         max_attempts: int = 2,
         system_prompt: str = "",
