@@ -58,7 +58,7 @@ def grupos_do_sigpesq(unidade: str | None = None) -> tuple[list[dict[str, str]],
     arquivos = sorted(pasta.glob("*.json")) if pasta.exists() else []
     if not arquivos:
         raise SemBrutoSigPesq("bruto do SigPesq ausente em etl/brutos/sigpesq/grupos/: "
-                              "rode `adito-etl sigpesq` (ou `sigpesq-converter`) antes")
+                              "rode `muninn-etl sigpesq` (ou `sigpesq-converter`) antes")
     validos: dict[str, dict[str, str]] = {}
     invalidos: list[dict[str, str]] = []
     for arq in arquivos:

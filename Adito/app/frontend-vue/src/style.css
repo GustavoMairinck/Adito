@@ -288,7 +288,7 @@
   background: color-mix(in srgb, var(--text-secondary) 35%, transparent);
 }
 
-/* Padrões de interação compartilhados do Adito. */
+/* Padrões de interação compartilhados do Muninn. */
 :where(button, a, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -297,13 +297,13 @@
 button:not(:disabled), summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
-.adito-wordmark {
+.muninn-wordmark {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: -0.055em;
 }
 
-.adito-topic {
+.muninn-topic {
   min-height: 126px;
   background: var(--bg-surface);
   color: var(--text-primary);
@@ -312,37 +312,37 @@ button:disabled { cursor: not-allowed; }
   transition: border-color 160ms ease, background-color 160ms ease;
 }
 
-.adito-topic:hover { border-color: var(--accent); background: var(--bg-surface-elevated); }
-.adito-topic[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); }
+.muninn-topic:hover { border-color: var(--accent); background: var(--bg-surface-elevated); }
+.muninn-topic[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); }
 
 /* Contraste dos cartões de áreas no tema escuro. */
-.dark .adito-topic {
+.dark .muninn-topic {
   background: #242930;
   border-color: #56616D;
   color: #F4F6F8;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
 }
 
-.dark .adito-topic:hover {
+.dark .muninn-topic:hover {
   background: #303740;
   border-color: #9BA7B3;
 }
 
-.dark .adito-topic[aria-pressed="true"] {
+.dark .muninn-topic[aria-pressed="true"] {
   background: #2D353E;
   border-color: #68D388;
   box-shadow: 0 0 0 1px #68D388;
 }
 
-.dark .adito-topic .text-text-muted { color: #C0CAD4; }
+.dark .muninn-topic .text-text-muted { color: #C0CAD4; }
 
-.dark .adito-topic-icon {
+.dark .muninn-topic-icon {
   background: #343C46;
   border-color: #637080;
   color: #E8EDF3;
 }
 
-.dark .adito-topic-icon svg { color: inherit; }
+.dark .muninn-topic-icon svg { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -3,16 +3,16 @@
 Utilitário para inspecionar e consultar o banco de dados acadêmicos SQLite (`dados.db`).
 
 Uso:
-  python Adito/scripts/ver_dados.py
+  python Muninn/scripts/ver_dados.py
       -> Lista todas as tabelas e views e quantidade de registros.
 
-  python Adito/scripts/ver_dados.py <nome_da_tabela_ou_view>
+  python Muninn/scripts/ver_dados.py <nome_da_tabela_ou_view>
       -> Mostra o esquema e as 5 primeiras linhas da tabela ou view.
 
-  python Adito/scripts/ver_dados.py "SELECT * FROM vfact_extensao_acao_resolved LIMIT 3"
+  python Muninn/scripts/ver_dados.py "SELECT * FROM vfact_extensao_acao_resolved LIMIT 3"
       -> Executa qualquer consulta SQL e imprime os resultados.
 
-  python Adito/scripts/ver_dados.py -i
+  python Muninn/scripts/ver_dados.py -i
       -> Abre um shell SQL interativo.
 """
 from __future__ import annotations
@@ -22,12 +22,12 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DB_PATH = REPO_ROOT / "Adito" / "app" / "data" / "dados.db"
+DB_PATH = REPO_ROOT / "Muninn" / "app" / "data" / "dados.db"
 
 
 def conectar() -> sqlite3.Connection:
     if not DB_PATH.exists():
-        sys.exit(f"Erro: banco não encontrado em {DB_PATH}.\nRode antes: python Adito/scripts/popular_banco.py")
+        sys.exit(f"Erro: banco não encontrado em {DB_PATH}.\nRode antes: python Muninn/scripts/popular_banco.py")
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
@@ -88,8 +88,8 @@ def listar_tabelas(conn: sqlite3.Connection):
     print(f"\nTotal de tabelas base: {len(tabelas)}")
 
     print("\n💡 Dica: para ver dados de uma view ou tabela específica, execute:")
-    print("   python Adito/scripts/ver_dados.py vfact_extensao_acao_resolved")
-    print("   python Adito/scripts/ver_dados.py -i   (para shell interativo)")
+    print("   python Muninn/scripts/ver_dados.py vfact_extensao_acao_resolved")
+    print("   python Muninn/scripts/ver_dados.py -i   (para shell interativo)")
 
 
 def inspecionar_tabela(conn: sqlite3.Connection, nome: str):
@@ -138,7 +138,7 @@ def executar_query(conn: sqlite3.Connection, query: str):
 
 def shell_interativo(conn: sqlite3.Connection):
     print("=" * 80)
-    print("Shell Interativo SQLite (Somente Leitura) - Adito dados.db")
+    print("Shell Interativo SQLite (Somente Leitura) - Muninn dados.db")
     print("Digite 'sair' ou pressione Ctrl+C para finalizar.")
     print("=" * 80)
 

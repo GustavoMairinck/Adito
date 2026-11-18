@@ -15,8 +15,8 @@ from . import pii
 
 # ------------------------------------------------------------------ pastas
 def base_dir() -> Path:
-    """Pasta `etl/` (ou `ADITO_ETL_BASE`, usado nos testes)."""
-    env = os.environ.get("ADITO_ETL_BASE")
+    """Pasta `etl/` (ou `MUNINN_ETL_BASE`, usado nos testes)."""
+    env = os.environ.get("MUNINN_ETL_BASE")
     if env:
         return Path(env).resolve()
     return Path(__file__).resolve().parents[2]
@@ -48,7 +48,7 @@ def ler_env(path: Path | None = None) -> dict[str, str]:
     return dados
 
 
-ORIGEM_CREDENCIAIS = "ADITO_CREDENCIAIS"
+ORIGEM_CREDENCIAIS = "MUNINN_CREDENCIAIS"
 ORIGENS = ("infisical", "env")
 
 
@@ -71,10 +71,10 @@ def credencial(chaves_usuario: Iterable[str], chaves_senha: Iterable[str],
                segredos: tuple[str, str] | None = None) -> tuple[str, str]:
     """Usuário e senha de uma fonte.
 
-    - `ADITO_CREDENCIAIS=infisical`: lê os segredos `segredos` (usuário, senha) no
+    - `MUNINN_CREDENCIAIS=infisical`: lê os segredos `segredos` (usuário, senha) no
       Infisical; os nomes podem ser trocados por `INFISICAL_<CHAVE>_SECRET` no .env
       (ex.: INFISICAL_SRC_USER_SECRET).
-    - `ADITO_CREDENCIAIS=env`: lê as chaves do `etl/.env` ou do ambiente. Só chaves
+    - `MUNINN_CREDENCIAIS=env`: lê as chaves do `etl/.env` ou do ambiente. Só chaves
       com prefixo da fonte (ex.: SRC_USER), nunca `USER`, que no SO é o usuário logado.
     """
     cu, cs = list(chaves_usuario), list(chaves_senha)

@@ -72,7 +72,7 @@ async function fetchCatalog() {
     catalog.value = data.tables
     tableName.value = data.tables.find(table => table.available)?.name ?? ''
   } catch (error) {
-    if (!controller.signal.aborted) catalogError.value = errorMessage(error, 'Não foi possível carregar as tabelas. Verifique o núcleo local do Adito.')
+    if (!controller.signal.aborted) catalogError.value = errorMessage(error, 'Não foi possível carregar as tabelas. Verifique o núcleo local do Muninn.')
   } finally {
     if (!controller.signal.aborted) catalogLoading.value = false
   }
@@ -87,7 +87,7 @@ async function initialize() {
     ready.value = true
     await fetchCatalog()
   } catch (error) {
-    catalogError.value = errorMessage(error, 'Não foi possível carregar os contextos. Verifique o núcleo local do Adito.')
+    catalogError.value = errorMessage(error, 'Não foi possível carregar os contextos. Verifique o núcleo local do Muninn.')
     catalogLoading.value = false
   }
 }

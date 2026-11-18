@@ -1,12 +1,12 @@
 """
-Comandos de manutenção do Adito (substituem os do manage.py). Rodar de backend/nucleo:
+Comandos de manutenção do Muninn (substituem os do manage.py). Rodar de backend/nucleo:
 
     python -m core.cli load-context <pasta> [--index]
     python -m core.cli sync-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]
     python -m core.cli rebuild-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]
     python -m core.cli flush-data [--dry-run] [--keep-email EMAIL]
 
-Usam o mesmo app.db do app (ORACULO_DATA_DIR / ORACULO_APP_DB) e o dados.duckdb atual.
+Usam o mesmo app.db do app (MUNINN_DATA_DIR / MUNINN_APP_DB) e o dados.duckdb atual.
 """
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ def flush_data(args) -> None:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m core.cli", description="Manutenção do Adito.")
+    parser = argparse.ArgumentParser(prog="python -m core.cli", description="Manutenção do Muninn.")
     sub = parser.add_subparsers(dest="comando", required=True)
 
     p = sub.add_parser("load-context", help="Carrega e valida um contexto (views.json, rules.md, examples.json).")

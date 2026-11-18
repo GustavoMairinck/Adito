@@ -3,7 +3,7 @@
 Verifica: evento ready, pedidos concorrentes, erro com status, cancelamento, linha inválida,
 nada além do protocolo no stdout e saída do processo quando o stdin fecha.
 
-Uso (de Adito/app):
+Uso (de Muninn/app):
     .venv/bin/python scripts/teste_stdio.py
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ def check(nome, cond, detalhe=""):
 
 class Nucleo:
     def __init__(self, data_dir: Path):
-        env = {**os.environ, "ORACULO_DATA_DIR": str(data_dir), "PYTHONUNBUFFERED": "1"}
+        env = {**os.environ, "MUNINN_DATA_DIR": str(data_dir), "PYTHONUNBUFFERED": "1"}
         env.pop("GEMINI_API_KEY", None)
         env.pop("GOOGLE_API_KEY", None)
         self.t0 = time.monotonic()
@@ -73,7 +73,7 @@ class Nucleo:
 def main() -> int:
     import teste_contrato
 
-    data_dir = Path(tempfile.mkdtemp(prefix="adito-stdio-"))
+    data_dir = Path(tempfile.mkdtemp(prefix="muninn-stdio-"))
     teste_contrato.DATA_DIR = data_dir
     teste_contrato.criar_dados()
     try:

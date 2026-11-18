@@ -16,7 +16,7 @@ function showFatal(message: string) {
   const box = document.createElement('div')
   box.style.cssText = 'max-width:640px;margin:15vh auto;padding:24px;font-family:sans-serif;line-height:1.5'
   const title = document.createElement('h1')
-  title.textContent = 'O Adito não conseguiu iniciar'
+  title.textContent = 'O Muninn não conseguiu iniciar'
   title.style.cssText = 'font-size:20px;margin:0 0 12px'
   const text = document.createElement('p')
   text.textContent = message

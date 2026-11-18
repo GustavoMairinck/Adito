@@ -1,11 +1,11 @@
 [package]
-name = "oraculo-esx"
+name = "muninn"
 version = "0.1.0"
-description = "Adito desktop"
+description = "Muninn desktop"
 edition = "2021"
 
 [lib]
-name = "oraculo_esx_lib"
+name = "muninn_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -1,5 +1,5 @@
 """
-Núcleo local do Adito falando com o Tauri por stdin/stdout, uma mensagem JSON por linha.
+Núcleo local do Muninn falando com o Tauri por stdin/stdout, uma mensagem JSON por linha.
 
 Pedido     (Tauri → núcleo): {"id": 7, "method": "explorer.rows", "params": {...}}
 Resposta   (núcleo → Tauri): {"id": 7, "ok": true, "result": ...}
@@ -25,7 +25,7 @@ import time
 from .errors import ApiError
 from .jsonio import dumps
 
-logger = logging.getLogger("adito.rpc")
+logger = logging.getLogger("muninn.rpc")
 
 
 def reserve_stdout():
@@ -127,7 +127,7 @@ def startup() -> dict:
 def main() -> None:
     proto = reserve_stdout()
     logging.basicConfig(
-        level=os.environ.get("ADITO_LOG_LEVEL", "INFO"),
+        level=os.environ.get("MUNINN_LOG_LEVEL", "INFO"),
         stream=sys.stderr,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )

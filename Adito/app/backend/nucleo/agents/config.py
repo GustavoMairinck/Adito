@@ -39,8 +39,8 @@ from core.datastore import app_db_path
 
 
 def checkpoint_db_path() -> str:
-    """Resolvido a cada chamada, como o app_db_path(): segue ORACULO_CHECKPOINT_DB / ORACULO_DATA_DIR atuais."""
-    return str(os.getenv("ORACULO_CHECKPOINT_DB") or app_db_path())
+    """Resolvido a cada chamada, como o app_db_path(): segue MUNINN_CHECKPOINT_DB / MUNINN_DATA_DIR atuais."""
+    return str(os.getenv("MUNINN_CHECKPOINT_DB") or app_db_path())
 
 # ─── Langfuse (telemetria externa; desligada se as chaves não estiverem definidas) ─
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")

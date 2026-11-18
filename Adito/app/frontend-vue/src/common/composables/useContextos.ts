@@ -14,7 +14,7 @@ export interface Contexto {
   views: Array<{ name: string; description: string }>
 }
 
-const STORAGE_KEY = 'oraculo_contexto_selecionado'
+const STORAGE_KEY = 'muninn_contexto_selecionado'
 
 const contextos = ref<Contexto[]>([])
 const selectedId = ref<string | null>(readSaved())

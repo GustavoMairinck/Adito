@@ -58,8 +58,8 @@ def ler_lista(path: Path) -> tuple[list[tuple[str, str]], list[str]]:
 
 def _gerar_config(config: Path, lista: Path, saida: Path, cache: Path) -> None:
     """Mesmo `lattes.config` que o horizon gera (LattesConfigGenerator)."""
-    config.write_text(f"""# Gerado por adito-etl
-global-nome_do_grupo = Adito
+    config.write_text(f"""# Gerado por muninn-etl
+global-nome_do_grupo = Muninn
 global-diretorio_de_saida = {saida}
 global-diretorio_de_armazenamento_de_cvs = {cache}
 global-email_do_admin = admin@example.com
@@ -84,7 +84,7 @@ def _corrigir_scriptlattes() -> None:
     except ImportError as e:
         raise ScriptLattesIndisponivel(
             "scriptLattes não instalado: rode `pip install -e '.[lattes]'` em etl/") from e
-    if getattr(bl, "_adito_corrigido", False):
+    if getattr(bl, "_muninn_corrigido", False):
         return
 
     def get_data(id_lattes: str, diretorio: str) -> None:
@@ -127,7 +127,7 @@ def _corrigir_scriptlattes() -> None:
 
     bl.__get_data = get_data
     bl.baixaCVLattes = baixa_cv
-    bl._adito_corrigido = True
+    bl._muninn_corrigido = True
 
 
 def _baixar_cache(ids: list[str], cache: Path, workers: int, exe: Execucao, log: Log) -> list[str]:

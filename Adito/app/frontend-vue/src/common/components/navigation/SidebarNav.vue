@@ -100,8 +100,8 @@ function toggleTheme() {
         <div class="flex items-center gap-2">
           <BrandIcon class="h-[34px] w-[34px]" />
           <div v-if="!isEffectivelyCollapsed" class="relative animate-in fade-in duration-300">
-            <h1 class="adito-wordmark text-[26px] leading-none text-white">
-              Adito
+            <h1 class="muninn-wordmark text-[26px] leading-none text-white">
+              Muninn
             </h1>
           </div>
         </div>

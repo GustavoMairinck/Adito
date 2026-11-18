@@ -8,7 +8,7 @@ dos espelhos mock. O schema informado é apagado e recriado a cada execução.
 
 Uso:
     export HORIZON_DATABASE_URL=postgresql://horizon:horizon@localhost:5434/horizon
-    python executar_etl_mock.py --etl ../Adito/Etls/Horizon/Etl --schema mock_validacao
+    python executar_etl_mock.py --etl ../Muninn/Etls/Horizon/Etl --schema mock_validacao
     python executar_etl_mock.py --etl ... --schema mock_completa --com-sonda
 """
 
@@ -28,7 +28,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     padrao_etl = os.path.dirname(AQUI) if os.path.isdir(os.path.join(os.path.dirname(AQUI), "src", "core")) else None
     ap.add_argument("--etl", default=padrao_etl, required=padrao_etl is None,
-                    help="pasta Etls/Horizon/Etl do Adito (padrão: a pasta acima deste kit)")
+                    help="pasta Etls/Horizon/Etl do Muninn (padrão: a pasta acima deste kit)")
     ap.add_argument("--dados", default=os.path.join(AQUI, "dados"))
     ap.add_argument("--schema", default="mock_validacao")
     ap.add_argument("--resultados", default=os.path.join(AQUI, "resultados"))

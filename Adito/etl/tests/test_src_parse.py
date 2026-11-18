@@ -1,10 +1,10 @@
 """Parsers do SRC contra HTML fixo (sem rede). Portado de SRCEtl tests/test_detail.py."""
 
-from adito_etl.comum import filtrar_colunas
-from adito_etl.fontes.src.detalhe import parse_detalhe
-from adito_etl.fontes.src.models import Acao
-from adito_etl.fontes.src.participacoes import COLUNAS_PERMITIDAS, linhas_da_tabela
-from adito_etl.fontes.src.vinculadas import parse_vinculadas
+from muninn_etl.comum import filtrar_colunas
+from muninn_etl.fontes.src.detalhe import parse_detalhe
+from muninn_etl.fontes.src.models import Acao
+from muninn_etl.fontes.src.participacoes import COLUNAS_PERMITIDAS, linhas_da_tabela
+from muninn_etl.fontes.src.vinculadas import parse_vinculadas
 
 HTML = """
 <table><tbody>

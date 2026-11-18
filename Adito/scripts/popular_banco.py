@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Popula o banco de dados acadêmicos SQLite (`dados.db`) com o que o ETL do Adito já extraiu.
+"""Popula o banco de dados acadêmicos SQLite (`dados.db`) com o que o ETL do Muninn já extraiu.
 
 Lê a pasta do ETL (`brutos/` de cada fonte + `trabalho/pessoas.json` do
 cruzamento), recria o schema SQLite nativo (DDLs 00 a 04), insere todas as 42
@@ -9,7 +9,7 @@ tabelas base em uma única transação atômica e compila as 6 views analíticas
 Não depende de Docker, PostgreSQL ou DuckDB.
 Executa em tempo inferior a 5 segundos diretamente via `sqlite3`.
 
-Uso (a partir de Adito/scripts/):
+Uso (a partir de Muninn/scripts/):
     python3 popular_banco.py
     python3 popular_banco.py --banco ../app/data/dados.db
     python3 popular_banco.py --so-gerar
@@ -380,7 +380,7 @@ class Carga:
     def carregar_pessoas(self) -> None:
         arq = self.etl / "trabalho" / "pessoas.json"
         if not arq.exists():
-            raise SystemExit(f"erro: {arq} não existe; rode `adito-etl cruzar` no ETL antes")
+            raise SystemExit(f"erro: {arq} não existe; rode `muninn-etl cruzar` no ETL antes")
         self.indice: dict[str, list[tuple[int, dict]]] = defaultdict(list)
         for p in ler(arq):
             pid = self.novo("pessoa", nome=p["nome"])
@@ -1031,7 +1031,7 @@ class Carga:
     def sql(self) -> str:
         """Gera o bloco SQL de inserção pura compatível com SQLite."""
         out = [
-            "-- Gerado por Adito/scripts/popular_banco.py para SQLite. Transação atômica única.",
+            "-- Gerado por Muninn/scripts/popular_banco.py para SQLite. Transação atômica única.",
             "PRAGMA foreign_keys = ON;",
             "BEGIN TRANSACTION;"
         ]
@@ -1152,18 +1152,18 @@ def validar_sanidade_banco(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def main(argv: Iterable[str] | None = None) -> int:
     inicio = time.time()
-    ap = argparse.ArgumentParser(description="Popula o banco SQLite (dados.db) com os dados acadêmicos do Adito.")
-    ap.add_argument("--etl", type=Path, default=os.environ.get("ADITO_ETL_DIR") or AQUI.parent / "etl",
-                    help="Pasta etl/ do Adito (com brutos/ e trabalho/). Padrão: $ADITO_ETL_DIR ou ../etl")
-    ap.add_argument("--banco", type=Path, default=os.environ.get("ADITO_DB_PATH") or AQUI.parent / "app" / "data" / "dados.db",
-                    help="Caminho do arquivo SQLite dados.db (padrão: Adito/app/data/dados.db)")
+    ap = argparse.ArgumentParser(description="Popula o banco SQLite (dados.db) com os dados acadêmicos do Muninn.")
+    ap.add_argument("--etl", type=Path, default=os.environ.get("MUNINN_ETL_DIR") or AQUI.parent / "etl",
+                    help="Pasta etl/ do Muninn (com brutos/ e trabalho/). Padrão: $MUNINN_ETL_DIR ou ../etl")
+    ap.add_argument("--banco", type=Path, default=os.environ.get("MUNINN_DB_PATH") or AQUI.parent / "app" / "data" / "dados.db",
+                    help="Caminho do arquivo SQLite dados.db (padrão: Muninn/app/data/dados.db)")
     ap.add_argument("--saida", type=Path, default=None, help="Arquivo SQL de dump (padrão: <etl>/saida/carga_banco.sql)")
     ap.add_argument("--so-gerar", action="store_true", help="Só gera o SQL e o relatório; não executa a carga")
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     etl = args.etl.expanduser().resolve()
     if not (etl / "brutos").is_dir():
-        ap.error(f"{etl} não parece a pasta etl/ do Adito (falta brutos/)")
+        ap.error(f"{etl} não parece a pasta etl/ do Muninn (falta brutos/)")
 
     banco_path = args.banco.expanduser().resolve()
 

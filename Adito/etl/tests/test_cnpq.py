@@ -1,8 +1,8 @@
 import pytest
 
-from adito_etl.comum import gravar_json
-from adito_etl.cruzamento.leitores import ler_cnpq
-from adito_etl.fontes.cnpq.grupos import (
+from muninn_etl.comum import gravar_json
+from muninn_etl.cruzamento.leitores import ler_cnpq
+from muninn_etl.fontes.cnpq.grupos import (
     SemBrutoSigPesq, filtrar_grupo, grupos_do_sigpesq, id_do_espelho)
 
 ID = "1234123412341234"

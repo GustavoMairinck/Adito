@@ -44,7 +44,7 @@ FATOS_NOMES = frozenset({
 def _criar_sqlite_sintetico(caminho_sqlite: Path) -> None:
     """Cria um arquivo `.db` mínimo contendo as 6 tabelas fato com as colunas do contexto."""
     spec = json.loads(
-        (RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
+        (RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
             encoding="utf-8"
         )
     )
@@ -76,7 +76,7 @@ class AppDbTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.appdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.appdir.cleanup)
-        env = patch.dict(os.environ, {"ORACULO_APP_DB": str(Path(self.appdir.name) / "app.db")})
+        env = patch.dict(os.environ, {"MUNINN_APP_DB": str(Path(self.appdir.name) / "app.db")})
         env.start()
         self.addCleanup(env.stop)
         self.addCleanup(db.close)
@@ -107,7 +107,7 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
     def test_fatos_nomes_cobertura_completa(self) -> None:
         self.assertEqual(len(FATOS_NOMES), 6)
         spec = json.loads(
-            (RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
+            (RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes" / "views.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -199,8 +199,8 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
                 conn._conn.execute("ATTACH DATABASE '/tmp/outro.db' AS outro")
 
     def test_load_context_dir_ativa_pesquisa_extensao_e_desativa_exemplo_vendas(self) -> None:
-        pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
-        pasta_vendas = RAIZ_REPO / "Adito" / "app" / "contexts" / "exemplo-vendas"
+        pasta_ifes = RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes"
+        pasta_vendas = RAIZ_REPO / "Muninn" / "app" / "contexts" / "exemplo-vendas"
 
         ctx_ifes, examples_ifes, errors_ifes = load_context_dir(
             pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
@@ -221,7 +221,7 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
         self.assertFalse(ctx_vendas.is_active)
 
     def test_bi_agent_execute_query_e_fetch_distinct_candidates(self) -> None:
-        pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
+        pasta_ifes = RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes"
         ctx_ifes, _, _ = load_context_dir(
             pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
         )
@@ -239,16 +239,16 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
         cols = view_columns("vfact_extensao_acao_resolved", dados_path=self.synthetic_sqlite)
         self.assertTrue(any(c[0] == "campus" for c in cols))
 
-        old_env = os.environ.get("ORACULO_DADOS_DB")
-        os.environ["ORACULO_DADOS_DB"] = str(self.synthetic_sqlite)
+        old_env = os.environ.get("MUNINN_DADOS_DB")
+        os.environ["MUNINN_DADOS_DB"] = str(self.synthetic_sqlite)
         try:
             candidates = fetch_distinct_candidates(ctx_ifes, "vfact_extensao_acao_resolved")
             self.assertEqual(len(candidates), 1)
         finally:
             if old_env is None:
-                os.environ.pop("ORACULO_DADOS_DB", None)
+                os.environ.pop("MUNINN_DADOS_DB", None)
             else:
-                os.environ["ORACULO_DADOS_DB"] = old_env
+                os.environ["MUNINN_DADOS_DB"] = old_env
 
     def test_banco_sqlite_real_contagens_fatos_quando_presente(self) -> None:
         if not DEFAULT_REPO_SQLITE.exists():
@@ -309,7 +309,7 @@ class ExplorerTests(AppDbTestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.db_path = Path(self.folder.name) / 'dados.db'
-        self.env = patch.dict(os.environ, {'ORACULO_DADOS_DB': str(self.db_path)})
+        self.env = patch.dict(os.environ, {'MUNINN_DADOS_DB': str(self.db_path)})
         self.env.start()
         self.addCleanup(self.env.stop)
         close_dados()
@@ -436,7 +436,7 @@ class ExplorerTests(AppDbTestCase):
 
     def test_missing_database_and_stale_context_return_actionable_errors(self):
         with self.assertLogs('rpc.explorer', level='ERROR'), patch.dict(
-            os.environ, {'ORACULO_DADOS_DB': str(self.db_path) + '.missing'},
+            os.environ, {'MUNINN_DADOS_DB': str(self.db_path) + '.missing'},
         ):
             self.assertEqual(self.catalog().status_code, 503)
             self.assertEqual(self.rows().status_code, 503)
@@ -533,8 +533,8 @@ class CaminhosTests(unittest.TestCase):
         from core.datastore import data_dir
 
         with tempfile.TemporaryDirectory() as base, patch.dict(os.environ, {"XDG_DATA_HOME": base}):
-            os.environ.pop("ORACULO_DATA_DIR", None)
-            self.assertEqual(data_dir(), Path(base) / "br.edu.ifes.leds.oraculo-esx")
+            os.environ.pop("MUNINN_DATA_DIR", None)
+            self.assertEqual(data_dir(), Path(base) / "br.edu.ifes.leds.muninn")
 
     def test_checkpointer_segue_o_caminho_atual_e_reabre_o_grafo(self):
         from agents.config import checkpoint_db_path
@@ -545,10 +545,10 @@ class CaminhosTests(unittest.TestCase):
                 return graph._path
 
         async def roteiro(a, b):
-            with patch.dict(os.environ, {"ORACULO_CHECKPOINT_DB": a}):
+            with patch.dict(os.environ, {"MUNINN_CHECKPOINT_DB": a}):
                 self.assertEqual(checkpoint_db_path(), a)
                 primeiro = await caminho_do_grafo()
-            with patch.dict(os.environ, {"ORACULO_CHECKPOINT_DB": b}):
+            with patch.dict(os.environ, {"MUNINN_CHECKPOINT_DB": b}):
                 segundo = await caminho_do_grafo()
             await graph.close_graph()
             return primeiro, segundo

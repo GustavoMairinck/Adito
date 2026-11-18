@@ -1,14 +1,14 @@
-"""Linha de comando `adito-etl`.
+"""Linha de comando `muninn-etl`.
 
-    adito-etl src-acoes [--campus Serra] [--max N]
-    adito-etl src-participacoes [--processo P ...] [--workers N]
-    adito-etl sigpesq
-    adito-etl sigpesq-converter --de PASTA_COM_XLSX
-    adito-etl cnpq [--unidade Serra] [--max N] [--refazer]
-    adito-etl lattes [--lista entradas/lattes.csv] [--max N] [--workers N]
-    adito-etl lattes-converter --de PASTA_COM_JSON_DO_SCRIPTLATTES
-    adito-etl cruzar
-    adito-etl verificar-pii
+    muninn-etl src-acoes [--campus Serra] [--max N]
+    muninn-etl src-participacoes [--processo P ...] [--workers N]
+    muninn-etl sigpesq
+    muninn-etl sigpesq-converter --de PASTA_COM_XLSX
+    muninn-etl cnpq [--unidade Serra] [--max N] [--refazer]
+    muninn-etl lattes [--lista entradas/lattes.csv] [--max N] [--workers N]
+    muninn-etl lattes-converter --de PASTA_COM_JSON_DO_SCRIPTLATTES
+    muninn-etl cruzar
+    muninn-etl verificar-pii
 
 Saída: 0 = ok; 1 = terminou com falhas em unidades (listadas); 2 = erro que
 impediu a execução (credencial, login, bruto ausente, dado pessoal encontrado).
@@ -42,7 +42,7 @@ def _resumo(exe: Execucao) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="adito-etl", description="ETL do Adito (extração e cruzamento).")
+    ap = argparse.ArgumentParser(prog="muninn-etl", description="ETL do Muninn (extração e cruzamento).")
     sub = ap.add_subparsers(dest="comando", required=True)
 
     p = sub.add_parser("src-acoes", help="Ações do SRC pela consulta pública (US-ETL-01)")

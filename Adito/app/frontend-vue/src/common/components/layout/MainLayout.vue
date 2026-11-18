@@ -17,7 +17,7 @@ function toggleSidebar() {
     <header class="md:hidden fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between border-b border-border-subtle bg-surface/95 px-5 backdrop-blur-md">
       <div class="flex items-center gap-2">
         <BrandIcon class="h-8 w-8" />
-        <h1 class="text-xl font-semibold tracking-[-0.04em] text-primary">Adito</h1>
+        <h1 class="text-xl font-semibold tracking-[-0.04em] text-primary">Muninn</h1>
       </div>
 
       <button

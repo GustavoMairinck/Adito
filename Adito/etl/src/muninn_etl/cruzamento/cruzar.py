@@ -198,7 +198,7 @@ def relatorio(res: Resultado) -> dict[str, Any]:
 
 def _markdown(rel: dict[str, Any]) -> str:
     l = ["# Relatório do cruzamento de pessoas", "",
-         "Gerado por `adito-etl cruzar`. Lista completa em `relatorio_cruzamento.json`.", "",
+         "Gerado por `muninn-etl cruzar`. Lista completa em `relatorio_cruzamento.json`.", "",
          "## Fontes", "",
          f"- Lidas: {', '.join(rel['fontes_lidas']) or 'nenhuma'}"]
     if rel["fontes_sem_leitor"]:

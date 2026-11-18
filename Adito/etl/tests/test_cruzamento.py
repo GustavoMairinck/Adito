@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from adito_etl.comum import gravar_json, ler_json
-from adito_etl.cruzamento.cruzar import cruzar, id_opaco, ligar
-from adito_etl.cruzamento.leitores import Ocorrencia
-from adito_etl.cruzamento.normalizar import (
+from muninn_etl.comum import gravar_json, ler_json
+from muninn_etl.cruzamento.cruzar import cruzar, id_opaco, ligar
+from muninn_etl.cruzamento.leitores import Ocorrencia
+from muninn_etl.cruzamento.normalizar import (
     forma_invariante, forma_ordenada, nome_implausivel, normalizar_nome)
 
 

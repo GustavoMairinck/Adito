@@ -3,13 +3,13 @@ import { buildChart, isScalarResultData } from "@/modules/chat/composables/useCh
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
 import { computed, ref } from "vue";
 
-const STORAGE_PREFIX = "oraculo_esx_chat_history";
+const STORAGE_PREFIX = "muninn_esx_chat_history";
 
 function createWelcomeMessage(): ChatMessage {
   return {
     id: "welcome",
     type: "ai",
-    text: "Olá! Sou o Adito, seu assistente para consultar os dados de pesquisa e extensão do IFES Campus Serra. Como posso ajudar você hoje?",
+    text: "Olá! Sou o Muninn, seu assistente para consultar os dados de pesquisa e extensão do IFES Campus Serra. Como posso ajudar você hoje?",
     timestamp: new Date().toISOString(),
   };
 }

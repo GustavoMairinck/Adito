@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    oraculo_esx_lib::run()
+    muninn_lib::run()
 }

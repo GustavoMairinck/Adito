@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * AdminView.vue
- * Pagina principal de Administracao do ORACULO-ESX (US-010 / US-023 / US-025 / US-DT-09)
+ * Pagina principal de Administracao do Muninn (US-010 / US-023 / US-025 / US-DT-09)
  */
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import {
@@ -184,7 +184,7 @@ ORDER BY total_pesquisadores DESC`,
     id: 'doc-001',
     type: 'documentation',
     name: 'Glossário Institucional - Iniciativas (Pesquisa & Extensão)',
-    content: `GLOSSÁRIO IFES / ADITO - Iniciativas
+    content: `GLOSSÁRIO IFES / MUNINN - Iniciativas
 Superclasse: unificado.iniciativa (id, nome)
 - Projetos de Pesquisa (SigPesq): unificado.projeto_pesquisa
 - Projetos Lattes: unificado.projeto_lattes
@@ -195,7 +195,7 @@ Superclasse: unificado.iniciativa (id, nome)
     id: 'doc-002',
     type: 'documentation',
     name: 'Glossário Institucional - Produção Científica (Lattes)',
-    content: `GLOSSÁRIO IFES / ADITO - Produção Científica
+    content: `GLOSSÁRIO IFES / MUNINN - Produção Científica
 Superclasse: unificado.producao (id, titulo, descricao, ano)
 Especializações:
 - unificado.artigo_trabalho_evento (artigos e anais com DOI/ISSN)
@@ -217,8 +217,8 @@ unificado.edital -> unificado.plano_trabalho -> unificado.orientacao
   {
     id: 'doc-004',
     type: 'documentation',
-    name: 'Dicionário Semântico - Fontes Adito (IFES Campus Serra)',
-    content: `MAPEAMENTO DE FONTES INTEGRADAS (Adito)
+    name: 'Dicionário Semântico - Fontes Muninn (IFES Campus Serra)',
+    content: `MAPEAMENTO DE FONTES INTEGRADAS (Muninn)
 - SRC -> unificado.acao, unificado.atividade, unificado.registro_participante
 - SigPesq / Horizon -> unificado.projeto_pesquisa, unificado.plano_trabalho, unificado.orientacao
 - Diretório CNPq (DGP) -> unificado.grupo_pesquisa, unificado.grupo_pesquisa_cnpq, unificado.linha_pesquisa
@@ -444,7 +444,7 @@ const factFields: { label: string; key: keyof FactPagamentoRow }[] = [
 
 const etlLogs = ref<EtlLog[]>((() => {
   try {
-    const saved = localStorage.getItem('oraculo_esx_etl_logs')
+    const saved = localStorage.getItem('muninn_etl_logs')
     return saved ? JSON.parse(saved) : []
   } catch {
     return []
@@ -452,7 +452,7 @@ const etlLogs = ref<EtlLog[]>((() => {
 })())
 
 watch(etlLogs, (newVal) => {
-  localStorage.setItem('oraculo_esx_etl_logs', JSON.stringify(newVal))
+  localStorage.setItem('muninn_etl_logs', JSON.stringify(newVal))
 }, { deep: true })
 
 function releaseEtlLock() {
@@ -681,7 +681,7 @@ onBeforeUnmount(() => {
             Administração
           </h1>
           <p class="max-w-2xl text-base text-text-secondary">
-            Carregue os contextos de pesquisa e extensão, gerencie o modelo de inteligência artificial e acompanhe os dados locais do Adito.
+            Carregue os contextos de pesquisa e extensão, gerencie o modelo de inteligência artificial e acompanhe os dados locais do Muninn.
           </p>
         </div>
       </div>

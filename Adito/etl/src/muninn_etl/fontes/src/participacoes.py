@@ -294,7 +294,7 @@ def extrair_participacoes(
     if not processos:
         index = brutos_dir("src") / "acoes" / "_index.json"
         if not index.exists():
-            raise FileNotFoundError(f"{index} não existe: rode antes `adito-etl src-acoes`")
+            raise FileNotFoundError(f"{index} não existe: rode antes `muninn-etl src-acoes`")
         processos = processos_do_index(index)
     user, senha = credencial(["SRC_USER"], ["SRC_PASSWORD"], segredos=("src-user", "src-password"))
 

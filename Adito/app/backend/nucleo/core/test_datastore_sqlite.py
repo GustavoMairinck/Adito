@@ -1,6 +1,6 @@
 """
 Testes unitários e de integração do Datastore SQLite (dados.db) e Authorizer de Segurança.
-Execução: PYTHONPATH=Adito/app/backend/nucleo Adito/app/.venv/bin/python -m unittest core.test_datastore_sqlite
+Execução: PYTHONPATH=Muninn/app/backend/nucleo Muninn/app/.venv/bin/python -m unittest core.test_datastore_sqlite
 """
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import unittest
 from pathlib import Path
 
 RAIZ_REPO = Path(__file__).resolve().parents[5]
-NUCLEO_DIR = RAIZ_REPO / "Adito" / "app" / "backend" / "nucleo"
-DADOS_DB_PATH = RAIZ_REPO / "Adito" / "app" / "data" / "dados.db"
+NUCLEO_DIR = RAIZ_REPO / "Muninn" / "app" / "backend" / "nucleo"
+DADOS_DB_PATH = RAIZ_REPO / "Muninn" / "app" / "data" / "dados.db"
 
 if str(NUCLEO_DIR) not in sys.path:
     sys.path.insert(0, str(NUCLEO_DIR))

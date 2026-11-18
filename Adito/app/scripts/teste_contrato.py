@@ -1,11 +1,11 @@
-"""Teste de contrato do núcleo do Adito: cada chamada que o front faz, com status e JSON.
+"""Teste de contrato do núcleo do Muninn: cada chamada que o front faz, com status e JSON.
 
 Roda o roteiro contra o núcleo local e compara com a referência (`contrato/referencia.json`),
 gravada com o servidor Django antes de ele ser removido: é a garantia de que as telas recebem
 o mesmo que antes. Os dados são sintéticos (nenhum dado pessoal) e o LLM é substituído por um
 grafo falso, então o teste não usa rede nem chave.
 
-Uso (de Adito/app):
+Uso (de Muninn/app):
     .venv/bin/python scripts/teste_contrato.py            # compara com a referência
     .venv/bin/python scripts/teste_contrato.py --gravar   # regrava (só se a mudança de contrato for intencional)
 """
@@ -28,14 +28,14 @@ APP_DIR = Path(__file__).resolve().parents[1]
 API_DIR = APP_DIR / "backend" / "nucleo"
 REFERENCIA = Path(__file__).resolve().parent / "contrato" / "referencia.json"
 
-DATA_DIR = Path(tempfile.mkdtemp(prefix="adito-contrato-"))
-os.environ["ORACULO_DATA_DIR"] = str(DATA_DIR)
-os.environ["ORACULO_LOCAL_TOKEN"] = "token-contrato"
+DATA_DIR = Path(tempfile.mkdtemp(prefix="muninn-contrato-"))
+os.environ["MUNINN_DATA_DIR"] = str(DATA_DIR)
+os.environ["MUNINN_LOCAL_TOKEN"] = "token-contrato"
 os.environ["GEMINI_API_KEY"] = "chave-falsa"
 os.environ.pop("GOOGLE_API_KEY", None)
-os.environ.pop("ORACULO_DADOS_DB", None)
-os.environ.pop("ORACULO_APP_DB", None)
-os.environ.pop("ORACULO_CHECKPOINT_DB", None)
+os.environ.pop("MUNINN_DADOS_DB", None)
+os.environ.pop("MUNINN_APP_DB", None)
+os.environ.pop("MUNINN_CHECKPOINT_DB", None)
 os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
 sys.path.insert(0, str(API_DIR))
 

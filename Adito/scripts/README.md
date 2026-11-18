@@ -1,6 +1,6 @@
 # Banco de Dados Acadêmicos — Modelo Unificado 100% SQLite (dados.db)
 
-Este diretório contém os scripts SQL e os utilitários de carga e visualização da base de dados acadêmicos do Adito em **100% SQLite (`Adito/app/data/dados.db`)**.
+Este diretório contém os scripts SQL e os utilitários de carga e visualização da base de dados acadêmicos do Muninn em **100% SQLite (`Muninn/app/data/dados.db`)**.
 
 A arquitetura adota o modelo **100% OLTP como Single Source of Truth**:
 - **42 Tabelas Base** em 3ª Forma Normal (3FN), com integridade referencial estrita (`PRAGMA foreign_keys = ON`).
@@ -12,21 +12,21 @@ A arquitetura adota o modelo **100% OLTP como Single Source of Truth**:
 
 ## 🚀 Como Criar e Popular o Banco (`dados.db`)
 
-Na pasta `Adito/scripts/`, execute o script nativo em Python (sem dependências externas):
+Na pasta `Muninn/scripts/`, execute o script nativo em Python (sem dependências externas):
 
 ```bash
 python popular_banco.py
 ```
 
 O comando realiza o pipeline completo em **~1 segundo**:
-1. Cria `Adito/app/data/dados.db` a partir dos scripts DDL (`00_schema.sql` até `04_fatos_views.sql`).
+1. Cria `Muninn/app/data/dados.db` a partir dos scripts DDL (`00_schema.sql` até `04_fatos_views.sql`).
 2. Lê os arquivos brutos do ETL (`SRC`, `SigPesq`, `Lattes`, `CNPq/DGP`) e o cruzamento (`trabalho/pessoas.json`).
 3. Executa a carga atômica de 42 tabelas relacionais em transação única (`BEGIN TRANSACTION`).
 4. Valida integridade referencial (`PRAGMA foreign_key_check`), varredura anti-PII (zero vazamento de CPFs e e-mails) e sanidade estrutural das 6 views analíticas.
 
-### Ou via CLI `adito-etl`:
+### Ou via CLI `muninn-etl`:
 ```bash
-adito-etl popular-banco
+muninn-etl popular-banco
 ```
 
 ---
@@ -63,7 +63,7 @@ Os scripts são executados na ordem topológica de dependência:
 
 ## 📊 As 6 Tabelas Fato Analíticas (Views Dinâmicas)
 
-As views são expostas para o agente de BI e para a interface do Adito:
+As views são expostas para o agente de BI e para a interface do Muninn:
 
 | View Analítica | Descrição | Granularidade |
 | :--- | :--- | :--- |

@@ -1,6 +1,6 @@
-"""ETL do Adito: extração do bruto por fonte e cruzamento das bases por nome normalizado.
+"""ETL do Muninn: extração do bruto por fonte e cruzamento das bases por nome normalizado.
 
-Fases (cada uma é um comando de `adito-etl`):
+Fases (cada uma é um comando de `muninn-etl`):
     extração   — `fontes.src`, `fontes.sigpesq` (CNPq/DGP e Lattes: US-ETL-04/05)
     cruzamento — `cruzamento`
 

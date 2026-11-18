@@ -5,7 +5,7 @@
 - `auditar` é a última barreira: recusa gravar JSON com CPF, e-mail, 11 dígitos
   seguidos ou chave de coluna pessoal.
 - `varrer` audita todos os JSON de uma pasta (usado no teste e no comando
-  `adito-etl verificar-pii`).
+  `muninn-etl verificar-pii`).
 """
 
 from __future__ import annotations

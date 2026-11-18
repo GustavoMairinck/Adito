@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Sobe o Adito desktop (Tauri) em modo desenvolvimento:
+# Sobe o Muninn desktop (Tauri) em modo desenvolvimento:
 # Vite na 5173 -> janela Tauri -> núcleo Python (iniciado pela própria janela, sem porta de rede;
 # conversa com a janela por stdin/stdout).
 # Fechar a janela encerra o núcleo e o Vite iniciado por este script.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP="$ROOT/Adito/app"
+APP="$ROOT/Muninn/app"
 PY="$APP/.venv/bin/python"
 # Mesma pasta que o Tauri usa (app_local_data_dir + identifier do tauri.conf.json).
-DATA="${XDG_DATA_HOME:-$HOME/.local/share}/br.edu.ifes.leds.oraculo-esx"
-VITE_LOG="/tmp/oraculo-vite.log"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/br.edu.ifes.leds.muninn"
+VITE_LOG="/tmp/muninn-vite.log"
 
-[ -x "$PY" ] || { echo "Falta $PY (veja Adito/app/README.md, seção 2)."; exit 1; }
+[ -x "$PY" ] || { echo "Falta $PY (veja Muninn/app/README.md, seção 2)."; exit 1; }
 command -v cargo >/dev/null || source "$HOME/.cargo/env"
 
 # 1. Dados: o app lê dados.db (em $DATA ou em $APP/data/dados.db) e contexts/.
-[ -f "$DATA/dados.db" ] || [ -f "$APP/data/dados.db" ] || echo "Aviso: dados.db não encontrado; rode Adito/scripts/popular_banco.py antes de consultar."
+[ -f "$DATA/dados.db" ] || [ -f "$APP/data/dados.db" ] || echo "Aviso: dados.db não encontrado; rode Muninn/scripts/popular_banco.py antes de consultar."
 
 # 2. Vite na porta 5173 (o Tauri em dev carrega exatamente essa porta)
 VITE_PID=""
@@ -43,7 +43,7 @@ if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
   export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
 fi
 
-echo "→ Abrindo a janela do Adito (o núcleo sobe junto)."
+echo "→ Abrindo a janela do Muninn (o núcleo sobe junto)."
 echo "  Log do núcleo: $DATA/logs/backend.log"
 cd "$APP/src-tauri"
 cargo run

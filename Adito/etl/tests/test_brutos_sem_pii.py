@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from adito_etl.pii import varrer
+from muninn_etl.pii import varrer
 
 ETL = Path(__file__).resolve().parents[1]
 

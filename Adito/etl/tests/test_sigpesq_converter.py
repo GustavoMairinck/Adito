@@ -2,9 +2,9 @@ from datetime import datetime
 
 from openpyxl import Workbook
 
-from adito_etl.comum import ler_json
-from adito_etl.fontes.sigpesq.converter import converter, converter_pasta
-from adito_etl.comum import Execucao
+from muninn_etl.comum import ler_json
+from muninn_etl.fontes.sigpesq.converter import converter, converter_pasta
+from muninn_etl.comum import Execucao
 
 
 def _xlsx(path, cabecalho, linhas):

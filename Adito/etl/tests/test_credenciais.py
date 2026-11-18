@@ -3,7 +3,7 @@ import types
 
 import pytest
 
-from adito_etl.comum import CredencialAusente, credencial
+from muninn_etl.comum import CredencialAusente, credencial
 
 
 def _env(base, texto):
@@ -11,14 +11,14 @@ def _env(base, texto):
 
 
 def test_sem_origem_explicita_para(base, monkeypatch):
-    monkeypatch.delenv("ADITO_CREDENCIAIS", raising=False)
+    monkeypatch.delenv("MUNINN_CREDENCIAIS", raising=False)
     _env(base, "SRC_USER=a\nSRC_PASSWORD=b\n")
-    with pytest.raises(CredencialAusente, match="ADITO_CREDENCIAIS"):
+    with pytest.raises(CredencialAusente, match="MUNINN_CREDENCIAIS"):
         credencial(["SRC_USER"], ["SRC_PASSWORD"], segredos=("src-user", "src-password"))
 
 
 def test_modo_env(base):
-    _env(base, "ADITO_CREDENCIAIS=env\nSRC_USER=a\nSRC_PASSWORD=b\n")
+    _env(base, "MUNINN_CREDENCIAIS=env\nSRC_USER=a\nSRC_PASSWORD=b\n")
     assert credencial(["SRC_USER"], ["SRC_PASSWORD"], segredos=("x", "y")) == ("a", "b")
 
 
@@ -57,7 +57,7 @@ def _sdk_falso(monkeypatch, segredos):
     return vistos
 
 
-INFISICAL = ("ADITO_CREDENCIAIS=infisical\nINFISICAL_CLIENT_ID=id\nINFISICAL_CLIENT_SECRET=sec\n"
+INFISICAL = ("MUNINN_CREDENCIAIS=infisical\nINFISICAL_CLIENT_ID=id\nINFISICAL_CLIENT_SECRET=sec\n"
              "INFISICAL_PROJECT_ID=proj\n")
 
 
@@ -81,6 +81,6 @@ def test_modo_infisical_segredo_vazio_ou_config_faltando(base, monkeypatch):
     _env(base, INFISICAL)
     with pytest.raises(CredencialAusente, match="src-password"):
         credencial(["SRC_USER"], ["SRC_PASSWORD"], segredos=("src-user", "src-password"))
-    _env(base, "ADITO_CREDENCIAIS=infisical\nINFISICAL_CLIENT_ID=id\n")
+    _env(base, "MUNINN_CREDENCIAIS=infisical\nINFISICAL_CLIENT_ID=id\n")
     with pytest.raises(CredencialAusente, match="INFISICAL_CLIENT_SECRET"):
         credencial(["SRC_USER"], ["SRC_PASSWORD"], segredos=("src-user", "src-password"))

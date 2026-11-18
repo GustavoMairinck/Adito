@@ -90,7 +90,7 @@ function select(key: string) {
         <div class="flex max-w-lg flex-col items-center gap-4">
           <div class="flex items-center gap-2 text-accent">
             <BrandIcon alt="" class="h-11 w-11" />
-            <span class="adito-wordmark text-4xl">Adito</span>
+            <span class="muninn-wordmark text-4xl">Muninn</span>
           </div>
           <h1 class="text-2xl font-semibold leading-tight text-text-primary sm:text-3xl">
             Explore a pesquisa e a extensão do Campus Serra
@@ -107,13 +107,13 @@ function select(key: string) {
             :key="category.key"
             :aria-pressed="selected === category.key"
             :class="[
-              'adito-topic group flex w-[calc((100%_-_0.75rem)/2)] flex-col items-center justify-center gap-3 px-3.5 py-5 sm:w-[calc((100%_-_1.5rem)/3)]'
+              'muninn-topic group flex w-[calc((100%_-_0.75rem)/2)] flex-col items-center justify-center gap-3 px-3.5 py-5 sm:w-[calc((100%_-_1.5rem)/3)]'
             ]"
             @click="select(category.key)"
           >
             <div
               :class="[
-                'adito-topic-icon flex h-10 w-10 items-center justify-center rounded-lg border transition-colors duration-200',
+                'muninn-topic-icon flex h-10 w-10 items-center justify-center rounded-lg border transition-colors duration-200',
                 selected === category.key
                   ? 'border-[var(--brand-primary)]/30 bg-[var(--brand-primary)]/15'
                   : 'border-[var(--brand-primary)]/12 bg-[var(--brand-primary)]/8 group-hover:border-[var(--brand-primary)]/25 group-hover:bg-[var(--brand-primary)]/12'

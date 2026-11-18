@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from adito_etl import pii
-from adito_etl.comum import gravar_json
+from muninn_etl import pii
+from muninn_etl.comum import gravar_json
 
 
 @pytest.mark.parametrize("texto", [

@@ -1,9 +1,9 @@
 import json
 
-from adito_etl.comum import Execucao, ler_json
-from adito_etl.cruzamento.leitores import ler_lattes
-from adito_etl.fontes.lattes.converter import converter_pasta, filtrar_curriculo, sem_contato
-from adito_etl.fontes.lattes.download import ler_lista
+from muninn_etl.comum import Execucao, ler_json
+from muninn_etl.cruzamento.leitores import ler_lattes
+from muninn_etl.fontes.lattes.converter import converter_pasta, filtrar_curriculo, sem_contato
+from muninn_etl.fontes.lattes.download import ler_lista
 
 ID = "1234567890123456"
 
@@ -75,7 +75,7 @@ def test_ler_lista(tmp_path):
 
 
 def test_agencia_da_orientacao():
-    from adito_etl.fontes.lattes.financiadores import agencia
+    from muninn_etl.fontes.lattes.financiadores import agencia
     base = "Ana. Título. 2026. Dissertação (Mestrado em X) - "
     ifes = "Instituto Federal de Educação, Ciência e Tecnologia do Espírito Santo"
     assert agencia(base + ifes + ", Fundação de Amparo à Pesquisa do Espírito Santo. Orientador: Bia.") == \

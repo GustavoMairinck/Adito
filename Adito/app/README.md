@@ -1,6 +1,6 @@
-# Oráculo ESX — Desktop
+# Muninn — Desktop
 
-Assistente de BI: você pergunta em português, o agente gera o SQL, executa nos seus dados e devolve resposta, tabela e gráfico. Esta é a versão desktop (Tauri) do Oráculo-ESX web: roda inteira na máquina, sem Docker, Postgres ou Redis.
+Assistente de BI: você pergunta em português, o agente gera o SQL, executa nos seus dados e devolve resposta, tabela e gráfico. Esta é a versão desktop (Tauri) do Oraculo-ESX web: roda inteira na máquina, sem Docker, Postgres ou Redis.
 
 - **Janela:** Tauri (Rust) carregando o front Vue.
 - **Núcleo:** Python + LangGraph, iniciado pelo próprio app como processo filho. Não abre porta de rede: conversa com a janela por stdin/stdout ([../docs/NUCLEO_LOCAL_SEM_HTTP.md](../docs/NUCLEO_LOCAL_SEM_HTTP.md)).
@@ -60,11 +60,11 @@ A chave do Gemini fica no **Gerenciador de Credenciais** do Windows.
 
 ## 2. Instalar as dependências (uma vez)
 
-Todos os comandos partem desta pasta (`Adito/app`).
+Todos os comandos partem desta pasta (`Muninn/app`).
 
 ### Backend Python
 
-O app procura o Python em `.venv/` dentro de `Adito/app` — o nome e o lugar importam.
+O app procura o Python em `.venv/` dentro de `Muninn/app` — o nome e o lugar importam.
 
 Linux:
 
@@ -83,7 +83,7 @@ py -m venv .venv
 .venv\Scripts\pip install -r backend\requirements.txt
 ```
 
-> Para usar outro Python, defina `ORACULO_PYTHON` com o caminho do executável antes de abrir o app.
+> Para usar outro Python, defina `MUNINN_PYTHON` com o caminho do executável antes de abrir o app.
 
 ### Front
 
@@ -101,8 +101,8 @@ O app lê tudo da pasta de dados do usuário:
 
 | Sistema | Pasta |
 |---|---|
-| Linux | `~/.local/share/br.edu.ifes.leds.oraculo-esx/` |
-| Windows | `%LOCALAPPDATA%\br.edu.ifes.leds.oraculo-esx\` |
+| Linux | `~/.local/share/br.edu.ifes.leds.muninn/` |
+| Windows | `%LOCALAPPDATA%\br.edu.ifes.leds.muninn\` |
 
 Ela é criada na primeira abertura. Dentro dela o app espera:
 
@@ -118,13 +118,13 @@ Esta pasta traz a mesma demo de vendas do Oráculo web (1.200 vendas) e um conte
 Linux:
 
 ```bash
-D=~/.local/share/br.edu.ifes.leds.oraculo-esx; mkdir -p "$D/contexts" && .venv/bin/python scripts/gerar_dados_demo.py "$D/dados.db" && cp -r contexts/exemplo-vendas "$D/contexts/"
+D=~/.local/share/br.edu.ifes.leds.muninn; mkdir -p "$D/contexts" && .venv/bin/python scripts/gerar_dados_demo.py "$D/dados.db" && cp -r contexts/exemplo-vendas "$D/contexts/"
 ```
 
 Windows (PowerShell):
 
 ```powershell
-$D = "$env:LOCALAPPDATA\br.edu.ifes.leds.oraculo-esx"
+$D = "$env:LOCALAPPDATA\br.edu.ifes.leds.muninn"
 New-Item -ItemType Directory -Force "$D\contexts" | Out-Null
 .venv\Scripts\python scripts\gerar_dados_demo.py "$D\dados.db"
 Copy-Item -Recurse contexts\exemplo-vendas "$D\contexts\"
@@ -142,7 +142,7 @@ Copy-Item -Recurse contexts\exemplo-vendas "$D\contexts\"
 
 ## 4. Rodar
 
-São dois terminais, ambos a partir de `Adito/app`.
+São dois terminais, ambos a partir de `Muninn/app`.
 
 **Terminal 1 — front (deixe aberto):**
 
@@ -170,7 +170,7 @@ Atalho: `../../rodar_desktop.sh` (na raiz do repositório) sobe o Vite e a janel
 
 Mudou algo em `contexts/` ou trocou o `dados.db`? Repita o passo 2.
 
-### Explorar os dados do Adito
+### Explorar os dados do Muninn
 
 Em **Explorar dados**, selecione um contexto e uma relação no catálogo. A tela oferece
 busca textual, filtro por valor exato de uma coluna, ordenação pelos cabeçalhos e
@@ -211,7 +211,7 @@ o modelo unificado. Para consultá-lo nesta versão, disponibilize suas relaçõ
 | Sintoma | Causa e solução |
 |---|---|
 | Janela branca ou "não abriu nada" | O Vite não está na porta 5173. Confira o terminal 1. |
-| "O Adito não conseguiu iniciar" / "O núcleo do Adito encerrou" / "não respondeu em 90 s" | Veja o log: `~/.local/share/br.edu.ifes.leds.oraculo-esx/logs/backend.log` (Linux) ou `%LOCALAPPDATA%\br.edu.ifes.leds.oraculo-esx\logs\backend.log` (Windows). Em geral falta o `.venv` ou alguma dependência do `pip`. |
+| "O Muninn não conseguiu iniciar" / "O núcleo do Muninn encerrou" / "não respondeu em 90 s" | Veja o log: `~/.local/share/br.edu.ifes.leds.muninn/logs/backend.log` (Linux) ou `%LOCALAPPDATA%\br.edu.ifes.leds.muninn\logs\backend.log` (Windows). Em geral falta o `.venv` ou alguma dependência do `pip`. |
 | Chat desativado com aviso de chave | Salve a chave em **Configurações**. |
 | Não salva a chave no Linux | O Secret Service não está rodando. Abra o "Senhas e chaves" (Seahorse) uma vez ou instale `gnome-keyring`. |
 | Agente diz que não há contexto | Faltou `contexts/<nome>/views.json` na pasta de dados ou rodar **Carregar Contextos**. |
@@ -223,7 +223,7 @@ o modelo unificado. Para consultá-lo nesta versão, disponibilize suas relaçõ
 
 Nenhum chama o Gemini nem usa rede: os dados são sintéticos e o LLM é falso. Todos usam pastas temporárias, sem tocar na pasta de dados do app.
 
-A partir de `Adito/app`:
+A partir de `Muninn/app`:
 
 ```bash
 .venv/bin/python scripts/teste_contrato.py
@@ -247,7 +247,7 @@ Cobre a segurança do SQL no DuckDB, contextos, a tela Explorar (catálogo, busc
 
 ### Manutenção
 
-A partir de `backend/nucleo`, com o mesmo `app.db` do app (ou outro, via `ORACULO_DATA_DIR`):
+A partir de `backend/nucleo`, com o mesmo `app.db` do app (ou outro, via `MUNINN_DATA_DIR`):
 
 ```bash
 ../../.venv/bin/python -m core.cli --help

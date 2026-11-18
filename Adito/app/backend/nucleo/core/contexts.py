@@ -17,7 +17,7 @@ from .db import to_db_id
 from .records import Contexto, KnowledgeItem, Tenant
 
 BASE_SQL_RULES = """
-You are ORACULO-ESX (Adito), an AI assistant specialized in academic and institutional data analysis.
+You are Muninn, an AI assistant specialized in academic and institutional data analysis.
 
 Your task is to generate correct, deterministic SQL queries in SQLite 3.
 

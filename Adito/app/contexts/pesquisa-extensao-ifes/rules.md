@@ -44,7 +44,7 @@ O banco de dados acadêmicos **SQLite 3 (`dados.db`)** expõe exclusivamente **6
 ## 2. Tratamento de Valores Não Informados e Filtros Textuais
 
 - Valores ausentes nas dimensões aparecem padronizados como `'Não Informado'`, `'Não Especificado'`, `'Não Informada'`, `'Externo / Não Vinculado'`, `'Campus Não Informado'` ou `'Sem Edital Vinculado'`.
-- No dialeto **SQLite 3**, utilize `LIKE '%termo%'` para buscas textuais. O motor do Adito provê busca customizada que é **case-insensitive e acento-insensível** (por exemplo, `campus LIKE '%Vitoria%'` e `campus LIKE '%Vitória%'` encontram os mesmos registros).
+- No dialeto **SQLite 3**, utilize `LIKE '%termo%'` para buscas textuais. O motor do Muninn provê busca customizada que é **case-insensitive e acento-insensível** (por exemplo, `campus LIKE '%Vitoria%'` e `campus LIKE '%Vitória%'` encontram os mesmos registros).
 - Nunca selecione colunas sensíveis de CPF ou e-mail e prefira listar explicitamente as colunas no `SELECT` em vez de `SELECT *`.
 
 ---

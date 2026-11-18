@@ -1,5 +1,5 @@
 /**
- * Chamadas ao núcleo local do Adito (Python), via Tauri, sem servidor HTTP.
+ * Chamadas ao núcleo local do Muninn (Python), via Tauri, sem servidor HTTP.
  *
  * O front chama `call('explorer.rows', {...})`; o Tauri escreve o pedido no stdin do núcleo
  * e devolve a resposta que volta pelo stdout (ver src-tauri/src/lib.rs e backend/nucleo/rpc/server.py).

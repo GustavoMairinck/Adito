@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Iterator, Sequence
 
 # Mesmo nome da pasta que o Tauri usa (identifier do tauri.conf.json)
-APP_DIR_NAME = "br.edu.ifes.leds.oraculo-esx"
+APP_DIR_NAME = "br.edu.ifes.leds.muninn"
 REPO_APP_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_REPO_SQLITE = REPO_APP_DIR / "data" / "dados.db"
 
@@ -31,7 +31,7 @@ _RE_LEADING_EXPLAIN = re.compile(r"^\s*EXPLAIN\s+", re.IGNORECASE)
 
 def data_dir() -> Path:
     """Pasta de dados do usuário (XDG no Linux, %LOCALAPPDATA% no Windows)."""
-    override = os.environ.get("ORACULO_DATA_DIR")
+    override = os.environ.get("MUNINN_DATA_DIR")
     if override:
         base = Path(override)
     elif sys.platform == "win32":
@@ -43,12 +43,12 @@ def data_dir() -> Path:
 
 
 def app_db_path() -> Path:
-    return Path(os.environ.get("ORACULO_APP_DB") or data_dir() / "app.db")
+    return Path(os.environ.get("MUNINN_APP_DB") or data_dir() / "app.db")
 
 
 def dados_db_path() -> Path:
     """Retorna o caminho do banco de dados acadêmicos SQLite (`dados.db`)."""
-    env_override = os.environ.get("ORACULO_DADOS_DB")
+    env_override = os.environ.get("MUNINN_DADOS_DB")
     if env_override:
         return Path(env_override)
     user_db = data_dir() / "dados.db"
@@ -300,7 +300,7 @@ def connect_dados(
     db_path = Path(path or dados_db_path()).resolve()
     if not db_path.exists():
         raise FileNotFoundError(
-            f"dados.db não encontrado em {db_path}. Popule o banco com python Adito/scripts/popular_banco.py antes de consultar."
+            f"dados.db não encontrado em {db_path}. Popule o banco com python Muninn/scripts/popular_banco.py antes de consultar."
         )
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)

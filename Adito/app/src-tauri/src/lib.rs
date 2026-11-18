@@ -1,4 +1,4 @@
-//! Casca desktop do Adito.
+//! Casca desktop do Muninn.
 //!
 //! Ao abrir, sobe o núcleo Python (`desktop_server.py`) como processo filho, sem porta de rede.
 //! A conversa é por stdin/stdout, uma mensagem JSON por linha (formato em `backend/nucleo/rpc/server.py`):
@@ -28,7 +28,7 @@ use tokio::sync::oneshot;
 
 const START_TIMEOUT: Duration = Duration::from_secs(90);
 const STOP_GRACE: Duration = Duration::from_secs(3);
-const KEYRING_SERVICE: &str = "br.edu.ifes.leds.oraculo-esx";
+const KEYRING_SERVICE: &str = "br.edu.ifes.leds.muninn";
 const KEYRING_USER: &str = "gemini-api-key";
 
 /// Erro devolvido ao front, no mesmo formato de antes: um status no estilo HTTP e o corpo.
@@ -119,11 +119,11 @@ fn read_key() -> Result<Option<String>, String> {
 // ── Processo do núcleo ───────────────────────────────────────────────────────
 
 /// Em desenvolvimento usa o Python do `.venv` do repositório; empacotado, o binário
-/// `oraculo-backend` (sidecar) que fica ao lado do executável do app.
+/// `muninn-backend` (sidecar) que fica ao lado do executável do app.
 fn core_command() -> Command {
     if cfg!(debug_assertions) {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf();
-        let python = std::env::var("ORACULO_PYTHON").map(PathBuf::from).unwrap_or_else(|_| {
+        let python = std::env::var("MUNINN_PYTHON").map(PathBuf::from).unwrap_or_else(|_| {
             if cfg!(windows) {
                 repo.join(".venv").join("Scripts").join("python.exe")
             } else {
@@ -136,7 +136,7 @@ fn core_command() -> Command {
         cmd
     } else {
         let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
-        let name = if cfg!(windows) { "oraculo-backend.exe" } else { "oraculo-backend" };
+        let name = if cfg!(windows) { "muninn-backend.exe" } else { "muninn-backend" };
         Command::new(exe_dir.join(name))
     }
 }
@@ -168,7 +168,7 @@ impl Core {
         // Acrescenta ao log: um reinício (troca da chave) não apaga o que a sessão já registrou.
         let log = OpenOptions::new().create(true).append(true).open(&self.log_path).map_err(|e| e.to_string())?;
         let mut cmd = core_command();
-        cmd.env("ORACULO_DATA_DIR", &self.data_dir)
+        cmd.env("MUNINN_DATA_DIR", &self.data_dir)
             .env("PYTHONUNBUFFERED", "1")
             .env("PYTHONIOENCODING", "utf-8")
             .stdin(Stdio::piped())
@@ -250,7 +250,7 @@ impl Core {
         // Fim do stdout: o processo terminou. Se não foi um reinício pedido, avisa o front.
         let current = self.status.lock().unwrap().1 == generation;
         if current {
-            let text = format!("O núcleo do Adito encerrou. Veja {}", self.log_path.display());
+            let text = format!("O núcleo do Muninn encerrou. Veja {}", self.log_path.display());
             self.set_status(Status::Failed(text.clone()), generation);
             self.fail_pending(CoreError::new(503, text.clone()));
             let _ = self.app.emit("core://exited", text);
@@ -452,7 +452,7 @@ pub fn run() {
             clear_llm_key
         ])
         .build(tauri::generate_context!())
-        .expect("erro ao iniciar o Adito")
+        .expect("erro ao iniciar o Muninn")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<Arc<Core>>().stop();

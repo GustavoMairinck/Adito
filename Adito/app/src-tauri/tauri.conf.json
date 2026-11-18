@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Adito",
+  "productName": "Muninn",
   "version": "0.1.0",
-  "identifier": "br.edu.ifes.leds.oraculo-esx",
+  "identifier": "br.edu.ifes.leds.muninn",
   "build": {
     "frontendDist": "../frontend-vue/dist",
     "devUrl": "http://localhost:5173"
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Adito · IFES Campus Serra",
+        "title": "Muninn · IFES Campus Serra",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
