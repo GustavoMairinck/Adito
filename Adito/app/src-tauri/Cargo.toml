@@ -1,7 +1,7 @@
 [package]
 name = "oraculo-esx"
 version = "0.1.0"
-description = "Oráculo ESX desktop"
+description = "Adito desktop"
 edition = "2021"
 
 [lib]
@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
-uuid = { version = "1", features = ["v4"] }
-# Cofre do SO para a chave da Mistral: Secret Service (Linux) e Credential Manager (Windows).
+# JSON do protocolo com o núcleo e a espera das respostas (já fazem parte da árvore do Tauri).
+serde_json = "1"
+tokio = { version = "1", features = ["sync"] }
+# Cofre do SO para a chave do Gemini: Secret Service (Linux) e Credential Manager (Windows).
 keyring = "4"
