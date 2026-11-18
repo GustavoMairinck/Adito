@@ -17,7 +17,7 @@
   },
   {
     "question": "[Base SRC - Ações] Quantas ações de extensão foram cadastradas por tipo de ação no campus Serra?",
-    "sql": "SELECT tipo_acao, COUNT(DISTINCT id_acao) AS total_acoes FROM vfact_extensao_acao_resolved WHERE campus ILIKE '%Serra%' GROUP BY tipo_acao ORDER BY total_acoes DESC"
+    "sql": "SELECT tipo_acao, COUNT(DISTINCT id_acao) AS total_acoes FROM vfact_extensao_acao_resolved WHERE campus LIKE '%Serra%' GROUP BY tipo_acao ORDER BY total_acoes DESC"
   },
   {
     "question": "[Base SRC - Ações] Qual o percentual de ações de extensão com relatório aprovado por ano de cadastro?",

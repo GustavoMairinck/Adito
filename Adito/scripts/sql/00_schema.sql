@@ -1,9 +1,6 @@
 -- ============================================================================
--- 00_schema.sql: Criacao do Schema Unificado e Configuracao de search_path
+-- 00_schema.sql: Configurações de Sessão e Pragmas para SQLite
 -- ============================================================================
 
-CREATE SCHEMA IF NOT EXISTS unificado;
-
--- Configura search_path para o banco
-ALTER DATABASE oraculo_db SET search_path TO unificado, public;
-SET search_path TO unificado, public;
+PRAGMA foreign_keys = ON;
+PRAGMA encoding = 'UTF-8';

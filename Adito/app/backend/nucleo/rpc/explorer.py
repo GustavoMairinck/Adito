@@ -4,8 +4,6 @@ import re
 import sqlite3
 from contextlib import closing
 
-import duckdb
-
 from core.contexts import visible_columns
 from core.datastore import connect_dados
 from core.db import to_db_id
@@ -61,7 +59,7 @@ def _kind(view):
 
 def _unavailable():
     return ApiError(503, {
-        "detail": "Não foi possível ler os dados. Verifique o dados.duckdb e recarregue os contextos em Administração.",
+        "detail": "Não foi possível ler os dados. Verifique o dados.db e recarregue os contextos em Administração.",
     })
 
 
@@ -80,7 +78,7 @@ def tables(params):
                 "columns": [{"name": name, "type": kind} for name, kind in columns],
                 "available": bool(columns),
             })
-    except (FileNotFoundError, duckdb.Error, sqlite3.Error):
+    except (FileNotFoundError, sqlite3.Error):
         logger.exception("Falha ao ler o catálogo do contexto %s", contexto.id)
         raise _unavailable() from None
     return {"tables": catalog}
@@ -106,10 +104,10 @@ def rows(params):
 
         clauses, values = [], []
         if params["search"]:
-            # A busca trata %, _ e ! como texto literal (ILIKE garante busca case-insensitive no DuckDB).
+            # A busca trata %, _ e ! como texto literal (LIKE com custom_like é case e acento-insensível).
             search = params["search"].replace("!", "!!").replace("%", "!%").replace("_", "!_")
             clauses.append("(" + " OR ".join(
-                f"CAST({_quote(column)} AS TEXT) ILIKE ? ESCAPE '!'" for column in columns
+                f"CAST({_quote(column)} AS TEXT) LIKE ? ESCAPE '!'" for column in columns
             ) + ")")
             values.extend([f"%{search}%"] * len(columns))
         if params["filter_column"] and params["filter_value"]:
@@ -128,7 +126,6 @@ def rows(params):
         # O SQL usa apenas a relação e as colunas já validadas no contexto.
         # Os valores fornecidos pelo usuário são parâmetros da consulta.
         with closing(connect_dados()) as conn:
-            conn.execute("BEGIN")
             total = conn.execute(f"SELECT COUNT(*) FROM {source}{where}", values).fetchone()[0]
             page = min(params["page"], max(1, (total + page_size - 1) // page_size))
             records = conn.execute(
@@ -148,7 +145,7 @@ def rows(params):
             "total": total, "page": page, "page_size": page_size,
             "distribution": distribution,
         }
-    except (FileNotFoundError, duckdb.Error, sqlite3.Error):
+    except (FileNotFoundError, sqlite3.Error):
         logger.exception("Falha ao consultar a relação %s do contexto %s", view["name"], contexto.id)
         raise _unavailable() from None
 

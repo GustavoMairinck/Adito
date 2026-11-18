@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Utilitário para inspecionar e consultar o banco DuckDB analítico (`dados.duckdb`).
+Utilitário para inspecionar e consultar o banco de dados acadêmicos SQLite (`dados.db`).
 
 Uso:
   python Adito/scripts/ver_dados.py
-      -> Lista todas as tabelas e quantidade de registros (main e unificado).
+      -> Lista todas as tabelas e views e quantidade de registros.
 
-  python Adito/scripts/ver_dados.py <nome_da_tabela>
-      -> Mostra o esquema e as 5 primeiras linhas da tabela.
+  python Adito/scripts/ver_dados.py <nome_da_tabela_ou_view>
+      -> Mostra o esquema e as 5 primeiras linhas da tabela ou view.
 
   python Adito/scripts/ver_dados.py "SELECT * FROM vfact_extensao_acao_resolved LIMIT 3"
       -> Executa qualquer consulta SQL e imprime os resultados.
@@ -17,131 +17,160 @@ Uso:
 """
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DB_PATH = REPO_ROOT / "Adito" / "app" / "data" / "dados.duckdb"
-
-try:
-    import duckdb
-except ImportError:
-    sys.exit("Erro: DuckDB não instalado no ambiente. Ative o .venv: source Adito/app/.venv/bin/activate")
+DB_PATH = REPO_ROOT / "Adito" / "app" / "data" / "dados.db"
 
 
-def conectar() -> duckdb.DuckDBPyConnection:
+def conectar() -> sqlite3.Connection:
     if not DB_PATH.exists():
-        sys.exit(f"Erro: banco não encontrado em {DB_PATH}.\nRode antes: python Adito/scripts/gerar_duckdb.py")
-    return duckdb.connect(
-        str(DB_PATH),
-        read_only=True,
-        config={
-            "enable_external_access": False,
-            "lock_configuration": True,
-        },
+        sys.exit(f"Erro: banco não encontrado em {DB_PATH}.\nRode antes: python Adito/scripts/popular_banco.py")
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def formatar_tabela(colunas: list[str], linhas: list[Iterable]) -> str:
+    if not linhas:
+        return " | ".join(colunas) + "\n(0 linhas)"
+    linhas_str = [[str(v) if v is not None else "NULL" for v in r] for r in linhas]
+    larguras = [len(c) for c in colunas]
+    for r in linhas_str:
+        for i, val in enumerate(r):
+            larguras[i] = max(larguras[i], len(val))
+    header = " | ".join(c.ljust(larguras[i]) for i, c in enumerate(colunas))
+    divisor = "-+-".join("-" * larguras[i] for i in range(len(colunas)))
+    body = "\n".join(" | ".join(val.ljust(larguras[i]) for i, val in enumerate(r)) for r in linhas_str)
+    return f"{header}\n{divisor}\n{body}"
+
+
+def listar_tabelas(conn: sqlite3.Connection):
+    print("=" * 80)
+    print(f"Banco Acadêmico Relacional (SQLite): {DB_PATH}")
+    print("=" * 80)
+
+    print("\n📊 6 VIEWS ANALÍTICAS DINÂMICAS (OLTP):")
+    print("-" * 80)
+    cursor = conn.execute(
+        """
+        SELECT name AS view_name
+        FROM sqlite_master
+        WHERE type = 'view' AND name LIKE 'vfact_%'
+        ORDER BY name;
+        """
     )
+    views = [row[0] for row in cursor.fetchall()]
+    view_rows = []
+    for v in views:
+        qtd = conn.execute(f"SELECT COUNT(*) FROM {v}").fetchone()[0]
+        view_rows.append([v, str(qtd)])
+    print(formatar_tabela(["View Analítica", "Total Registros"], view_rows))
 
-
-def listar_tabelas(conn: duckdb.DuckDBPyConnection):
-    print("=" * 80)
-    print(f"Banco Analítico: {DB_PATH}")
-    print("=" * 80)
-
-    print("\n📊 TABELAS FATO MATERIALIZADAS (Schema: main)")
+    print("\n📦 42 TABELAS RELACIONAIS EM 3FN:")
     print("-" * 80)
-    df_fatos = conn.execute(
+    cursor = conn.execute(
         """
-        SELECT 
-            table_name AS "Tabela Fato",
-            estimated_size AS "Total Registros"
-        FROM duckdb_tables()
-        WHERE schema_name = 'main'
-        ORDER BY table_name;
+        SELECT name AS table_name
+        FROM sqlite_master
+        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+        ORDER BY name;
         """
-    ).df()
-    print(df_fatos.to_string(index=False))
+    )
+    tabelas = [row[0] for row in cursor.fetchall()]
+    tab_rows = []
+    for t in tabelas:
+        qtd = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+        tab_rows.append([t, str(qtd)])
+    print(formatar_tabela(["Tabela 3FN", "Registros"], tab_rows))
+    print(f"\nTotal de tabelas base: {len(tabelas)}")
 
-    print("\n📦 TABELAS BRUTAS DO ETL (Schema: unificado)")
-    print("-" * 80)
-    df_unificado = conn.execute(
-        """
-        SELECT 
-            table_name AS "Tabela Unificado",
-            estimated_size AS "Registros"
-        FROM duckdb_tables()
-        WHERE schema_name = 'unificado' AND table_name NOT LIKE 'vfact_%'
-        ORDER BY table_name;
-        """
-    ).df()
-    print(f"Total de tabelas unificadas: {len(df_unificado)}")
-    print(df_unificado.to_string(index=False))
-    print("\n💡 Dica: para ver dados de uma tabela específica, execute:")
+    print("\n💡 Dica: para ver dados de uma view ou tabela específica, execute:")
     print("   python Adito/scripts/ver_dados.py vfact_extensao_acao_resolved")
     print("   python Adito/scripts/ver_dados.py -i   (para shell interativo)")
 
 
-def inspecionar_tabela(conn: duckdb.DuckDBPyConnection, tabela: str):
-    schema = "unificado" if "." in tabela and tabela.startswith("unificado.") else "main"
-    nome_limpo = tabela.split(".")[-1]
-
-    print(f"\n🔍 Inspecionando tabela: {schema}.{nome_limpo}")
+def inspecionar_tabela(conn: sqlite3.Connection, nome: str):
+    print(f"\n🔍 Inspecionando objeto: {nome}")
     print("-" * 80)
 
     try:
-        desc = conn.execute(f'DESCRIBE "{nome_limpo}";').df()
-        print("COLUNAS:")
-        print(desc[["column_name", "column_type"]].to_string(index=False))
+        cursor = conn.execute(f"PRAGMA table_info({nome});")
+        col_rows = cursor.fetchall()
+        if not col_rows:
+            # Caso de view onde PRAGMA table_info funciona no SQLite moderno
+            cursor = conn.execute(f"SELECT * FROM {nome} LIMIT 0;")
+            cols = [desc[0] for desc in cursor.description]
+            print("COLUNAS:")
+            print("\n".join(f"  - {c}" for c in cols))
+        else:
+            print("COLUNAS:")
+            cols_info = [[str(r[1]), str(r[2]), "NOT NULL" if r[3] else "NULLABLE", "PK" if r[5] else ""] for r in col_rows]
+            print(formatar_tabela(["Coluna", "Tipo", "Nulidade", "PK"], cols_info))
+
         print("-" * 80)
-
-        amostra = conn.execute(f'SELECT * FROM "{nome_limpo}" LIMIT 5;').df()
+        cursor = conn.execute(f"SELECT * FROM {nome} LIMIT 5;")
+        amostra = cursor.fetchall()
+        cols = [desc[0] for desc in cursor.description]
         print(f"\nAMOSTRA (Primeiras {len(amostra)} linhas):")
-        print(amostra.to_string())
+        print(formatar_tabela(cols, amostra))
     except Exception as e:
-        print(f"Erro ao consultar tabela '{tabela}': {e}")
+        print(f"Erro ao consultar objeto '{nome}': {e}")
 
 
-def executar_sql(conn: duckdb.DuckDBPyConnection, sql: str):
-    print(f"\nExecutando SQL:\n{sql}\n")
+def executar_query(conn: sqlite3.Connection, query: str):
+    print(f"\n⚡ Executando consulta SQL:\n{query}")
     print("-" * 80)
     try:
-        df = conn.execute(sql).df()
-        print(df.to_string())
-        print(f"\n({len(df)} linha(s) retornada(s))")
+        cursor = conn.execute(query)
+        linhas = cursor.fetchall()
+        if cursor.description:
+            cols = [desc[0] for desc in cursor.description]
+            print(formatar_tabela(cols, linhas))
+            print(f"\n({len(linhas)} linha(s) retornada(s))")
+        else:
+            print(f"Consulta executada com sucesso. ({cursor.rowcount} linhas afetadas)")
     except Exception as e:
-        print(f"Erro no SQL: {e}")
+        print(f"Erro ao executar query: {e}")
 
 
-def modo_interativo(conn: duckdb.DuckDBPyConnection):
-    print("\n🐚 Shell SQL Interativo do DuckDB (digite 'sair' ou 'exit' para encerrar)")
-    print("-" * 80)
+def shell_interativo(conn: sqlite3.Connection):
+    print("=" * 80)
+    print("Shell Interativo SQLite (Somente Leitura) - Adito dados.db")
+    print("Digite 'sair' ou pressione Ctrl+C para finalizar.")
+    print("=" * 80)
+
+    import readline  # noqa: F401
+
     while True:
         try:
-            query = input("\nduckdb> ").strip()
-            if not query:
+            cmd = input("\nsqlite> ").strip()
+            if not cmd:
                 continue
-            if query.lower() in ("sair", "exit", "quit", "q"):
+            if cmd.lower() in ("sair", "exit", "quit", "\\q"):
                 print("Até logo!")
                 break
-            df = conn.execute(query).df()
-            print(df.to_string())
-            print(f"({len(df)} linhas)")
-        except KeyboardInterrupt:
-            print("\nEncerrado.")
+            executar_query(conn, cmd)
+        except (KeyboardInterrupt, EOFError):
+            print("\nEncerrando shell.")
             break
-        except Exception as e:
-            print(f"Erro: {e}")
 
 
 def main():
     conn = conectar()
+
     if len(sys.argv) == 1:
         listar_tabelas(conn)
-    elif sys.argv[1] in ("-i", "--interativo", "shell"):
-        modo_interativo(conn)
-    elif sys.argv[1].strip().upper().startswith("SELECT") or sys.argv[1].strip().upper().startswith("WITH"):
-        executar_sql(conn, " ".join(sys.argv[1:]))
+    elif sys.argv[1] in ("-i", "--interativo"):
+        shell_interativo(conn)
+    elif sys.argv[1].strip().upper().startswith(("SELECT", "WITH", "EXPLAIN", "PRAGMA")):
+        executar_query(conn, " ".join(sys.argv[1:]))
     else:
         inspecionar_tabela(conn, sys.argv[1])
+
+    conn.close()
 
 
 if __name__ == "__main__":

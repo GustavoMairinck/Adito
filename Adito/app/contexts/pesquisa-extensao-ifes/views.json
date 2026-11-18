@@ -38,7 +38,7 @@
     },
     {
       "name": "vfact_projeto_pesquisa_resolved",
-      "description": "Uma linha por Projeto de Pesquisa no SigPesq (id_projeto), com parecer_diretoria, natureza_projeto (PESQUISA_APLICADA/PESQUISA_BASICA), campus, coordenador_nome, titulacao_coordenador e qtd_planos_trabalho.",
+      "description": "Uma linha por Projeto de Pesquisa no SigPesq (id_projeto), com parecer_diretoria, natureza_projeto (PESQUISA_APLICADA/PESQUISA_BASICA), origem_registro (CADASTRO_COMPLETO_SIGPESQ/INFERIDO_DE_ORIENTACAO), flag_projeto_completo, campus, coordenador_nome, titulacao_coordenador, parceiros_demandantes, duracao_meses_prevista e qtd_planos_trabalho.",
       "sensitive_columns": [],
       "embed_columns": [
         "titulo_projeto",
@@ -46,7 +46,9 @@
         "grande_area",
         "area_conhecimento",
         "natureza_projeto",
-        "parecer_diretoria"
+        "parecer_diretoria",
+        "parceiros_demandantes",
+        "origem_registro"
       ],
       "local_search_columns": [
         "coordenador_nome",
@@ -55,7 +57,7 @@
     },
     {
       "name": "vfact_orientacao_bolsa_resolved",
-      "description": "Uma linha por concessão de bolsa ou orientação de pesquisa (id_orientacao), com programa_fomento (PIBIC, PIBITI, PIBIC-Jr, etc.), modalidade (BOLSISTA/VOLUNTARIO), valor_bolsa_mensal, investimento_total_estimado, titulo_edital, titulo_plano_trabalho, nome_orientador, nome_orientado e agencia_financiadora.",
+      "description": "Uma linha por concessão de bolsa ou orientação de pesquisa (id_orientacao), com programa_fomento (PIBIC, PIBITI, PIVIC, PIBIC-EM, JTC, PICTI, etc.), modalidade (BOLSISTA/VOLUNTARIO), valor_bolsa_mensal, duracao_meses_efetiva, investimento_total_estimado, investimento_previsto_original, titulo_edital, titulo_plano_trabalho, nome_orientador, nome_orientado e agencia_financiadora.",
       "sensitive_columns": [],
       "embed_columns": [
         "programa_fomento",
@@ -72,24 +74,26 @@
     },
     {
       "name": "vfact_producao_cientifica_resolved",
-      "description": "Uma linha por autoria de produção científica/intelectual no Lattes (id_producao + id_pessoa_lattes), abrangendo artigos em periódicos, trabalhos em congressos, livros, capítulos, patentes e registros de software.",
+      "description": "Uma linha por autoria de produção científica/intelectual no Lattes (id_producao + id_pessoa_lattes), com titulo_producao, ano, tipo_macro_producao, subtipo_producao, veiculo_publicacao, doi, issn_isbn, natureza_artigo, nome_autor, id_lattes_autor, campus (Ifes ou Externo / Não Vinculado), instituicao_vinculo, flag_artigo_periodico, flag_patente_software, flag_software_sem_patente, flag_obra_unica e qtd_autorias.",
       "sensitive_columns": [],
       "embed_columns": [
         "titulo_producao",
         "veiculo_publicacao",
         "campus",
+        "instituicao_vinculo",
         "subtipo_producao",
         "tipo_macro_producao"
       ],
       "local_search_columns": [
         "nome_autor",
         "titulo_producao",
-        "veiculo_publicacao"
+        "veiculo_publicacao",
+        "instituicao_vinculo"
       ]
     },
     {
       "name": "vfact_grupo_pesquisa_membro_resolved",
-      "description": "Uma linha por vínculo de membro (pesquisador, estudante ou técnico) em Grupo de Pesquisa certificado pelo CNPq DGP (id_membro_grupo), com nome_grupo, situacao_grupo, papel_membro, status_participacao (ATIVO/EGRESSO) e flag_lider.",
+      "description": "Uma linha por vínculo de membro em Grupo de Pesquisa CNPq DGP (id_membro_grupo), com nome_grupo, situacao_grupo, papel_membro, status_participacao (ATIVO/EGRESSO), flag_lider e tempo_participacao_dias.",
       "sensitive_columns": [],
       "embed_columns": [
         "nome_grupo",

@@ -1,6 +1,5 @@
 numpy
 sqlglot
-duckdb>=1.2.0
 langchain
 langchain-core
 langchain-google-genai

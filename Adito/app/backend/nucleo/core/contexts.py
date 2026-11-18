@@ -8,9 +8,8 @@ Pasta de um contexto:
     examples.json  opcional: [{"question": "...", "sql": "..."}]
 """
 import json
+import sqlite3
 from pathlib import Path
-
-import duckdb
 
 from . import db
 from .datastore import REPO_APP_DIR, ReadPolicy, connect_dados, data_dir
@@ -18,19 +17,19 @@ from .db import to_db_id
 from .records import Contexto, KnowledgeItem, Tenant
 
 BASE_SQL_RULES = """
-You are ORACULO-ESX (Adito), an AI assistant specialized in OLAP data analysis.
+You are ORACULO-ESX (Adito), an AI assistant specialized in academic and institutional data analysis.
 
-Your task is to generate correct, deterministic SQL queries in DuckDB.
+Your task is to generate correct, deterministic SQL queries in SQLite 3.
 
 Rules:
 1. Use ONLY the tables/views listed in ALLOWED VIEWS. Never reference any other table, view, or external file function.
-2. NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, COPY, ATTACH, DETACH, INSTALL, LOAD, PRAGMA, SET, CALL, schema prefixes or multiple statements.
+2. NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, ATTACH, DETACH, PRAGMA, SET, schema prefixes or multiple statements.
 3. Column names exactly as listed (lowercase). Never select sensitive columns (CPF or email). Prefer listing explicit columns instead of SELECT *.
 4. Use LIMIT n, never TOP.
 5. Every non-aggregated selected column must appear in GROUP BY.
 6. Percentages must use NULLIF to avoid division by zero.
 7. Return a single valid SQL query without comments or explanations.
-8. DuckDB OLAP dialect: you MAY use ILIKE for case-insensitive matching, EXTRACT(YEAR FROM col), CAST(x AS TYPE) or x::TYPE, COALESCE, COUNT(DISTINCT col), SUM, AVG, ROUND.
+8. SQLite 3 dialect: you MAY use LIKE for case-insensitive and accent-insensitive matching (e.g. campus LIKE '%Vitoria%'), strftime('%Y', col), CAST(x AS INTEGER), COALESCE, COUNT(DISTINCT col), SUM, AVG, ROUND.
 9. PLURAL vs SINGULAR LIMIT:
    - Plural questions ("quais", "liste", "mostre", "os N mais", "top N"): ORDER BY metric DESC LIMIT 10 unless the user gives N.
    - Singular questions ("qual o", "o/a com maior/menor", "o principal"): LIMIT 1.
@@ -86,12 +85,16 @@ def row_limit_for(contexto_id, default: int) -> int:
 
 def view_columns(view: str, dados_path=None) -> list[tuple[str, str]]:
     safe_view = view.replace('"', '""')
-    try:
-        with connect_dados(path=dados_path) as conn:
-            rows = conn.execute(f'DESCRIBE "{safe_view}"').fetchall()
-        return [(str(row["column_name"]), str(row["column_type"] or "")) for row in rows]
-    except duckdb.CatalogException:
-        return []
+    with connect_dados(path=dados_path) as conn:
+        try:
+            rows = conn.execute(f'PRAGMA table_info("{safe_view}")').fetchall()
+            if rows:
+                return [(str(row["name"]), str(row["type"] or "")) for row in rows]
+            # Fallback caso PRAGMA não liste descrição
+            cur = conn.execute(f'SELECT * FROM "{safe_view}" LIMIT 0')
+            return [(desc[0], "") for desc in cur.description] if cur.description else []
+        except sqlite3.Error:
+            return []
 
 
 def visible_columns(contexto: Contexto, view: str, dados_path=None) -> list[tuple[str, str]]:

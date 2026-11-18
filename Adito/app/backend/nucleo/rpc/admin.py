@@ -82,7 +82,7 @@ def system_status(params):
     """Estado dos bancos locais e do RAG."""
     services = [
         _service("app.db", str(app_db_path()), lambda: db.execute("SELECT 1")),
-        _service("dados.duckdb", str(dados_db_path()), _check_dados),
+        _service("dados.db", str(dados_db_path()), _check_dados),
     ]
 
     uptime_seconds = 0.0

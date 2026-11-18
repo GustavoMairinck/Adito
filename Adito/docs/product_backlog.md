@@ -5,8 +5,12 @@ Backlog do Adito no monorepo. As stories do porte desktop (US-001 a US-015) est�
 ## Epics
 
 ### EPIC-07: ETL do Adito
-Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por nome normalizado em `Adito/etl/` e exportação JSON das 41 tabelas do banco PostgreSQL `unificado` usadas pelas views de fatos (`Adito/scripts/exportar_json.py`), rodados só pela equipe de dados. Origem: `docs/discovery/adito.md` (rev. 4 e rev. 5) e `docs/requirements/adito-etl.md` (rev. 1 e rev. 2).
-- **Stories**: US-ETL-01 a US-ETL-08.
+Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por nome normalizado em `Adito/etl/`. Origem: `docs/discovery/adito.md` (rev. 4 e rev. 5) e `docs/requirements/adito-etl.md` (rev. 1 e rev. 2).
+- **Stories**: US-ETL-01 a US-ETL-07 (US-ETL-08 e US-ADITO-DUCKDB-01 substituídas pelo EPIC-08).
+
+### EPIC-08: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)
+Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada analítica (6 VIEWs de fatos dinâmicas) em um único banco SQLite (`dados.db`) gerado diretamente por script Python (`sqlite3`), eliminando Docker, PostgreSQL, JSONs intermediários e DuckDB, e adaptando o backend núcleo com segurança estrita (`mode=ro`, `set_authorizer`), busca sem acentos e transpilação `sqlglot`. Origem: `docs/discovery/migracao-arquitetura-sqlite.md`, `docs/requirements/migracao-arquitetura-sqlite.md` e ADRs 0001 a 0004.
+- **Stories**: US-SQLITE-01 a US-SQLITE-04.
 
 ---
 
@@ -23,8 +27,21 @@ Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por
 | [US-ETL-04](stories/US-ETL-04_extrator-cnpq-dgp.md) | Extrator do CNPq/DGP | EPIC-07 | 3 | 🟡 Média | 03 | FR05, BR04 | Backlog |
 | [US-ETL-05](stories/US-ETL-05_extrator-lattes.md) | Extrator do Lattes | EPIC-07 | 5 | 🟡 Média | 01 | FR06, A02, A05 | Backlog |
 | [US-ETL-07](stories/US-ETL-07_ligacoes-grupo-orientacao.md) | Ligações de grupo e de orientação | EPIC-07 | 3 | 🟡 Média | 03, 04, 05, 06 | FR12 | Backlog |
-| [US-ETL-08](stories/US-ETL-08_exportar-json-fatos.md) | Exportar tabelas das views de fatos do PostgreSQL em JSON | EPIC-07 | 5 | 🔴 Alta (slice 3) | banco `unificado` populado | FR14–20, BR07–10, NFR07–10, A06–07 | 🔍 Review |
-| [US-ADITO-DUCKDB-01](stories/US-ADITO-DUCKDB-01_banco-duckdb-olap-fatos.md) | Banco analítico DuckDB OLAP com as 6 tabelas fato e adaptação do Adito | EPIC-07 | 8 | 🔴 Alta | JSONs exportados | FR21–25, BR11–13, NFR11–13 | 🔍 Review |
+
+---
+
+### 🗂️ EPIC-08 — Migração para 100% SQLite (dados.db) (Concluído em 18/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-SQLITE-01](stories/US-SQLITE-01_ddl-sqlite-tabelas-core-fatos-v2.md) | Modelagem DDL em SQLite (42 Tabelas Base 3FN e 6 Fatos v2.0) | EPIC-08 | 5 | 🔴 Alta (slice 1) | — | FR01, FR02, FR04–FR10, BR01–BR08 | ✅ Concluída |
+| [US-SQLITE-02](stories/US-SQLITE-02_pipeline-carga-python-materializacao-fatos.md) | Pipeline de Carga Direta em Python/SQLite (`popular_banco.py`) e Validações | EPIC-08 | 5 | 🔴 Alta (slice 1) | US-SQLITE-01 | FR03, FR11, FR12, NFR01, NFR04, NFR07 | ✅ Concluída |
+| [US-SQLITE-03](stories/US-SQLITE-03_backend-nucleo-datastore-sqlite-authorizer.md) | Adaptação do Backend Núcleo para SQLite (Datastore RO, Authorizer, LIKE, sqlglot) | EPIC-08 | 5 | 🟠 Alta (slice 2) | US-SQLITE-02 | FR13–FR18, NFR02, NFR03 | ✅ Concluída |
+| [US-SQLITE-04](stories/US-SQLITE-04_descomissionamento-legados-testes-specs.md) | Descomissionamento de Legados, Atualização de Testes e Especificações | EPIC-08 | 3 | 🟡 Média (slice 2) | US-SQLITE-02, 03 | FR19, NFR05, NFR06 | ✅ Concluída |
+
+> Total EPIC-08: 18 pts (100% Concluído em 18/11/2026).  
+> - **Vertical Slice 1 (10 pts):** `US-SQLITE-01` + `US-SQLITE-02` (Geração e validação do banco `dados.db` 100% funcional em SQLite). Concluído.  
+> - **Vertical Slice 2 (8 pts):** `US-SQLITE-03` + `US-SQLITE-04` (Integração segura com backend núcleo, agente de BI resiliente e expurgo de legados). Concluído.  
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >

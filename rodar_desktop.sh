@@ -15,8 +15,8 @@ VITE_LOG="/tmp/oraculo-vite.log"
 [ -x "$PY" ] || { echo "Falta $PY (veja Adito/app/README.md, seção 2)."; exit 1; }
 command -v cargo >/dev/null || source "$HOME/.cargo/env"
 
-# 1. Dados: o app lê dados.duckdb (em $DATA ou em $APP/data/dados.duckdb) e contexts/.
-[ -f "$DATA/dados.duckdb" ] || [ -f "$APP/data/dados.duckdb" ] || echo "Aviso: dados.duckdb não encontrado; rode Adito/scripts/gerar_duckdb.py antes de consultar."
+# 1. Dados: o app lê dados.db (em $DATA ou em $APP/data/dados.db) e contexts/.
+[ -f "$DATA/dados.db" ] || [ -f "$APP/data/dados.db" ] || echo "Aviso: dados.db não encontrado; rode Adito/scripts/popular_banco.py antes de consultar."
 
 # 2. Vite na porta 5173 (o Tauri em dev carrega exatamente essa porta)
 VITE_PID=""

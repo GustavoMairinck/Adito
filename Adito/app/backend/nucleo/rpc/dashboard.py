@@ -26,10 +26,10 @@ _JSON_COLUMNS = frozenset({
 def _filters(params):
     mapping = {
         "ano": ("ano", "="),
-        "area": ("grande_area", "ilike"),
-        "modalidade": ("programa_fomento", "ilike"),
-        "status": ("modalidade", "ilike"),
-        "projeto": ("titulo_projeto", "ilike"),
+        "area": ("grande_area", "like"),
+        "modalidade": ("programa_fomento", "like"),
+        "status": ("modalidade", "like"),
+        "projeto": ("titulo_projeto", "like"),
     }
     clauses, values = [], []
     for key, (column, op) in mapping.items():
@@ -40,7 +40,7 @@ def _filters(params):
             clauses.append(f"{column} = ?")
             values.append(value)
         else:
-            clauses.append(f"{column} ILIKE ?")
+            clauses.append(f"{column} LIKE ?")
             values.append(f"%{value}%")
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", values
 
@@ -109,8 +109,8 @@ def charts(params):
         ORDER BY ano
     """, values)
     mensal = _fetchall(f"""
-        SELECT COALESCE(EXTRACT(MONTH FROM data_inicio)::INTEGER, 1) AS month_num,
-               CAST(COALESCE(EXTRACT(MONTH FROM data_inicio)::INTEGER, 1) AS VARCHAR) AS month,
+        SELECT COALESCE(CAST(strftime('%m', data_inicio) AS INTEGER), 1) AS month_num,
+               CAST(COALESCE(CAST(strftime('%m', data_inicio) AS INTEGER), 1) AS TEXT) AS month,
                COALESCE(SUM(investimento_total_estimado), 0) AS value
         FROM {ANALYTICS_VIEW}
         {where}
@@ -119,11 +119,11 @@ def charts(params):
     """, values)
     filters = _fetchone(f"""
         SELECT
-          COALESCE(list(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), []) AS anos_disponiveis,
-          COALESCE(list(DISTINCT grande_area) FILTER (WHERE grande_area IS NOT NULL), []) AS areas_disponiveis,
-          COALESCE(list(DISTINCT programa_fomento) FILTER (WHERE programa_fomento IS NOT NULL), []) AS modalidades_disponiveis,
-          COALESCE(list(DISTINCT modalidade) FILTER (WHERE modalidade IS NOT NULL), []) AS statuses_disponiveis,
-          COALESCE(MAX(ano), EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER) AS ano_vigente
+          COALESCE(json_group_array(DISTINCT ano) FILTER (WHERE ano IS NOT NULL), '[]') AS anos_disponiveis,
+          COALESCE(json_group_array(DISTINCT grande_area) FILTER (WHERE grande_area IS NOT NULL), '[]') AS areas_disponiveis,
+          COALESCE(json_group_array(DISTINCT programa_fomento) FILTER (WHERE programa_fomento IS NOT NULL), '[]') AS modalidades_disponiveis,
+          COALESCE(json_group_array(DISTINCT modalidade) FILTER (WHERE modalidade IS NOT NULL), '[]') AS statuses_disponiveis,
+          COALESCE(MAX(ano), CAST(strftime('%Y', 'now') AS INTEGER)) AS ano_vigente
         FROM {ANALYTICS_VIEW}
     """, json_columns=_JSON_COLUMNS)
     return {"por_ano": por_ano, "mensal": mensal, **filters}
