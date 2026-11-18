@@ -145,10 +145,10 @@ async function handleSubmit() {
                   v-model="content"
                   rows="6"
                   :placeholder="selectedType === 'sql'
-                    ? 'SELECT SUM(receita_liquida) FROM vfactvendasresolved WHERE ano = 2024'
+                    ? 'SELECT campus, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY campus'
                     : selectedType === 'ddl'
-                      ? 'CREATE OR REPLACE VIEW public.vfactvendasresolved AS ...'
-                      : 'Receita sempre usa receita_liquida no contexto Muninn...'"
+                      ? 'CREATE VIEW vfact_projeto_pesquisa_resolved AS ...'
+                      : 'Projetos ativos são os que têm situacao_projeto = ...'"
                   class="w-full rounded-lg border border-border-subtle bg-primary/20 px-5 py-3 font-mono text-sm text-text-primary placeholder-text-muted transition-all focus:border-accent/50 focus:bg-surface focus:ring-4 focus:ring-accent/5 outline-none shadow-inner dark:bg-primary/40 dark:focus:bg-primary/60"
                 />
               </div>

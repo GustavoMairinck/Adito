@@ -198,9 +198,8 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
             with self.assertRaises(sqlite3.DatabaseError):
                 conn._conn.execute("ATTACH DATABASE '/tmp/outro.db' AS outro")
 
-    def test_load_context_dir_ativa_pesquisa_extensao_e_desativa_exemplo_vendas(self) -> None:
+    def test_load_context_dir_ativa_pesquisa_extensao(self) -> None:
         pasta_ifes = RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes"
-        pasta_vendas = RAIZ_REPO / "Muninn" / "app" / "contexts" / "exemplo-vendas"
 
         ctx_ifes, examples_ifes, errors_ifes = load_context_dir(
             pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
@@ -213,12 +212,6 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
         ddl = describe_views(ctx_ifes, dados_path=self.synthetic_sqlite)
         for view_name in FATOS_NOMES:
             self.assertIn(view_name, ddl)
-
-        ctx_vendas, _, errors_vendas = load_context_dir(
-            pasta_vendas, self.tenant, dados_path=self.synthetic_sqlite
-        )
-        self.assertEqual(errors_vendas, [])
-        self.assertFalse(ctx_vendas.is_active)
 
     def test_bi_agent_execute_query_e_fetch_distinct_candidates(self) -> None:
         pasta_ifes = RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes"

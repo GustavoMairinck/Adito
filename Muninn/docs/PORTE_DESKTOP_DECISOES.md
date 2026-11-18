@@ -229,6 +229,8 @@ Também falta: gerar `DJANGO_SECRET_KEY` por instalação, forçar `DEBUG=false`
 
 ## 8. Demonstração de vendas (2026-11-04)
 
+> Removida em 2026-11-18 (contexto `exemplo-vendas`, `scripts/gerar_dados_demo.py`, `backend/training/` e `mudanças/`); o Muninn usa só o contexto `pesquisa-extensao-ifes`.
+
 - `scripts/gerar_dados_demo.py <dados.db>` gera o `dados.db` com a mesma demo que o Oráculo web carregava (`backend/training/ddl/schema.sql` + `mudanças/mudanca/03` e `02`): 1.200 vendas de 2023 a 2026 e a view `vfactvendasresolved`, mais `v_receita_produto` (view sobre view).
 - `contexts/exemplo-vendas/` usa essa demo: regras e métricas originais (com o nome da view corrigido; as regras antigas citavam `vfact_vendas_resolved`) e os 68 exemplos originais, todos testados contra a demo (um usava `INTERVAL` do Postgres e foi trocado por `date('now', '-3 months')`).
 - O botão do Admin ("Carregar Contextos") valida os contextos e, com a chave da Mistral configurada, gera o RAG e o índice de valores.
