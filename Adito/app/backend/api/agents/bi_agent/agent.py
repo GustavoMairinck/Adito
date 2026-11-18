@@ -8,6 +8,26 @@ from core.datastore import connect_dados
 
 from .graph import build_graph
 
+def execute_query(sql: str, contexto_id: str | None, max_rows: int | None = None, dados_path=None) -> List[dict]:
+    """Executa a query no dados.duckdb (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas.
+
+    Não depende do LLM: widgets e histórico do chat reexecutam SQL sem instanciar o agente.
+    """
+    try:
+        clean_sql = sql.strip().rstrip(';')
+        with connect_dados(read_policy_for(contexto_id), dados_path) as conn:
+            cur = conn.execute(clean_sql)
+            fetched = cur.fetchmany(int(max_rows)) if max_rows is not None else cur.fetchall()
+            rows = [dict(r) for r in fetched]
+
+        if rows and all(v is None for r in rows for v in r.values()):
+            return []
+        return rows
+    except Exception as e:
+        print(f"[x] Erro na execução final: {e}")
+        return [{"error": str(e)}]
+
+
 class BIAgent:
     def __init__(
         self,
@@ -32,20 +52,7 @@ class BIAgent:
             self.app = self.app.with_config({"callbacks": callbacks})
 
     def execute_query(self, sql: str, contexto_id: str | None, max_rows: int | None = None) -> List[dict]:
-        """Executa a query no dados.duckdb (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas."""
-        try:
-            clean_sql = sql.strip().rstrip(';')
-            with connect_dados(read_policy_for(contexto_id), self.dados_path) as conn:
-                cur = conn.execute(clean_sql)
-                fetched = cur.fetchmany(int(max_rows)) if max_rows is not None else cur.fetchall()
-                rows = [dict(r) for r in fetched]
-
-            if rows and all(v is None for r in rows for v in r.values()):
-                return []
-            return rows
-        except Exception as e:
-            print(f"[x] Erro na execução final: {e}")
-            return [{"error": str(e)}]
+        return execute_query(sql, contexto_id, max_rows, self.dados_path)
 
     def ask(self, question: str, tenant_id: str, contexto_id: str, thread_id: str, callbacks: Optional[List[Any]] = None, execute: bool = False) -> dict:
         """Processa a pergunta do usuário dentro de um contexto (views, regras e RAG do contexto)."""

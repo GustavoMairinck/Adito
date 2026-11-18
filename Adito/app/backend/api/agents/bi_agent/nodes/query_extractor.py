@@ -1,14 +1,14 @@
 import json
 from typing import Any
 
-from django.db.models import Q
 from langchain_core.embeddings import Embeddings
 
 from core.contexts import get_contexto
 from core.datastore import REPO_APP_DIR, data_dir
+from core.db import to_db_id
+from core.records import KnowledgeItem
 from core.rich_logging import log_kv, log_node_end, log_node_start
 from core.vectors import nearest
-from knowledge.models import KnowledgeItem
 
 from ..config import KNOWLEDGE_LABELS, KNOWLEDGE_LIMITS
 from ..state import BiAgentState
@@ -35,14 +35,20 @@ def _fallback_examples_for_contexto(contexto_id: str | None) -> str:
     return ""
 
 
+# Itens do contexto da conversa mais os genéricos (sem contexto).
+_DO_CONTEXTO = "(contexto_id = ? OR contexto_id IS NULL) AND tenant_id = ? AND embedding IS NOT NULL"
+
+
+def _ids(tenant_id, contexto_id) -> list:
+    try:
+        cid = to_db_id(contexto_id)
+    except ValueError:
+        cid = None
+    return [cid, to_db_id(tenant_id)]
+
+
 def _search_knowledge(tenant_id: str, contexto_id: str | None, query_embedding: Any, item_type: str):
-    # Itens do contexto da conversa mais os genéricos (sem contexto).
-    items = KnowledgeItem.objects.filter(
-        Q(contexto_id=contexto_id) | Q(contexto__isnull=True),
-        tenant_id=tenant_id,
-        item_type=item_type,
-        embedding__isnull=False,
-    )
+    items = KnowledgeItem.select(_DO_CONTEXTO + " AND item_type = ?", [*_ids(tenant_id, contexto_id), item_type])
     return [item for item, _ in nearest(items, query_embedding, KNOWLEDGE_LIMITS[item_type])]
 
 
@@ -52,11 +58,7 @@ def query_extractor(state: BiAgentState, embedder: Embeddings) -> dict[str, str]
     tenant_id = state["tenant_id"]
     contexto_id = state.get("contexto_id")
 
-    has_indexed_knowledge = KnowledgeItem.objects.filter(
-        Q(contexto_id=contexto_id) | Q(contexto__isnull=True),
-        tenant_id=tenant_id,
-        embedding__isnull=False,
-    ).exists()
+    has_indexed_knowledge = KnowledgeItem.count(_DO_CONTEXTO, _ids(tenant_id, contexto_id)) > 0
 
     if not has_indexed_knowledge:
         fallback_context = _fallback_examples_for_contexto(contexto_id)

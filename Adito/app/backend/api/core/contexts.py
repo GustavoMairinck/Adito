@@ -11,10 +11,11 @@ import json
 from pathlib import Path
 
 import duckdb
-from django.db import transaction
 
+from . import db
 from .datastore import REPO_APP_DIR, ReadPolicy, connect_dados, data_dir
-from .models import Contexto, Tenant
+from .db import to_db_id
+from .records import Contexto, KnowledgeItem, Tenant
 
 BASE_SQL_RULES = """
 You are ORACULO-ESX (Adito), an AI assistant specialized in OLAP data analysis.
@@ -39,21 +40,34 @@ Rules:
 
 # ── Consulta ────────────────────────────────────────────────────────────────
 
+def _db_id(value) -> str | None:
+    try:
+        return to_db_id(value)
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 def get_contexto(contexto_id) -> Contexto | None:
     if not contexto_id:
         return None
-    return Contexto.objects.filter(id=contexto_id, is_active=True).first()
+    cid = _db_id(contexto_id)
+    return Contexto.first("id = ? AND is_active = 1", [cid]) if cid else None
+
+
+def active_contextos(tenant_id) -> list[Contexto]:
+    return Contexto.select("tenant_id = ? AND is_active = 1", [to_db_id(tenant_id)], order="name")
 
 
 def pick_contexto(tenant: Tenant, requested_id=None) -> Contexto | None:
     """Contexto de uma conversa nova: o pedido, ou o único ativo do tenant se houver só um."""
-    active = Contexto.objects.filter(tenant=tenant, is_active=True)
-    if not active.exists():
+    tid = to_db_id(tenant.id)
+    if not Contexto.count("tenant_id = ? AND is_active = 1", [tid]):
         sync_default_contexts(tenant)
-        active = Contexto.objects.filter(tenant=tenant, is_active=True)
     if requested_id:
-        return active.filter(id=requested_id).first()
-    return active.first() if active.count() == 1 else None
+        cid = _db_id(requested_id)
+        return Contexto.first("tenant_id = ? AND is_active = 1 AND id = ?", [tid, cid]) if cid else None
+    active = Contexto.select("tenant_id = ? AND is_active = 1", [tid], limit=2)
+    return active[0] if len(active) == 1 else None
 
 
 def read_policy_for(contexto: Contexto | str | None) -> ReadPolicy:
@@ -141,7 +155,6 @@ def validate_contexto(contexto: Contexto, dados_path=None) -> list[str]:
     return errors
 
 
-@transaction.atomic
 def load_context_dir(path: str | Path, tenant: Tenant, dados_path=None) -> tuple[Contexto, list[dict], list[str]]:
     """Cria ou atualiza o Contexto a partir da pasta. Devolve (contexto, exemplos, erros)."""
     folder = Path(path)
@@ -150,32 +163,36 @@ def load_context_dir(path: str | Path, tenant: Tenant, dados_path=None) -> tuple
     examples_file = folder / "examples.json"
     slug = spec.get("contexto") or folder.name
 
-    contexto, _ = Contexto.objects.update_or_create(
-        tenant=tenant,
-        slug=slug,
-        defaults={
-            "name": spec.get("nome") or slug,
-            "description": spec.get("descricao", ""),
-            "views": spec.get("views", []),
-            "rules": rules_file.read_text(encoding="utf-8") if rules_file.exists() else "",
-            "llm_row_limit": spec.get("llm_row_limit"),
-        },
-    )
-    examples = json.loads(examples_file.read_text(encoding="utf-8")) if examples_file.exists() else []
+    defaults = {
+        "name": spec.get("nome") or slug,
+        "description": spec.get("descricao", ""),
+        "views": spec.get("views", []),
+        "rules": rules_file.read_text(encoding="utf-8") if rules_file.exists() else "",
+        "llm_row_limit": spec.get("llm_row_limit"),
+    }
+    with db.transaction():
+        contexto = Contexto.first("tenant_id = ? AND slug = ?", [to_db_id(tenant.id), slug])
+        if contexto is None:
+            contexto = Contexto(tenant_id=tenant.id, slug=slug, **defaults).insert()
+        else:
+            for key, value in defaults.items():
+                setattr(contexto, key, value)
+            contexto.update()
+        examples = json.loads(examples_file.read_text(encoding="utf-8")) if examples_file.exists() else []
 
-    if spec.get("ativo") is False:
-        if contexto.is_active:
+        if spec.get("ativo") is False:
+            if contexto.is_active:
+                contexto.is_active = False
+                contexto.update("is_active")
+            return contexto, examples, []
+
+        errors = validate_contexto(contexto, dados_path)
+        if errors:
             contexto.is_active = False
-            contexto.save(update_fields=["is_active"])
-        return contexto, examples, []
-
-    errors = validate_contexto(contexto, dados_path)
-    if errors:
-        contexto.is_active = False
-        contexto.save(update_fields=["is_active"])
-    elif not contexto.is_active:
-        contexto.is_active = True
-        contexto.save(update_fields=["is_active"])
+            contexto.update("is_active")
+        elif not contexto.is_active:
+            contexto.is_active = True
+            contexto.update("is_active")
     return contexto, examples, errors
 
 
@@ -203,14 +220,14 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
             continue
 
     # Valida contextos já salvos no banco para desativar os que não existem mais no dados.duckdb
-    for ctx in Contexto.objects.filter(tenant=tenant, is_active=True):
+    for ctx in Contexto.select("tenant_id = ? AND is_active = 1", [to_db_id(tenant.id)]):
         try:
             errors = validate_contexto(ctx, dados_path=dados_path)
         except FileNotFoundError:
             errors = ["dados.duckdb não encontrado."]
         if errors:
             ctx.is_active = False
-            ctx.save(update_fields=["is_active"])
+            ctx.update("is_active")
 
     return synced
 
@@ -218,7 +235,6 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
     """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa a chave do usuário."""
     from analytics_index.services import rebuild_text_embeddings
-    from knowledge.models import KnowledgeItem
 
     items = [("ddl", describe_views(contexto, dados_path), {})]
     if contexto.rules:
@@ -230,17 +246,19 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
             {"question": example["question"]},
         ))
 
-    with transaction.atomic():
-        KnowledgeItem.objects.filter(contexto=contexto).delete()
-        for item_type, content, metadata in items:
-            KnowledgeItem.objects.create(
-                tenant=contexto.tenant,
-                contexto=contexto,
+    # Os embeddings (rede) saem antes da transação para não segurar o app.db travado.
+    rows = [(item_type, content, metadata, embedder.embed_query(content)) for item_type, content, metadata in items]
+    with db.transaction():
+        db.execute("DELETE FROM knowledge_knowledgeitem WHERE contexto_id = ?", [to_db_id(contexto.id)])
+        for item_type, content, metadata, embedding in rows:
+            KnowledgeItem(
+                tenant_id=contexto.tenant_id,
+                contexto_id=contexto.id,
                 item_type=item_type,
                 content=content,
                 metadata=metadata,
-                embedding=embedder.embed_query(content),
-            )
+                embedding=embedding,
+            ).insert()
 
     values = rebuild_text_embeddings(contexto, embedder)
     return {"knowledge_items": len(items), "values": values}

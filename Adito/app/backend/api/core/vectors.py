@@ -1,39 +1,7 @@
-"""Vetores em SQLite: guardados como BLOB float32 e buscados por força bruta com numpy."""
+"""Vetores em SQLite: guardados como BLOB float32 (core.db) e buscados por força bruta com numpy."""
 from typing import Any, Iterable
 
 import numpy as np
-from django.db import models
-
-
-class EmbeddingField(models.BinaryField):
-    """BinaryField que aceita lista/ndarray na escrita e devolve ndarray float32 na leitura."""
-
-    def __init__(self, *args, dimensions: int | None = None, **kwargs):
-        self.dimensions = dimensions
-        super().__init__(*args, **kwargs)
-
-    def deconstruct(self):
-        name, path, args, kwargs = super().deconstruct()
-        if self.dimensions is not None:
-            kwargs["dimensions"] = self.dimensions
-        return name, path, args, kwargs
-
-    def get_prep_value(self, value):
-        if value is None or isinstance(value, (bytes, bytearray, memoryview)):
-            return super().get_prep_value(value)
-        return super().get_prep_value(to_blob(value))
-
-    def from_db_value(self, value, expression, connection):
-        if value is None:
-            return None
-        return from_blob(value)
-
-    def to_python(self, value):
-        if value is None or isinstance(value, np.ndarray):
-            return value
-        if isinstance(value, (bytes, bytearray, memoryview)):
-            return from_blob(value)
-        return np.asarray(value, dtype=np.float32)
 
 
 def to_blob(vector: Any) -> bytes:

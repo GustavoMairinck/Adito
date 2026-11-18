@@ -3,13 +3,13 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from django.db import transaction
-
+from core import db
 from core.datastore import connect_dados
+from core.db import to_db_id
+from core.records import AnalyticsTextEmbedding
 from core.vectors import nearest
 
 from .config import TEXT_EMBEDDING_BATCH_SIZE, TEXT_EMBEDDING_TOP_K
-from .models import AnalyticsTextEmbedding
 
 
 @dataclass(frozen=True)
@@ -126,6 +126,33 @@ def embed_texts(embedder, texts: list[str]) -> list:
     return [embedder.embed_query(text) for text in texts]
 
 
+def _existing_hashes(contexto, source_table: str, hashes: list[str]) -> set[str]:
+    found: set[str] = set()
+    for start in range(0, len(hashes), 500):  # limite de parâmetros do SQLite
+        chunk = hashes[start:start + 500]
+        found.update(row[0] for row in db.execute(
+            "SELECT value_hash FROM analytics_text_embedding WHERE contexto_id = ? AND source_table = ? "
+            f"AND value_hash IN ({', '.join('?' * len(chunk))})",
+            [to_db_id(contexto.id), source_table, *chunk],
+        ))
+    return found
+
+
+def _insert_ignore(rows: list[AnalyticsTextEmbedding]) -> None:
+    """bulk_create(ignore_conflicts=True): a constraint única descarta valores repetidos."""
+    if not rows:
+        return
+    now = db.utcnow()
+    names = AnalyticsTextEmbedding.columns()
+    for row in rows:
+        row.created_at = row.updated_at = now
+    with db.transaction() as conn:
+        conn.executemany(
+            f"INSERT OR IGNORE INTO analytics_text_embedding ({', '.join(names)}) VALUES ({', '.join('?' * len(names))})",
+            [[AnalyticsTextEmbedding.db_value(n, getattr(row, n)) for n in names] for row in rows],
+        )
+
+
 def sync_text_embeddings(
     contexto,
     embedder,
@@ -141,13 +168,7 @@ def sync_text_embeddings(
         if limit is not None:
             candidates = candidates[:limit]
         hashes = [candidate.value_hash for candidate in candidates]
-        existing_hashes = set(
-            AnalyticsTextEmbedding.objects.filter(
-                contexto=contexto,
-                source_table=source_table,
-                value_hash__in=hashes,
-            ).values_list("value_hash", flat=True)
-        )
+        existing_hashes = _existing_hashes(contexto, source_table, hashes)
         missing = [candidate for candidate in candidates if candidate.value_hash not in existing_hashes]
 
         summary["tables"][source_table] = {
@@ -166,8 +187,9 @@ def sync_text_embeddings(
             embeddings = embed_texts(embedder, texts)
             rows = [
                 AnalyticsTextEmbedding(
-                    tenant=contexto.tenant,
-                    contexto=contexto,
+                    id=db.new_id(),
+                    tenant_id=contexto.tenant_id,
+                    contexto_id=contexto.id,
                     source_table=candidate.source_table,
                     embedding_text=candidate.embedding_text,
                     payload_json=candidate.payload_json,
@@ -176,7 +198,7 @@ def sync_text_embeddings(
                 )
                 for candidate, embedding in zip(batch, embeddings)
             ]
-            AnalyticsTextEmbedding.objects.bulk_create(rows, ignore_conflicts=True)
+            _insert_ignore(rows)
             summary["tables"][source_table]["created"] += len(rows)
             summary["created"] += len(rows)
 
@@ -195,19 +217,23 @@ def rebuild_text_embeddings(
     if dry_run:
         return sync_text_embeddings(contexto, embedder, table=table, batch_size=batch_size, dry_run=True, limit=limit)
 
-    stale = AnalyticsTextEmbedding.objects.filter(contexto=contexto)
-    if table:
-        stale = stale.filter(source_table__in=tables)
-    with transaction.atomic():
-        stale.delete()
+    with db.transaction():
+        if table:
+            db.execute(
+                f"DELETE FROM analytics_text_embedding WHERE contexto_id = ? AND source_table IN ({', '.join('?' * len(tables))})",
+                [to_db_id(contexto.id), *tables],
+            )
+        else:
+            db.execute("DELETE FROM analytics_text_embedding WHERE contexto_id = ?", [to_db_id(contexto.id)])
 
     return sync_text_embeddings(contexto, embedder, table=table, batch_size=batch_size, dry_run=False, limit=limit)
 
 
 def search_text_embeddings(contexto, query_embedding, table: str | None = None, top_k: int = TEXT_EMBEDDING_TOP_K) -> list[dict]:
-    qs = AnalyticsTextEmbedding.objects.filter(contexto=contexto, embedding__isnull=False)
+    where, params = "contexto_id = ? AND embedding IS NOT NULL", [to_db_id(contexto.id)]
     if table:
-        qs = qs.filter(source_table=table)
+        where, params = where + " AND source_table = ?", [*params, table]
+    qs = AnalyticsTextEmbedding.select(where, params)
 
     return [
         {

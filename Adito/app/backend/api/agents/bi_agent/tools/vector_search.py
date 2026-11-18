@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
 from analytics_index.services import configured_tables, search_text_embeddings
-from core.models import Contexto
+from core.records import Contexto
 from core.rich_logging import log_info, log_success
 
 
