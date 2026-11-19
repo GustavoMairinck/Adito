@@ -25,7 +25,7 @@ Decisões tomadas para levar o Oraculo-ESX (web, em Docker) para um aplicativo d
 | [US-006](stories/US-006_contextos.md) | Trabalhar com vários contextos de dados | Done |
 | [US-007](stories/US-007_entrada-arquivo-sqlite.md) | Trazer meus dados num arquivo SQLite pronto | In Progress |
 | [US-008](stories/US-008_agente-mesmo-processo.md) | Agente BI no mesmo processo do backend | Done |
-| [US-009](stories/US-009_demo-vendas.md) | Testar o app com a demonstração de vendas | Done |
+| [US-009](stories/US-009_demo-vendas.md) | Testar o app com a demonstração de vendas | Removida |
 | [US-010](stories/US-010_telas-herdadas.md) | Tirar do app as telas que só faziam sentido na web | Done |
 | [US-011](stories/US-011_instalador.md) | Instalar o app sem ferramentas de desenvolvimento | Backlog |
 | [US-012](stories/US-012_limite-linhas-llm.md) | Respeitar o limite de linhas do contexto no envio ao LLM | Backlog |

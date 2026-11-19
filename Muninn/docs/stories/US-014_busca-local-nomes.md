@@ -92,7 +92,7 @@ N/A
 
 ## 📝 Notas e Comentários
 
-- `local_search_columns: ["vendedor"]` já está no contexto de exemplo.
+- O contexto `pesquisa-extensao-ifes` já declara `local_search_columns` (por exemplo `coordenador_nome`). Antes, o exemplo citado aqui era o `vendedor` da demonstração de vendas, removida.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

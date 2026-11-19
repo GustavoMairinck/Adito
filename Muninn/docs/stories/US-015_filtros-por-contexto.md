@@ -14,10 +14,10 @@
 
 **Como** gestor que usa o dashboard
 **Eu quero** filtros e uma tela de exploração que sigam o contexto dos meus dados
-**Para que** não ficar preso à view de vendas da demo
+**Para que** não ficar preso a uma view fixa
 
 ### Contexto Adicional
-Os endpoints fixos do painel (`kpis`, `charts`, `projects`) e a tela Explorar Dados continuam presos à view de vendas. A proposta é um `filters.json` por contexto.
+Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.top_projects`) consultam uma view fixa, hoje `vfact_orientacao_bolsa_resolved` (antes era a view da demonstração de vendas, removida). A tela Explorar Dados já segue o contexto. A proposta é um `filters.json` por contexto.
 
 ---
 

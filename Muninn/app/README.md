@@ -147,7 +147,7 @@ Atalho: `../../rodar_desktop.sh` (na raiz do repositório) sobe o Vite e a janel
 
 1. **Para usar o chat**, abra **Configurações** → cole a chave do Gemini → **Salvar**. O app testa a chave antes de guardar.
 2. **Administração** → **Carregar Contextos**. Valida os contextos e, com a chave configurada, gera os embeddings. A exploração das tabelas funciona com os contextos validados.
-3. **Chat** → escolha o contexto e pergunte, por exemplo: "qual a receita líquida por região?".
+3. **Chat** → escolha o contexto e pergunte, por exemplo: "quantas ações de extensão foram cadastradas por ano?".
 
 Mudou algo em `contexts/` ou trocou o `dados.db`? Repita o passo 2.
 
