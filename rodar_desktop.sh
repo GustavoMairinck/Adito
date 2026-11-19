@@ -40,9 +40,19 @@ if curl -s -o /dev/null http://localhost:5173; then
       echo "A porta 5173 está ocupada por um processo que não dá para identificar. Encerre-o e rode de novo."
       exit 1
     fi
+    # Só encerra se for mesmo um Vite; qualquer outro serviço na 5173 fica com o usuário.
+    OUTRO_CMD="$(ps -p "$OUTRO_PID" -o args= 2>/dev/null || true)"
+    if [[ "$OUTRO_CMD" != *vite* ]]; then
+      echo "A porta 5173 está ocupada por outro programa (pid $OUTRO_PID: ${OUTRO_CMD:-desconhecido}). Encerre-o e rode de novo."
+      exit 1
+    fi
     echo "→ O Vite na 5173 é de outra pasta (${OUTRA_PASTA:-desconhecida}); encerrando para subir o desta."
     kill "$OUTRO_PID" 2>/dev/null || true
     for _ in $(seq 1 20); do curl -s -o /dev/null http://localhost:5173 || break; sleep 0.5; done
+    if curl -s -o /dev/null http://localhost:5173; then
+      echo "O Vite da outra pasta (pid $OUTRO_PID) não encerrou. Encerre-o e rode de novo."
+      exit 1
+    fi
   fi
 fi
 
