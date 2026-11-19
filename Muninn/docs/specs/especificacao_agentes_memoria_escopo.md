@@ -19,7 +19,7 @@ pergunta ─► detect_injection ──sim──► guard_node (resposta fixa "b
 ## Memória
 
 - Toda resposta (conversa, dados e barreira) entra no histórico como `AIMessage`, no checkpointer SQLite por `thread_id`.
-- O agente de conversa recebe só as últimas `MAX_HISTORY_MESSAGES` = 12 mensagens, cada uma cortada em `MAX_MESSAGE_CHARS` = 1500 caracteres.
+- O agente de conversa recebe só as últimas `MAX_HISTORY_MESSAGES` = 12 mensagens; o roteador, as últimas 8 mais a pergunta atual. Em ambos, cada mensagem anterior (do usuário ou do assistente) é cortada em `MAX_MESSAGE_CHARS` = 1500 caracteres.
 - O `bi_agent` não recebe o histórico, só a instrução do roteador.
 
 ## Escopo
@@ -31,12 +31,14 @@ pergunta ─► detect_injection ──sim──► guard_node (resposta fixa "b
 ## Barreira de prompt injection
 
 1. `orchestrator/guard.py::detect_injection`: regex sem LLM, sobre o texto sem acento e em minúsculas. Pega pedidos para ignorar instruções, revelar o prompt, trocar de papel ("modo desenvolvedor", "finja", "a partir de agora você é") e marcações como `<system>`.
+   - "Orientação" e "regra" são termos do domínio. Só bloqueiam quando apontam para o assistente: com possessivo ("suas regras") ou com qualificador ("do sistema", "anteriores", "acima"). "Ignore as orientações de 2020" passa.
+   - "Atue como" e "aja como" não entram, porque aparecem em filtros ("em que o docente atue como coordenador").
 2. O roteador classifica o resto como `blocked` (regras SECURITY no prompt).
 3. A proteção dos dados continua no SQL: só `SELECT`, só as 6 views do contexto, sem `*`, sem referência à linha inteira, sem colunas sensíveis, com `mode=ro` e authorizer no SQLite.
 
 ## Resposta de dados
 
-- A SQL roda primeiro; depois um LLM escreve a resposta com a pergunta e até `llm_row_limit` linhas do contexto (`views.json`: 50 em `pesquisa-extensao-ifes`; 20 se não definido).
+- A SQL roda primeiro; depois um LLM escreve a resposta (registrada no Langfuse como `bi_answer_from_rows`) com a pergunta e até `llm_row_limit` linhas do contexto (`views.json`: 50 em `pesquisa-extensao-ifes`; 20 se não definido).
 - Erro de execução vira `fallback`, não tabela.
 - O corretor de SQL recebe a pergunta, o esquema e as regras do contexto.
 
