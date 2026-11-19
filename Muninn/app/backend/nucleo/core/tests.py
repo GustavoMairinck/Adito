@@ -607,7 +607,138 @@ class PersistenciaTests(AppDbTestCase):
         a, b = get_local_user(), get_local_user()
         self.assertEqual(a.id, b.id)
         self.assertTrue(a.is_staff)
-        self.assertTrue(a.password.startswith("!"))
+
+
+# Esquema de um app.db criado pela versão com Django (antes da versão 2), só o necessário.
+_DDL_DJANGO = """
+CREATE TABLE "django_migrations" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "app" varchar(255) NOT NULL, "name" varchar(255) NOT NULL, "applied" datetime NOT NULL);
+CREATE TABLE "django_content_type" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "app_label" varchar(100) NOT NULL, "model" varchar(100) NOT NULL);
+CREATE TABLE "auth_permission" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "content_type_id" integer NOT NULL REFERENCES "django_content_type" ("id") DEFERRABLE INITIALLY DEFERRED, "codename" varchar(100) NOT NULL, "name" varchar(255) NOT NULL);
+CREATE TABLE "auth_group" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "name" varchar(150) NOT NULL UNIQUE);
+CREATE TABLE "auth_group_permissions" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "group_id" integer NOT NULL REFERENCES "auth_group" ("id") DEFERRABLE INITIALLY DEFERRED, "permission_id" integer NOT NULL REFERENCES "auth_permission" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_tenant" ("id" char(32) NOT NULL PRIMARY KEY, "name" varchar(255) NOT NULL, "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL);
+CREATE TABLE "core_user" ("password" varchar(128) NOT NULL, "last_login" datetime NULL, "is_superuser" bool NOT NULL, "username" varchar(150) NOT NULL UNIQUE, "first_name" varchar(150) NOT NULL, "last_name" varchar(150) NOT NULL, "email" varchar(254) NOT NULL, "is_staff" bool NOT NULL, "is_active" bool NOT NULL, "date_joined" datetime NOT NULL, "id" char(32) NOT NULL PRIMARY KEY, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "tenant_id" char(32) NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_user_groups" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "group_id" integer NOT NULL REFERENCES "auth_group" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_user_user_permissions" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "permission_id" integer NOT NULL REFERENCES "auth_permission" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "django_admin_log" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "object_id" text NULL, "object_repr" varchar(200) NOT NULL, "action_flag" smallint unsigned NOT NULL, "change_message" text NOT NULL, "content_type_id" integer NULL REFERENCES "django_content_type" ("id") DEFERRABLE INITIALLY DEFERRED, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "action_time" datetime NOT NULL);
+CREATE TABLE "django_session" ("session_key" varchar(40) NOT NULL PRIMARY KEY, "session_data" text NOT NULL, "expire_date" datetime NOT NULL);
+CREATE TABLE "checkpoints" ("thread_id" TEXT NOT NULL, "checkpoint_ns" TEXT NOT NULL DEFAULT '', "checkpoint_id" TEXT NOT NULL, "dados" TEXT);
+CREATE TABLE "writes" ("thread_id" TEXT NOT NULL, "checkpoint_ns" TEXT NOT NULL DEFAULT '', "checkpoint_id" TEXT NOT NULL, "dados" TEXT);
+"""
+
+
+class MigracaoV2Tests(unittest.TestCase):
+    """Um app.db da versão com Django chega à versão 2 sem Django, sem vendas e sem perder o resto."""
+
+    T, U = "aa" * 16, "bb" * 16
+    PESQ, VENDAS = "cc" * 16, "dd" * 16
+    CONV_PESQ, CONV_VENDAS = "11" * 16, "22" * 16
+    AGORA = "2026-11-10 12:00:00"
+
+    def setUp(self):
+        self.pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self.pasta.cleanup)
+        self.app_db = Path(self.pasta.name) / "app.db"
+        env = patch.dict(os.environ, {"MUNINN_APP_DB": str(self.app_db), "MUNINN_DATA_DIR": self.pasta.name})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(db.close)
+        self.addCleanup(session.reset)
+        self._criar_banco_antigo()
+
+    def _criar_banco_antigo(self):
+        from core.schema import SCHEMA_SQL
+
+        c = sqlite3.connect(self.app_db)
+        c.executescript(_DDL_DJANGO)
+        c.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))  # demais tabelas (IF NOT EXISTS)
+        a = self.AGORA
+        c.execute("INSERT INTO django_migrations (app, name, applied) VALUES ('knowledge', '0002_reset_embeddings_for_gemini', ?)", [a])
+        c.execute("INSERT INTO core_tenant VALUES (?, 'padrao', 1, ?, ?)", [self.T, a, a])
+        c.execute(
+            "INSERT INTO core_user VALUES ('!x', NULL, 0, 'local', '', '', '', 1, 1, ?, ?, ?, ?, ?)",
+            [a, self.U, a, a, self.T],
+        )
+        for cid, slug in ((self.PESQ, "pesquisa-extensao-ifes"), (self.VENDAS, "exemplo-vendas")):
+            c.execute(
+                "INSERT INTO core_contexto (id, slug, name, description, views, rules, is_active, created_at, updated_at, tenant_id) "
+                "VALUES (?, ?, ?, '', '[]', '', ?, ?, ?, ?)", [cid, slug, slug, int(slug != "exemplo-vendas"), a, a, self.T],
+            )
+        for conv, ctx in ((self.CONV_PESQ, self.PESQ), (self.CONV_VENDAS, self.VENDAS)):
+            c.execute("INSERT INTO chat_conversation VALUES (?, 't', ?, ?, ?, ?, ?)", [conv, a, a, ctx, self.T, self.U])
+            msg = conv[:30] + "ff"
+            c.execute("INSERT INTO chat_message VALUES (?, 'assistant', 'r', '{}', ?, ?)", [msg, a, conv])
+            c.execute(
+                "INSERT INTO chat_queryexecution VALUES (?, 'p', 'SELECT 1', 1, NULL, NULL, ?, ?, ?, ?, ?)",
+                [conv[:30] + "ee", a, ctx, msg, self.T, self.U],
+            )
+            dash = "99" * 16
+            c.execute("INSERT OR IGNORE INTO dashboard_dashboard VALUES (?, 'principal', '', ?, ?, ?, ?)", [dash, a, a, self.T, self.U])
+            c.execute(
+                "INSERT INTO dashboard_widget VALUES (?, 'w', '?', 'SELECT 1', 'bar', 'static', 4, 'medium', 0, 0, 4, 4, 0, 'none', 'OK', NULL, ?, ?, ?, ?)",
+                [conv[:30] + "dd", a, a, ctx, dash],
+            )
+            fio = f"tenant_x:user_y:conv_{db.from_db_id(conv)}"
+            c.execute("INSERT INTO checkpoints VALUES (?, '', 'c1', NULL)", [fio])
+            c.execute("INSERT INTO writes VALUES (?, '', 'c1', NULL)", [fio])
+        c.commit()
+        c.close()
+
+    def _tabelas(self):
+        return {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+    def test_banco_antigo_vai_para_a_versao_2(self):
+        from core.schema import TABELAS_DJANGO, VERSAO
+
+        self.assertEqual(ensure_schema(), VERSAO)
+        self.assertEqual(VERSAO, 2)
+        self.assertTrue(Path(str(self.app_db) + ".bak-v1").exists(), "faltou a cópia de segurança")
+        self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
+        colunas = [r[1] for r in db.execute("PRAGMA table_info(core_user)")]
+        self.assertEqual(sorted(colunas), sorted(
+            ["id", "username", "first_name", "last_name", "email", "is_staff", "created_at", "updated_at", "tenant_id"]))
+        self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        self.assertEqual(db.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+
+        # Vendas sai inteiro; pesquisa fica intacto.
+        slugs = [r[0] for r in db.execute("SELECT slug FROM core_contexto")]
+        self.assertEqual(slugs, ["pesquisa-extensao-ifes"])
+        conversas = [r[0] for r in db.execute("SELECT id FROM chat_conversation")]
+        self.assertEqual(conversas, [self.CONV_PESQ])
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_message").fetchone()[0], 1)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_queryexecution").fetchone()[0], 1)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM dashboard_widget").fetchone()[0], 1)
+        fios = [r[0] for r in db.execute("SELECT thread_id FROM checkpoints")]
+        self.assertEqual(len(fios), 1)
+        self.assertIn(db.from_db_id(self.CONV_PESQ), fios[0])
+
+        # O usuário local continua o mesmo e o app abre com ele.
+        user = get_local_user()
+        self.assertEqual(user.id, db.from_db_id(self.U))
+        self.assertEqual(ensure_schema(), VERSAO)  # já em dia: não migra de novo
+
+    def test_banco_novo_nasce_na_versao_2_sem_django(self):
+        from core.schema import TABELAS_DJANGO, VERSAO
+
+        novo = Path(self.pasta.name) / "novo.db"
+        with patch.dict(os.environ, {"MUNINN_APP_DB": str(novo)}):
+            self.assertEqual(ensure_schema(), VERSAO)
+            self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
+            self.assertNotIn("password", [r[1] for r in db.execute("PRAGMA table_info(core_user)")])
+            self.assertFalse(Path(str(novo) + ".bak-v1").exists())
+
+    def test_pasta_de_vendas_na_pasta_de_dados_sai_do_caminho(self):
+        from core.contexts import sync_default_contexts
+        from core.records import Tenant as T
+
+        ensure_schema()
+        pasta = Path(self.pasta.name) / "contexts" / "exemplo-vendas"
+        pasta.mkdir(parents=True)
+        (pasta / "views.json").write_text(json.dumps({"contexto": "exemplo-vendas", "views": [{"name": "x"}]}), encoding="utf-8")
+        sync_default_contexts(T.first())
+        self.assertFalse(pasta.exists())
+        self.assertTrue((Path(self.pasta.name) / "contexts.removidos" / "exemplo-vendas" / "views.json").exists())
+        self.assertEqual([r[0] for r in db.execute("SELECT slug FROM core_contexto WHERE slug = 'exemplo-vendas'")], [])
 
 
 class AgentesMemoriaEscopoTests(unittest.TestCase):

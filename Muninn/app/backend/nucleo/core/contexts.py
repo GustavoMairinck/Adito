@@ -8,6 +8,7 @@ Pasta de um contexto:
     examples.json  opcional: [{"question": "...", "sql": "..."}]
 """
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from . import db
 from .datastore import REPO_APP_DIR, ReadPolicy, connect_dados, data_dir
 from .db import to_db_id
 from .records import Contexto, KnowledgeItem, Tenant
+from .schema import CONTEXTOS_REMOVIDOS
 
 BASE_SQL_RULES = """
 You are Muninn, an AI assistant specialized in academic and institutional data analysis.
@@ -199,6 +201,31 @@ def load_context_dir(path: str | Path, tenant: Tenant, dados_path=None) -> tuple
     return contexto, examples, errors
 
 
+def _slug_da_pasta(folder: Path) -> str:
+    try:
+        spec = json.loads((folder / "views.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return folder.name
+    return spec.get("contexto") or folder.name
+
+
+def _afastar_contextos_removidos(user_contexts: Path) -> None:
+    """Move para contexts.removidos/ as pastas de contextos que saíram do produto.
+
+    Sem isso, uma cópia antiga na pasta de dados (o README antigo mandava copiar a demonstração de
+    vendas) recriaria o contexto no app.db a cada abertura. Nada é apagado.
+    """
+    for folder in list(user_contexts.glob("*")):
+        if not (folder / "views.json").exists() or _slug_da_pasta(folder) not in CONTEXTOS_REMOVIDOS:
+            continue
+        destino_base = user_contexts.parent / "contexts.removidos"
+        destino_base.mkdir(parents=True, exist_ok=True)
+        destino, n = destino_base / folder.name, 1
+        while destino.exists():
+            destino, n = destino_base / f"{folder.name}-{n}", n + 1
+        shutil.move(str(folder), str(destino))
+
+
 def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
     """Sincroniza os contextos das pastas do repositório e da pasta do usuário."""
     context_folders: dict[str, Path] = {}
@@ -210,12 +237,15 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
 
     user_contexts = data_dir() / "contexts"
     if user_contexts.exists():
+        _afastar_contextos_removidos(user_contexts)
         for p in user_contexts.glob("*"):
             if (p / "views.json").exists():
                 context_folders[p.name] = p
 
     synced: list[Contexto] = []
     for folder in context_folders.values():
+        if _slug_da_pasta(folder) in CONTEXTOS_REMOVIDOS:
+            continue
         try:
             ctx, _, _ = load_context_dir(folder, tenant, dados_path=dados_path)
             synced.append(ctx)

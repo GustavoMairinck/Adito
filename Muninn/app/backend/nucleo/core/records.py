@@ -6,7 +6,6 @@ Cascatas e SET NULL que o ORM fazia sozinho estão nas funções de exclusão ab
 from __future__ import annotations
 
 import os
-import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -31,21 +30,15 @@ class Tenant(Record):
 class User(Record):
     table = "core_user"
     kinds = {
-        "id": "id", "tenant_id": "id", "is_superuser": "bool", "is_staff": "bool", "is_active": "bool",
-        "last_login": "dt", "date_joined": "dt", "created_at": "dt", "updated_at": "dt",
+        "id": "id", "tenant_id": "id", "is_staff": "bool", "created_at": "dt", "updated_at": "dt",
     }
 
     id: str | None = None
     username: str = ""
-    password: str = ""
     first_name: str = ""
     last_name: str = ""
     email: str = ""
-    is_superuser: bool = False
     is_staff: bool = False
-    is_active: bool = True
-    last_login: datetime | None = None
-    date_joined: datetime | None = None
     tenant_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -221,7 +214,7 @@ LOCAL_USERNAME = "local"
 
 
 def get_local_user() -> User:
-    """Usuário único do desktop (staff, sem senha utilizável) e o tenant fixo."""
+    """Usuário único do desktop (staff) e o tenant fixo."""
     nome = os.environ.get("DEFAULT_TENANT_NAME", "padrao")
     with db.transaction():
         tenant = Tenant.first("name = ?", [nome], order="created_at")
@@ -229,10 +222,7 @@ def get_local_user() -> User:
             tenant = Tenant(name=nome).insert()
         user = User.first("username = ?", [LOCAL_USERNAME])
         if user is None:
-            user = User(
-                username=LOCAL_USERNAME, tenant_id=tenant.id, is_staff=True,
-                password="!" + secrets.token_urlsafe(30)[:40], date_joined=db.utcnow(),
-            ).insert()
+            user = User(username=LOCAL_USERNAME, tenant_id=tenant.id, is_staff=True).insert()
         elif user.tenant_id is None:
             user.tenant_id = tenant.id
             user.update("tenant_id")

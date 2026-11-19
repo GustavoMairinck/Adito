@@ -88,7 +88,7 @@ def flush_data(args) -> None:
     """Apaga conversas, mensagens, auditoria de SQL e o estado do LangGraph (preserva contextos, RAG e widgets)."""
     from agents.config import checkpoint_db_path
 
-    preservados = {r[0] for r in db.execute("SELECT id FROM core_user WHERE is_superuser = 1 OR username = 'local'")}
+    preservados = {r[0] for r in db.execute("SELECT id FROM core_user WHERE username = 'local'")}
     if args.keep_email:
         preservados |= {r[0] for r in db.execute("SELECT id FROM core_user WHERE email = ?", [args.keep_email])}
     marcas = ", ".join("?" * len(preservados)) or "NULL"
