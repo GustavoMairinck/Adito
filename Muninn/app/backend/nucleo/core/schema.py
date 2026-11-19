@@ -9,6 +9,7 @@ Versão do esquema do app.db (PRAGMA user_version).
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from . import db
@@ -88,7 +89,8 @@ VERSAO = 1 + len(MIGRACOES)
 
 def _backup(versao: int) -> Path:
     destino = Path(str(app_db_path()) + f".bak-v{versao}")
-    with sqlite3.connect(destino) as copia:
+    # closing(): o "with" do sqlite3 só controla a transação; sem fechar, o arquivo fica preso no Windows.
+    with closing(sqlite3.connect(destino)) as copia:
         db.connect().backup(copia)
     return destino
 
