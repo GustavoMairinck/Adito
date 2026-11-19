@@ -16,6 +16,10 @@ Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada an
 Criação de ponto de entrada único via Makefile na raiz do monorepo para unificar setup de ambientes virtuais e dependências, reconstrução do banco relacional com fatos em < 5s, inicialização do app desktop e execução consolidada das suítes de testes automatizados. Origem: `docs/discovery/automacao-makefiles-devex.md` e `docs/requirements/automacao-makefiles-devex.md`.
 - **Stories**: US-DEVEX-01.
 
+### EPIC-10: Garantia de Qualidade — Testes Automatizados, Performance e Avaliação da IA (Issue #71)
+Estruturação da suíte completa de qualidade do Muninn: testes unitários no frontend Vue (Vitest + Vue Test Utils), testes E2E híbridos com Playwright (mock de `__TAURI_INTERNALS__` + bridge live com `desktop_server.py`), benchmark de performance/latência do núcleo local sobre o `dados.db` real com SLOs e avaliação híbrida de acurácia da IA (SQL gabarito executada + LLM-as-a-Judge) com dataset independente. Origem: `Muninn/docs/discovery/testes-automatizados-qualidade.md` e `Muninn/docs/requirements/testes-automatizados-qualidade.md`.
+- **Stories**: US-QA-01 a US-QA-04.
+
 ---
 
 ## User Stories Priorizadas
@@ -57,6 +61,21 @@ Criação de ponto de entrada único via Makefile na raiz do monorepo para unifi
 
 > Total EPIC-09: 3 pts (100% Concluído em 18/11/2026).  
 > - **Vertical Slice 1 (3 pts):** `US-DEVEX-01` (Implementação do Makefile raiz, testes operacionais dos alvos e documentação no README). Concluído.
+
+---
+
+### 🗂️ EPIC-10 — Garantia de Qualidade: Testes Automatizados, Performance e Avaliação da IA (aprovado em 19/11/2026 — Issue #71)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-QA-01](stories/US-QA-01_testes-unitarios-frontend-vitest.md) | Testes Unitários de Frontend Vue (Vitest + Vue Test Utils) | EPIC-10 | 3 | 🔴 Alta (slice 1) | — | FR01, FR11, BR03, BR04, BR06, NFR01–NFR03 | ✅ Concluída |
+| [US-QA-03](stories/US-QA-03_benchmark-performance-nucleo-local.md) | Benchmark de Performance e Latência do Núcleo Local (`dados.db`) | EPIC-10 | 3 | 🔴 Alta (slice 1) | — | FR04–FR06, FR11, BR04, NFR02–NFR04, A01 | ✅ Concluída |
+| [US-QA-02](stories/US-QA-02_testes-e2e-hibridos-playwright.md) | Testes E2E Híbridos de Frontend com Playwright (Mock IPC + Live Bridge) | EPIC-10 | 5 | 🟠 Alta (slice 2) | US-QA-01 | FR02, FR03, FR11, BR03, BR06, NFR01–NFR03, A03–A04 | ✅ Concluída |
+| [US-QA-04](stories/US-QA-04_avaliacao-acuracia-ia-llm-judge.md) | Avaliação Híbrida de Acurácia da IA & Consolidação Issue #71 | EPIC-10 | 5 | 🟠 Alta (slice 2) | US-QA-02, US-QA-03 | FR07–FR12, BR01–BR05, NFR03–NFR05, A01–A02 | ✅ Concluída |
+
+> Total EPIC-10: 16 pts (100% Concluído em 19/11/2026).  
+> - **Vertical Slice 1 (6 pts):** `US-QA-01` + `US-QA-03` (Testes unitários Vitest no frontend + Benchmark determinístico de performance do backend sobre `dados.db`). Concluído.  
+> - **Vertical Slice 2 (10 pts):** `US-QA-02` + `US-QA-04` (Playwright E2E híbrido + Avaliação híbrida de acurácia com LLM Judge + Docs e evidências da Issue #71). Concluído.
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >

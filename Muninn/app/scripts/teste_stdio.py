@@ -37,13 +37,13 @@ def check(nome, cond, detalhe=""):
 class Nucleo:
     def __init__(self, data_dir: Path):
         env = {**os.environ, "MUNINN_DATA_DIR": str(data_dir), "PYTHONUNBUFFERED": "1"}
-        env.pop("GEMINI_API_KEY", None)
-        env.pop("GOOGLE_API_KEY", None)
+        env["GEMINI_API_KEY"] = ""
+        env["GOOGLE_API_KEY"] = ""
         self.t0 = time.monotonic()
         self.proc = subprocess.Popen(
             [sys.executable, str(APP_DIR / "backend" / "nucleo" / "desktop_server.py")],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(data_dir / "nucleo.log", "w"),
-            env=env, text=True, encoding="utf-8",
+            env=env, cwd=str(data_dir), text=True, encoding="utf-8",
         )
         self.next_id = 0
 

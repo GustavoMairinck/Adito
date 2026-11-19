@@ -44,8 +44,8 @@ COLOR_RED    := \033[31m
 .PHONY: help all dev desktop dev-front build-front dev-tauri \
         db etl etl-popular etl-cruzar etl-ver etl-pii etl-extract \
         etl-src-acoes etl-src-participacoes etl-sigpesq etl-cnpq etl-lattes \
-        test test-etl test-core test-mcp test-tauri \
-        setup setup-app setup-etl clean clean-all check-setup
+        test test-etl test-core test-mcp test-front test-e2e test-e2e-live test-perf test-eval test-tauri \
+        setup setup-app setup-etl clean clean-all check-setup check-front
 
 # ------------------------------------------------------------------------------
 # 📖 Ajuda & Documentação Interativa
@@ -70,11 +70,11 @@ desktop: check-setup ## Inicia o ambiente desktop via ./rodar_desktop.sh (banco 
 	@echo -e "$(COLOR_CYAN)→ Subindo Muninn Desktop (Vite + Núcleo Python + Janela Tauri)...$(COLOR_RESET)"
 	@"$(ROOT_DIR)/rodar_desktop.sh"
 
-dev-front: ## Inicia apenas o servidor de desenvolvimento do frontend (Vite na porta 5173)
+dev-front: check-front ## Inicia apenas o servidor de desenvolvimento do frontend (Vite na porta 5173)
 	@echo -e "$(COLOR_CYAN)→ Iniciando Frontend Vue em modo desenvolvimento...$(COLOR_RESET)"
 	@cd "$(FRONT_DIR)" && npm run dev
 
-build-front: ## Gera o build de produção do frontend Vue
+build-front: check-front ## Gera o build de produção do frontend Vue
 	@echo -e "$(COLOR_CYAN)→ Compilando frontend Vue para produção...$(COLOR_RESET)"
 	@cd "$(FRONT_DIR)" && npm run build
 
@@ -135,7 +135,7 @@ etl-lattes: check-setup ## Extrai currículos Lattes da lista de pesquisadores
 # ------------------------------------------------------------------------------
 # 🧪 Testes Automatizados
 # ------------------------------------------------------------------------------
-test: test-etl test-core test-mcp ## Executa sequencialmente as suítes de testes automatizados do backend/ETL
+test: test-etl test-core test-mcp test-front ## Executa sequencialmente as suítes rápidas/offline (ETL, núcleo, MCP e frontend unit)
 	@echo -e "\n$(COLOR_BOLD)$(COLOR_GREEN)✓ Todas as suítes de testes foram executadas com sucesso!$(COLOR_RESET)\n"
 
 test-etl: check-setup ## Executa os testes automatizados do ETL (pytest)
@@ -150,6 +150,34 @@ test-mcp: check-setup ## Executa os testes de contrato e integração STDIO/MCP
 	@echo -e "$(COLOR_CYAN)→ Executando testes de STDIO e Contrato RPC...$(COLOR_RESET)"
 	@cd "$(APP_DIR)" && "$(APP_PYTHON)" scripts/teste_stdio.py
 	@cd "$(APP_DIR)" && "$(APP_PYTHON)" scripts/teste_contrato.py
+
+test-front: check-front ## Executa os testes unitários do frontend Vue (Vitest)
+	@echo -e "$(COLOR_CYAN)→ Executando testes unitários do frontend Vue (Vitest)...$(COLOR_RESET)"
+	@cd "$(FRONT_DIR)" && npm run test:unit
+
+test-e2e: check-front ## Executa testes E2E do frontend em Chromium via Playwright (modo determinístico/mock IPC)
+	@echo -e "$(COLOR_CYAN)→ Executando testes E2E do frontend (Playwright mock)...$(COLOR_RESET)"
+	@cd "$(FRONT_DIR)" && npm run test:e2e
+
+test-e2e-live: check-setup check-front ## Executa testes E2E integrados (Playwright + bridge local + núcleo Python real sobre dados.db)
+	@echo -e "$(COLOR_CYAN)→ Executando testes E2E integrados com núcleo Python real (dados.db)...$(COLOR_RESET)"
+	@set -e; \
+	"$(APP_PYTHON)" "$(APP_DIR)/scripts/e2e_bridge.py" --port 18765 & \
+	BRIDGE_PID=$$!; \
+	trap 'kill $$BRIDGE_PID 2>/dev/null || true; wait $$BRIDGE_PID 2>/dev/null || true' EXIT; \
+	for i in $$(seq 1 40); do \
+		if curl -sf http://127.0.0.1:18765/health >/dev/null 2>&1; then break; fi; \
+		sleep 0.2; \
+	done; \
+	cd "$(FRONT_DIR)" && E2E_BRIDGE_URL=http://127.0.0.1:18765 npm run test:e2e:live
+
+test-perf: check-setup ## Executa o benchmark de performance/latência do núcleo local sobre dados.db
+	@echo -e "$(COLOR_CYAN)→ Executando benchmark de performance do núcleo local...$(COLOR_RESET)"
+	@cd "$(APP_DIR)" && "$(APP_PYTHON)" scripts/bench_backend.py $(ARGS)
+
+test-eval: check-setup ## Executa avaliação híbrida de acurácia da IA (SQL gabarito + LLM Judge — requer GEMINI_API_KEY)
+	@echo -e "$(COLOR_CYAN)→ Executando avaliação híbrida de acurácia da IA...$(COLOR_RESET)"
+	@cd "$(APP_DIR)" && "$(APP_PYTHON)" scripts/eval_acuracia.py $(ARGS)
 
 test-tauri: ## Executa os testes unitários em Rust da casca Tauri
 	@echo -e "$(COLOR_CYAN)→ Executando testes do Tauri (Rust)...$(COLOR_RESET)"
@@ -169,6 +197,14 @@ check-setup:
 		echo -e "$(COLOR_RED)❌ Erro: Ambiente virtual do ETL não encontrado em:$(COLOR_RESET)"; \
 		echo -e "   $(ETL_VENV)"; \
 		echo -e "Execute '$(COLOR_BOLD)make setup$(COLOR_RESET)' primeiro para configurar os ambientes.\n"; \
+		exit 1; \
+	fi
+
+check-front:
+	@if [ ! -d "$(FRONT_DIR)/node_modules" ]; then \
+		echo -e "$(COLOR_RED)❌ Erro: Dependências do frontend não encontradas em:$(COLOR_RESET)"; \
+		echo -e "   $(FRONT_DIR)/node_modules"; \
+		echo -e "Execute '$(COLOR_BOLD)make setup-app$(COLOR_RESET)' (ou 'cd Muninn/app/frontend-vue && npm install') primeiro.\n"; \
 		exit 1; \
 	fi
 
