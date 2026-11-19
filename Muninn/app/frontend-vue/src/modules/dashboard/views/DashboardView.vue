@@ -70,10 +70,10 @@ const downloadCSV = (data: any[], filename: string) => {
 
 // KPI mapping
 const kpiList = computed(() => [
-  { title: 'Receita Líquida', value: loading.value ? '...' : (kpis.value?.total_investido || 'R$ 0'), subtitle: 'Acumulado histórico', icon: DollarSign },
-  { title: 'Produtos Vendidos', value: loading.value ? '...' : (kpis.value?.projetos_ativos?.toString() || '0'), subtitle: 'Com vendas registradas', icon: Briefcase },
-  { title: `Receita ${anoVigente.value}`, value: loading.value ? '...' : (kpis.value?.pagamentos_ano_vigente || 'R$ 0'), subtitle: `Ano vigente (${anoVigente.value})`, icon: CreditCard },
-  { title: 'Vendedores', value: loading.value ? '...' : (kpis.value?.equipe_alocada?.toString() || '0'), subtitle: 'Com vendas registradas', icon: Users },
+  { title: 'Investimento estimado', value: loading.value ? '...' : (kpis.value?.total_investido || 'R$ 0'), subtitle: 'Soma de todos os projetos', icon: DollarSign },
+  { title: 'Projetos', value: loading.value ? '...' : (kpis.value?.projetos_ativos?.toString() || '0'), subtitle: 'Projetos distintos no filtro', icon: Briefcase },
+  { title: `Investimento ${anoVigente.value}`, value: loading.value ? '...' : (kpis.value?.pagamentos_ano_vigente || 'R$ 0'), subtitle: `Ano vigente (${anoVigente.value})`, icon: CreditCard },
+  { title: 'Orientadores', value: loading.value ? '...' : (kpis.value?.equipe_alocada?.toString() || '0'), subtitle: 'Orientadores distintos no filtro', icon: Users },
 ])
 
 // Theme sensitivity for axis colors
@@ -272,14 +272,14 @@ const lineChartSeries = computed(() => [{
 
     <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <ChartCard title="Receita por Ano" :loading="loading">
+      <ChartCard title="Investimento por ano" :loading="loading">
         <template #actions>
           <UButton
             color="gray"
             variant="ghost"
             icon="i-lucide-download"
             size="sm"
-            @click="downloadCSV(charts.por_ano, 'receita_por_ano.csv')"
+            @click="downloadCSV(charts.por_ano, 'investimento_por_ano.csv')"
           />
         </template>
 
@@ -323,7 +323,7 @@ const lineChartSeries = computed(() => [{
     <div class="premium-card premium-shadow overflow-hidden">
       <div class="p-6 border-b border-border dark:border-white/5">
         <h3 class="text-sm font-bold uppercase tracking-[2px] text-primary dark:text-white">
-          Top 10 Produtos por Receita
+          Top 10 projetos por investimento
         </h3>
       </div>
 
@@ -332,8 +332,8 @@ const lineChartSeries = computed(() => [{
           <thead>
             <tr class="border-b border-border dark:border-white/5">
               <th class="hidden sm:table-cell text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">#</th>
-              <th class="text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Produto</th>
-              <th class="text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Receita</th>
+              <th class="text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Projeto</th>
+              <th class="text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Investimento</th>
               <th class="text-left py-4 px-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Categoria</th>
             </tr>
           </thead>
@@ -369,7 +369,7 @@ const lineChartSeries = computed(() => [{
         </table>
       </div>
       <div v-else class="py-12 text-center text-muted-foreground">
-        {{ loading ? 'Carregando produtos...' : 'Nenhum produto encontrado' }}
+        {{ loading ? 'Carregando projetos...' : 'Nenhum projeto encontrado' }}
       </div>
     </div>
   </div>

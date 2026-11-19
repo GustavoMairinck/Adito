@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage
 from .state import MultiAgentState
 from .router import orchestrator_node
 from .conversational_agent import conversational_node
+from .guard import GUARD_INTENTS, INTENT_BLOCKED, INTENT_OUT_OF_SCOPE, guard_node
 from agents.config import checkpoint_db_path
 
 mcp_tools = []
@@ -128,33 +129,61 @@ async def mcp_tool_node(state: MultiAgentState):
     return {"messages": [AIMessage(content=f"Ferramenta MCP {tool_name} não encontrada.")]}
 
 
-def route_from_orchestrator(state: MultiAgentState):
-    has_tool_calls = any(call.get("intent") != "conversational" for call in state["calls"])
+def merge_instructions(instrucoes: list[str]) -> str:
+    """Junta várias instruções para a mesma ferramenta em um pedido só."""
+    instrucoes = [i.strip() for i in instrucoes if i and i.strip()]
+    if len(instrucoes) <= 1:
+        return instrucoes[0] if instrucoes else ""
+    itens = "\n".join(f"{n}. {i}" for n, i in enumerate(instrucoes, 1))
+    return (
+        "Responda todos os itens abaixo com uma única consulta SQL "
+        "(use subconsultas, CTEs ou UNION ALL se precisar), com uma coluna identificando cada item:\n"
+        + itens
+    )
 
-    sends = []
-    for call in state["calls"]:
-        intent = call.get("intent")
-        base = {
-            "messages":              state.get("messages", []),
-            "user_input":            state.get("user_input", ""),
-            "tenant_id":             state.get("tenant_id"),
-            "contexto_id":        state.get("contexto_id"),
-            "thread_id":             state.get("thread_id"),
-            "delegation_instruction": call.get("delegation_instruction"),
-        }
-        if intent == "conversational":
-            if not has_tool_calls:
-                sends.append(Send("conversational_agent", base))
-        else:
-            sends.append(Send("mcp_tool_node", {**base, "tool_name": intent}))
-    return sends
+
+def route_from_orchestrator(state: MultiAgentState):
+    calls = state.get("calls") or []
+    intents = {call.get("intent") for call in calls}
+    base = {
+        "messages":              state.get("messages", []),
+        "user_input":            state.get("user_input", ""),
+        "tenant_id":             state.get("tenant_id"),
+        "contexto_id":        state.get("contexto_id"),
+        "thread_id":             state.get("thread_id"),
+    }
+
+    # Bloqueio vence tudo: nenhuma outra chamada roda junto.
+    if INTENT_BLOCKED in intents:
+        return [Send("guard_node", {**base, "tool_name": INTENT_BLOCKED})]
+
+    tool_calls = [c for c in calls if c.get("intent") not in GUARD_INTENTS | {"conversational"}]
+    if tool_calls:
+        # Uma chamada por ferramenta: o estado guarda um resultado só (final_response, graph, sql_used),
+        # então chamadas paralelas à mesma ferramenta se sobrescreviam e o usuário via só uma.
+        por_ferramenta: dict[str, list[str]] = {}
+        for c in tool_calls:
+            por_ferramenta.setdefault(c.get("intent"), []).append(c.get("delegation_instruction") or "")
+        return [
+            Send("mcp_tool_node", {**base, "tool_name": nome,
+                                   "delegation_instruction": merge_instructions(instrucoes)})
+            for nome, instrucoes in por_ferramenta.items()
+        ]
+    if INTENT_OUT_OF_SCOPE in intents:
+        return [Send("guard_node", {**base, "tool_name": INTENT_OUT_OF_SCOPE})]
+
+    conversational = next((c for c in calls if c.get("intent") == "conversational"), {})
+    return [Send("conversational_agent", {**base,
+                 "delegation_instruction": conversational.get("delegation_instruction")})]
 
 
 builder = StateGraph(MultiAgentState)
 builder.add_node("orchestrator", orchestrator_node)
 builder.add_node("conversational_agent", conversational_node)
 builder.add_node("mcp_tool_node", mcp_tool_node)
+builder.add_node("guard_node", guard_node)
 builder.add_edge(START, "orchestrator")
 builder.add_conditional_edges("orchestrator", route_from_orchestrator)
 builder.add_edge("mcp_tool_node", END)
 builder.add_edge("conversational_agent", END)
+builder.add_edge("guard_node", END)

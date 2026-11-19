@@ -111,29 +111,10 @@ dados.db               seus dados (SQLite, com as views que o agente pode consul
 contexts/<nome>/       um contexto por pasta: views.json, rules.md, examples.json
 ```
 
-### Usar a demonstração de vendas
-
-Esta pasta traz a mesma demo de vendas do Oráculo web (1.200 vendas) e um contexto pronto para ela.
-
-Linux:
-
-```bash
-D=~/.local/share/br.edu.ifes.leds.muninn; mkdir -p "$D/contexts" && .venv/bin/python scripts/gerar_dados_demo.py "$D/dados.db" && cp -r contexts/exemplo-vendas "$D/contexts/"
-```
-
-Windows (PowerShell):
-
-```powershell
-$D = "$env:LOCALAPPDATA\br.edu.ifes.leds.muninn"
-New-Item -ItemType Directory -Force "$D\contexts" | Out-Null
-.venv\Scripts\python scripts\gerar_dados_demo.py "$D\dados.db"
-Copy-Item -Recurse contexts\exemplo-vendas "$D\contexts\"
-```
-
 ### Usar os seus próprios dados
 
 1. Gere um arquivo SQLite com as views que o agente pode ler e copie para `dados.db` na pasta acima. O app não cria views: tudo o que ele consulta precisa existir no arquivo.
-2. Crie uma pasta em `contexts/` seguindo o modelo de [contexts/exemplo-vendas](contexts/exemplo-vendas):
+2. Crie uma pasta em `contexts/` seguindo o modelo de [contexts/pesquisa-extensao-ifes](contexts/pesquisa-extensao-ifes):
    - `views.json` — views expostas, colunas sensíveis (nunca saem para a LLM), colunas indexadas para busca semântica e limite de linhas enviadas à LLM.
    - `rules.md` — regras de negócio e métricas, em texto livre.
    - `examples.json` — pares pergunta → SQL que o agente usa como referência.
@@ -263,10 +244,8 @@ Comandos `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data` 
 src-tauri/          janela Tauri: inicia o núcleo e fala com ele por stdin/stdout; guarda a chave no cofre do SO
 frontend-vue/       front Vue/Vite
 backend/nucleo/     núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, DuckDB), agentes (LangGraph)
-contexts/           contexto de exemplo (demo de vendas)
-scripts/            geração da demo e testes do núcleo
-backend/training/   schema da demo de vendas (lido por scripts/gerar_dados_demo.py)
-mudanças/mudanca/   dados da demo de vendas (lidos por scripts/gerar_dados_demo.py)
+contexts/           contexto de dados (pesquisa e extensão do IFES)
+scripts/            testes do núcleo
 ```
 
 Ao atualizar da integração Mistral, o núcleo zera os vetores antigos na primeira abertura; carregue os contextos novamente para gerar os índices com Gemini. Use `GEMINI_API_KEY` no `.env` para desenvolvimento. O modelo padrão é `gemini-3.5-flash-lite`, ajustável com `GEMINI_MODEL`.
