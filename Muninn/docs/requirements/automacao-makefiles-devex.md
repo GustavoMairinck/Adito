@@ -26,7 +26,7 @@ Prover um conjunto de comandos padronizados, rápidos e mnemônicos através de 
 
 ## Business / Domain Rules
 
-- **BR01 (Ponto de Entrada Único):** Todos os alvos do Makefile devem ser operados exclusivamente a partir do diretório raiz do repositório (`/home/andre/test_adito`), gerenciando internamente as mudanças de diretório (`cd`) necessárias para cada subprojeto.
+- **BR01 (Ponto de Entrada Único):** Todos os alvos do Makefile devem ser operados exclusivamente a partir do diretório raiz do repositório, gerenciando internamente as mudanças de diretório (`cd`) necessárias para cada subprojeto.
 - **BR02 (Guarda Amigável de Ambiente):** Comandos que dependem de ferramentas ou ambientes virtuais (como `make dev`, `make db` ou `make test`) devem verificar a existência dos binários em `.venv`. Caso não existam, o comando deve falhar com mensagem explícita e instrutiva: *"Ambiente não configurado. Execute 'make setup' primeiro."*, em vez de falhas crípticas de `command not found`.
 - **BR03 (Garantia de Fatos Atualizadas):** O alvo mestre `make dev` deve invocar `make db` como dependência prévia, garantindo que o desktop nunca suba com um banco ausente, defasado ou corrompido.
 - **BR04 (Declaração Estrita de Alvos):** Todos os alvos que não representam arquivos no sistema de arquivos devem ser explicitamente registrados na diretiva `.PHONY` do Makefile.

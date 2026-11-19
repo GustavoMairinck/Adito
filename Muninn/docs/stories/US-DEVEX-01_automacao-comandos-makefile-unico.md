@@ -27,19 +27,19 @@ Nenhum ponto pendente (todas as dúvidas de design foram sanadas na etapa de Dis
 
 ## Critérios de Aceitação
 
-- [ ] **CA01 (Menu de Ajuda):** Ao rodar `make` ou `make help` na raiz do repositório, o terminal deve exibir uma lista formatada, categorizada e com cores ANSI contendo todos os comandos disponíveis e suas descrições.
-- [ ] **CA02 (Atalho Mestre Unificado):** Ao rodar `make dev`, o Makefile deve verificar se o ambiente está configurado, executar `make db` previamente (garantindo que o SQLite esteja reconstruído com as fatos) e disparar o script `./rodar_desktop.sh`, abrindo o ambiente completo.
-- [ ] **CA03 (Pipeline de Banco e Fatos Rápido):** Ao rodar `make db`, o comando deve orquestrar o cruzamento (`muninn-etl cruzar`), executar `popular_banco.py` gerando as 42 tabelas 3FN e as 6 Views dinâmicas das fatos v2.0 em `dados.db`, e copiar o arquivo para a pasta de dados do Tauri (`~/.local/share/br.edu.ifes.leds.muninn/` no Linux), completando o processo em menos de 5 segundos.
-- [ ] **CA04 (Controle de Desktop e Frontend):** Devem existir alvos dedicados para:
+- [x] **CA01 (Menu de Ajuda):** Ao rodar `make` ou `make help` na raiz do repositório, o terminal deve exibir uma lista formatada, categorizada e com cores ANSI contendo todos os comandos disponíveis e suas descrições.
+- [x] **CA02 (Atalho Mestre Unificado):** Ao rodar `make all` ou `make dev`, o Makefile deve verificar se o ambiente está configurado, executar `make db` previamente (garantindo que o SQLite esteja reconstruído com as fatos) e disparar o script `./rodar_desktop.sh`, abrindo o ambiente completo.
+- [x] **CA03 (Pipeline de Banco e Fatos Rápido):** Ao rodar `make db`, o comando deve orquestrar o cruzamento (`muninn-etl cruzar`), executar `popular_banco.py` gerando as tabelas relacionais do modelo e as 6 Views dinâmicas das fatos v2.0 em `dados.db`, e copiar o arquivo para a pasta de dados do Tauri (`~/.local/share/br.edu.ifes.leds.muninn/` no Linux), completando o processo em menos de 5 segundos (executado em ~1.2s).
+- [x] **CA04 (Controle de Desktop e Frontend):** Devem existir alvos dedicados para:
   - `make desktop`: inicia o desktop com a base já existente via `./rodar_desktop.sh`.
   - `make dev-front`: inicia apenas o frontend Vite em modo dev (`npm run dev`).
   - `make build-front`: gera o build de produção do frontend (`npm run build`).
   - `make dev-tauri`: executa a janela Tauri (`cargo run`).
-- [ ] **CA05 (Extração de Dados Sob Demanda):** O comando `make etl-extract` deve acionar a extração de dados da web, com alvos específicos disponíveis para cada fonte (`make etl-src-acoes`, `make etl-src-participacoes`, `make etl-sigpesq`, `make etl-cnpq`, `make etl-lattes`, `make etl-pii` e `make etl-ver`).
-- [ ] **CA06 (Setup com Guardas Amigáveis):** O comando `make setup` deve criar os venvs Python (`Muninn/app/.venv` e `Muninn/etl/.venv`), instalar as dependências de backend, instalar o pacote `muninn_etl` em modo editável e executar `npm install` no frontend. Se o desenvolvedor tentar rodar `make dev` ou `make db` sem o setup concluído, o Makefile deve exibir mensagem clara instruindo: *"Ambiente não configurado. Execute 'make setup' primeiro."*.
-- [ ] **CA07 (Testes Automatizados Consolidados):** O comando `make test` deve executar sequencialmente as 5 suítes de testes automatizados do repositório (ETL com `pytest`, testes do núcleo com `unittest`, testes de contrato e STDIO) e retornar código `0` com resumo visual verde apenas se todos passarem. Alvos granulares (`make test-etl`, `make test-core`, `make test-mcp`, `make test-tauri`) devem estar disponíveis.
-- [ ] **CA08 (Limpeza):** Os comandos `make clean` e `make clean-all` devem remover arquivos compilados temporários (`__pycache__`, `*.pyc`), caches do pytest (`.pytest_cache`) e logs temporários de desenvolvimento em `/tmp`.
-- [ ] **CA09 (Documentação no README):** O arquivo `README.md` da raiz do repositório deve incluir uma seção clara com a tabela de atalhos do Makefile e instruções de primeiro uso.
+- [x] **CA05 (Extração de Dados Sob Demanda):** O comando `make etl-extract` deve acionar a extração de dados da web, com alvos específicos disponíveis para cada fonte (`make etl-src-acoes`, `make etl-src-participacoes`, `make etl-sigpesq`, `make etl-cnpq`, `make etl-lattes`, `make etl-pii` e `make etl-ver`), além de `make etl` para o ciclo completo.
+- [x] **CA06 (Setup com Guardas Amigáveis):** O comando `make setup` deve criar os venvs Python (`Muninn/app/.venv` e `Muninn/etl/.venv`), instalar as dependências de backend, instalar o pacote `muninn_etl` em modo editável e executar `npm install` no frontend. Se o desenvolvedor tentar rodar `make dev` ou `make db` sem o setup concluído, o Makefile deve interromper a execução com erro e exibir mensagem clara instruindo: *"Execute 'make setup' primeiro para configurar os ambientes."*.
+- [x] **CA07 (Testes Automatizados Consolidados):** O comando `make test` deve executar sequencialmente as suítes de testes automatizados do backend/ETL (ETL com `pytest`, testes do núcleo com `unittest`, testes de contrato e STDIO) e retornar código `0` com resumo visual verde apenas se todos passarem. Alvos granulares (`make test-etl`, `make test-core`, `make test-mcp`, `make test-tauri`) devem estar disponíveis.
+- [x] **CA08 (Limpeza Segura):** Os comandos `make clean` e `make clean-all` devem remover arquivos compilados temporários (`__pycache__`, `*.pyc`), caches do pytest (`.pytest_cache`) e logs temporários do Muninn sem risco de apagar diretórios fora do repositório.
+- [x] **CA09 (Documentação no README):** O arquivo `README.md` da raiz do repositório deve incluir uma seção clara com a tabela de atalhos do Makefile e instruções de primeiro uso.
 
 ---
 
@@ -59,7 +59,7 @@ Nenhum ponto pendente (todas as dúvidas de design foram sanadas na etapa de Dis
 - **Touch List preliminar:**
   - `Makefile` (novo na raiz)
   - `README.md` (atualização da seção de comandos)
-  - `docs/product_backlog.md` (registro do EPIC-09 e US-DEVEX-01)
+  - `Muninn/docs/product_backlog.md` (registro do EPIC-09 e US-DEVEX-01)
 - **Task Issues previstas:** N/A
 
 ---
@@ -67,26 +67,27 @@ Nenhum ponto pendente (todas as dúvidas de design foram sanadas na etapa de Dis
 ## Notas Técnicas
 
 ### Arquitetura
-- **Arquivo principal:** `Makefile` localizado na raiz do monorepo (`/home/andre/test_adito/Makefile`).
+- **Arquivo principal:** `Makefile` localizado na raiz do monorepo (`Makefile`).
 - **Padrão de implementação:**
   - `SHELL := /bin/bash`
   - `.DEFAULT_GOAL := help`
   - Todas as metas virtuais listadas explicitamente em `.PHONY`.
   - Uso estrito de tabs para identação de receitas Make.
   - Saída estilizada com sequências de escape ANSI para formatação de texto e cores (Ciano, Verde, Amarelo e Reset).
+  - Aspas duplas em todos os caminhos para suporte a diretórios com espaços.
 
 ### Dependências
 - GNU Make instalado no sistema do desenvolvedor.
-- Bash padrão em ambientes Unix (Linux/macOS).
+- Bash padrão em ambientes Unix (Linux/macOS/WSL).
 
 ---
 
 ## Plano de Testes
 
 ### Testes Manuais & Validação Operacional
-- [ ] Executar `make help` e verificar alinhamento e cores da saída.
-- [ ] Executar `make setup` e validar se os venvs e dependências foram provisionados corretamente.
-- [ ] Executar `make db` e verificar se `dados.db` foi criado com 42 tabelas, 6 views analíticas e tempo < 5s.
-- [ ] Executar `make test` e verificar se todas as suítes de teste rodam sequencialmente e retornam código 0.
-- [ ] Executar `make clean` e checar remoção de `__pycache__` e `.pytest_cache`.
-- [ ] Simular ausência de `.venv` e validar se mensagem amigável instrui a rodar `make setup`.
+- [x] Executar `make help` e verificar alinhamento e cores da saída.
+- [x] Executar `make setup` e validar se os venvs e dependências foram provisionados corretamente.
+- [x] Executar `make db` e verificar se `dados.db` foi criado com tabelas relacionais, 6 views analíticas e tempo < 5s (~1.2s).
+- [x] Executar `make test` e verificar se todas as suítes de teste rodam sequencialmente e retornam código 0.
+- [x] Executar `make clean` e checar remoção de `__pycache__` e `.pytest_cache`.
+- [x] Simular ausência de `.venv` e validar se o Makefile interrompe com erro orientando a rodar `make setup`.

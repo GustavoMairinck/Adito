@@ -50,7 +50,8 @@ Não aplicável (Nível ScrumAIDev 1, Behavior change = NO, estimativa <= 8 pont
 
 ### [TASK-DEVEX-02] Alvos de Dados, Fatos Analíticas & ETL
 - **Descricao:** Implementar os alvos de manipulação de dados e SQLite:
-  - `make db`: executa o cruzamento de identidades (`muninn-etl cruzar`), executa `Muninn/scripts/popular_banco.py` (criando as 42 tabelas 3FN e as 6 Views dinâmicas das fatos v2.0) e copia o `dados.db` para a pasta de dados do Tauri do usuário em < 5 segundos.
+  - `make db`: executa o cruzamento de identidades (`muninn-etl cruzar`), executa `Muninn/scripts/popular_banco.py` (criando as tabelas relacionais do modelo e as 6 Views dinâmicas das fatos v2.0) e copia o `dados.db` para a pasta de dados do Tauri do usuário em < 5 segundos (~1.2s).
+  - `make etl`: ciclo completo de ETL encadeando extração externa, cruzamento e carga.
   - `make etl-ver`: abre o explorador interativo no terminal via `Muninn/scripts/ver_dados.py`.
   - `make etl-pii`: executa a auditoria de proteção a dados pessoais (`muninn-etl verificar-pii`).
   - `make etl-extract` e alvos granulares para acionar extratores da web sob demanda (`src-acoes`, `src-participacoes`, `sigpesq`, `cnpq`, `lattes`).
@@ -62,28 +63,28 @@ Não aplicável (Nível ScrumAIDev 1, Behavior change = NO, estimativa <= 8 pont
 
 ### [TASK-DEVEX-03] Alvos do Desktop, Frontend & Guarda Amigável
 - **Descricao:** Implementar os alvos de inicialização e build da aplicação desktop:
-  - `make dev`: atalho unificado mestre que verifica o setup, executa `make db` previamente e dispara `./rodar_desktop.sh`.
+  - `make all` / `make dev`: atalho unificado mestre que verifica o setup, executa `make db` previamente e dispara `./rodar_desktop.sh`.
   - `make desktop`: executa `./rodar_desktop.sh` utilizando o banco já existente.
   - `make dev-front`: sobe o servidor Vite (`npm run dev` na porta 5173).
   - `make build-front`: executa `npm run build` no frontend.
   - `make dev-tauri`: executa a janela desktop via `cargo run`.
-  - Guarda amigável: se os venvs não existirem, comandos que dependem deles devem exibir: *"Ambiente não configurado. Execute 'make setup' primeiro."*.
+  - Guarda amigável: se os venvs não existirem, comandos que dependem deles devem interromper com erro exibindo: *"Execute 'make setup' primeiro para configurar os ambientes."*.
 - **Estimativa:** 0.75 pt
 - **Status:** Done
 - **Criterios de Aceite:**
   - `make dev` atualiza o banco e sobe o app de forma integrada.
-  - Tentativa de execução sem setup emite mensagem amigável sem stack trace críptico.
+  - Tentativa de execução sem setup emite mensagem amigável sem stack trace críptico e interrompe com código 1.
 
 ### [TASK-DEVEX-04] Alvos de Testes Consolidados & Limpeza
 - **Descricao:** Implementar comandos para automação da qualidade e higiene do repositório:
-  - `make test`: executa sequencialmente as 5 suítes de testes automatizados (`pytest` do ETL, `unittest` do núcleo, contrato e STDIO) com relatório visual verde consolidado.
+  - `make test`: executa sequencialmente as suítes de testes automatizados do backend/ETL (`pytest` do ETL, `unittest` do núcleo, contrato e STDIO) com relatório visual verde consolidado.
   - `make test-etl`, `make test-core`, `make test-mcp`, `make test-tauri`: alvos granulares de teste.
-  - `make clean` e `make clean-all`: remoção recursiva de `__pycache__`, caches de pytest e logs transitórios do Vite em `/tmp`.
+  - `make clean` e `make clean-all`: remoção recursiva de `__pycache__`, caches de pytest e logs transitórios do Muninn, com aspas em todos os caminhos para evitar deleção acidental em pastas com espaços.
 - **Estimativa:** 0.5 pt
 - **Status:** Done
 - **Criterios de Aceite:**
   - `make test` reporta sucesso consolidado com código de saída 0.
-  - `make clean` purga arquivos transitórios sem tocar em dados permanentes.
+  - `make clean` purga arquivos transitórios sem tocar em dados permanentes ou projetos vizinhos.
 
 ### [TASK-DEVEX-05] Setup Automatizado, Documentação no README & Validação
 - **Descricao:** Implementar o alvo `make setup` (criação de venvs Python, `pip install` e `npm install`), atualizar o arquivo `README.md` raiz com a tabela de referência de comandos rápidos e validar operacionalmente todos os alvos do Makefile em ambiente local.

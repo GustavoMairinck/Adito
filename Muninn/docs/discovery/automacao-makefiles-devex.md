@@ -43,7 +43,7 @@ Um `Makefile` na raiz do projeto com interface clara, auto-documentada (`make he
 ## Scope
 
 ### IN
-- `Makefile` na raiz do repositório (`/home/andre/test_adito/Makefile`).
+- `Makefile` na raiz do repositório.
 - Alvos para Desktop: `make dev`, `make desktop`, `make dev-front`, `make build-front`.
 - Alvos para Banco e ETL: `make db`, `make etl-extract`, `make etl-cruzar`, `make etl-pii`, `make etl-ver`.
 - Alvos para Testes: `make test`, `make test-etl`, `make test-core`, `make test-mcp`, `make test-tauri`.
