@@ -150,7 +150,7 @@ def bootstrap(params):
         if contexto.is_active and not errors and llm_configured():
             try:
                 summary = index_contexto(contexto, get_embedder(), examples)
-                item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=summary["values"]["created"])
+                item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=summary["values"]["created"] + summary["values"]["skipped"])
             except Exception as exc:
                 log_error("data_bootstrap", f"Falha ao indexar {contexto.slug}: {exc}")
                 item.update(indexado=False, erros=[f"Indexação falhou: {exc}"])

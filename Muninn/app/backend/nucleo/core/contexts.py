@@ -269,7 +269,7 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
 
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
     """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa a chave do usuário."""
-    from analytics_index.services import rebuild_text_embeddings
+    from analytics_index.services import update_text_embeddings
 
     items = [("ddl", describe_views(contexto, dados_path), {})]
     if contexto.rules:
@@ -295,5 +295,5 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
                 embedding=embedding,
             ).insert()
 
-    values = rebuild_text_embeddings(contexto, embedder)
+    values = update_text_embeddings(contexto, embedder)
     return {"knowledge_items": len(items), "values": values}

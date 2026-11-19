@@ -324,6 +324,96 @@ class PainelContextosTests(AppDbTestCase):
         self.assertEqual((meu["rag_itens"], meu["valores"]), (0, 0))
 
 
+class EmbedderFalso:
+    """Devolve um vetor por texto; pode recusar com 429 nas chamadas escolhidas."""
+
+    def __init__(self, recusas=(), erro="429 RESOURCE_EXHAUSTED. Please retry in 12.5s."):
+        self.recusas, self.erro, self.chamadas, self.textos = set(recusas), erro, 0, []
+
+    def embed_documents(self, texts):
+        self.chamadas += 1
+        if self.chamadas in self.recusas:
+            raise RuntimeError(self.erro)
+        self.textos.extend(texts)
+        return [[float(len(t)), 1.0] for t in texts]
+
+    def embed_query(self, text):
+        return self.embed_documents([text])[0]
+
+
+class EmbedderComEsperaTests(unittest.TestCase):
+    """Cota por minuto do Gemini: espera o tempo pedido e tenta de novo; cota diária para com aviso."""
+
+    def test_espera_o_tempo_pedido_e_tenta_de_novo(self):
+        from analytics_index.embedder import EmbedderComEspera
+        esperas = []
+        real = EmbedderFalso(recusas={1, 2})
+        self.assertEqual(EmbedderComEspera(real, dormir=esperas.append).embed_documents(["ab"]), [[2.0, 1.0]])
+        self.assertEqual(esperas, [13.5, 13.5])
+
+    def test_cota_diaria_nao_espera(self):
+        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
+        esperas = []
+        real = EmbedderFalso(recusas={1}, erro="429 RESOURCE_EXHAUSTED quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier")
+        with self.assertRaisesRegex(CotaEsgotada, "cota diária"):
+            EmbedderComEspera(real, dormir=esperas.append).embed_query("x")
+        self.assertEqual(esperas, [])
+
+    def test_desiste_depois_das_tentativas_e_outros_erros_passam_direto(self):
+        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
+        with self.assertRaises(CotaEsgotada):
+            EmbedderComEspera(EmbedderFalso(recusas={1, 2, 3}), dormir=lambda s: None, tentativas=3).embed_query("x")
+        with self.assertRaisesRegex(RuntimeError, "chave inválida"):
+            EmbedderComEspera(EmbedderFalso(recusas={1}, erro="400 chave inválida"), dormir=lambda s: None).embed_query("x")
+
+
+class IndexacaoIncrementalTests(AppDbTestCase):
+    """A carga continua de onde parou: não apaga o que já foi indexado e só envia o que falta."""
+
+    def setUp(self):
+        super().setUp()
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        self.dados_db = Path(pasta.name) / "dados.db"
+        self._gravar_nomes([f"nome {i}" for i in range(5)])
+        env = patch.dict(os.environ, {"MUNINN_DADOS_DB": str(self.dados_db)})
+        env.start()
+        self.addCleanup(env.stop)
+        _, tenant = session.current()
+        self.ctx = Contexto(tenant_id=tenant.id, slug="teste", name="Teste", views=[{"name": "t", "embed_columns": ["nome"]}])
+        self.ctx.insert()
+
+    def _gravar_nomes(self, nomes):
+        close_dados()
+        conn = sqlite3.connect(self.dados_db)
+        conn.execute("DROP TABLE IF EXISTS t")
+        conn.execute("CREATE TABLE t (nome TEXT)")
+        conn.executemany("INSERT INTO t VALUES (?)", [(n,) for n in nomes])
+        conn.commit()
+        conn.close()
+
+    def _indexados(self):
+        return db.execute("SELECT COUNT(*) FROM analytics_text_embedding").fetchone()[0]
+
+    def test_continua_de_onde_parou_e_apaga_o_que_sumiu(self):
+        from analytics_index.services import update_text_embeddings
+        # Lotes de 2: o 2º lote falha, o 1º fica gravado.
+        with self.assertRaises(RuntimeError):
+            update_text_embeddings(self.ctx, EmbedderFalso(recusas={2}, erro="rede caiu"), batch_size=2)
+        self.assertEqual(self._indexados(), 2)
+
+        segundo = EmbedderFalso()
+        resumo = update_text_embeddings(self.ctx, segundo, batch_size=2)
+        self.assertEqual((resumo["created"], resumo["skipped"]), (3, 2))
+        self.assertEqual(len(segundo.textos), 3)  # só o que faltava foi enviado
+        self.assertEqual(self._indexados(), 5)
+
+        self._gravar_nomes(["nome 0", "nome novo"])
+        resumo = update_text_embeddings(self.ctx, EmbedderFalso(), batch_size=2)
+        self.assertEqual((resumo["created"], resumo["removed"]), (1, 4))
+        self.assertEqual(self._indexados(), 2)
+
+
 class ChaveGeminiTests(AppDbTestCase):
     """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""
 

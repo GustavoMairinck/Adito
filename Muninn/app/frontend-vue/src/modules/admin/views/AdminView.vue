@@ -438,7 +438,7 @@ async function handleSync() {
     // Sem limite de tempo: a indexação roda no núcleo local e pode levar minutos.
     const response = await call('admin.bootstrap')
 
-    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.duckdb e indexação do RAG).
+    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.db e indexação do RAG).
     const data = response || {}
     const contextos: any[] = data.contextos || []
     const triggeredAt = new Date().toISOString()
@@ -1064,6 +1064,10 @@ onBeforeUnmount(() => {
               {{ hasRunningEtl ? 'Indexando contextos…' : 'Carregar e indexar contextos' }}
             </button>
           </div>
+          <p v-if="hasRunningEtl" class="mt-4 text-sm text-text-muted">
+            Pode levar alguns minutos: o Gemini limita os pedidos por minuto e o Muninn espera quando precisa.
+            Se parar no meio, o que já foi indexado fica salvo e a próxima carga continua de onde parou.
+          </p>
         </div>
 
         <!-- Contextos carregados -->
