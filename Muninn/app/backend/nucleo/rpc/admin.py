@@ -5,10 +5,10 @@ import time
 
 from analytics_index.embedder import get_embedder
 from core import db
-from core.contexts import index_contexto, load_context_dir
+from core.contexts import context_folders, index_contexto, load_context_dir, validate_contexto
 from core.datastore import REPO_APP_DIR, app_db_path, connect_dados, dados_db_path, data_dir
 from core.db import api_dt, to_db_id
-from core.records import KnowledgeItem, QueryExecution, User
+from core.records import Contexto, KnowledgeItem, QueryExecution, User
 from core.rich_logging import log_error, log_success
 
 from .core_methods import llm_configured
@@ -130,13 +130,13 @@ def bootstrap(params):
     if not user.is_staff:
         raise forbidden("Apenas administradores podem preparar os dados.")
 
-    contexts_root = data_dir() / "contexts"
-    folders = sorted(p for p in contexts_root.glob("*") if (p / "views.json").exists())
+    # As mesmas pastas da abertura do app: as do app mais as da pasta de dados. Antes, se a pasta
+    # de dados tivesse algum contexto, só ela era lida e os contextos do app ficavam de fora.
+    folders = context_folders()
     if not folders:
-        repo_contexts = REPO_APP_DIR / "contexts"
-        folders = sorted(p for p in repo_contexts.glob("*") if (p / "views.json").exists())
-    if not folders:
-        raise bad_request({"detail": f"Nenhum contexto encontrado em {contexts_root}."})
+        raise bad_request({"detail": (
+            f"Nenhum contexto encontrado em {REPO_APP_DIR / 'contexts'} nem em {data_dir() / 'contexts'}."
+        )})
 
     loaded = []
     for folder in folders:
@@ -160,6 +160,37 @@ def bootstrap(params):
 
     log_success("data_bootstrap", f"{sum(c['ativo'] for c in loaded)}/{len(loaded)} contexto(s) válidos")
     return {"status": "success", "chave_configurada": llm_configured(), "contextos": loaded}
+
+
+@rpc("admin.contextos")
+def contextos(params):
+    """Situação de cada contexto no app.db: ativo, tabelas, RAG, valores indexados e erros atuais."""
+    user, tenant = _staff()
+    if tenant is None:
+        return []
+    tid = to_db_id(tenant.id)
+    out = []
+    for ctx in Contexto.select("tenant_id = ?", [tid], order="name"):
+        cid = to_db_id(ctx.id)
+        try:
+            erros = validate_contexto(ctx)
+        except FileNotFoundError:
+            erros = ["dados.db não encontrado."]
+        except Exception as exc:  # o painel mostra o problema em vez de quebrar
+            erros = [str(exc)]
+        out.append({
+            "id": ctx.id,
+            "slug": ctx.slug,
+            "nome": ctx.name,
+            "descricao": ctx.description,
+            "ativo": ctx.is_active,
+            "tabelas": [view["name"] for view in ctx.views],
+            "rag_itens": db.execute("SELECT COUNT(*) FROM knowledge_knowledgeitem WHERE contexto_id = ?", [cid]).fetchone()[0],
+            "valores": db.execute("SELECT COUNT(*) FROM analytics_text_embedding WHERE contexto_id = ?", [cid]).fetchone()[0],
+            "atualizado_em": api_dt(ctx.updated_at),
+            "erros": erros,
+        })
+    return out
 
 
 # ── Treino manual do RAG ────────────────────────────────────────────────────

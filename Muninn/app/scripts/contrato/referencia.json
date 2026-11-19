@@ -1066,6 +1066,22 @@
      "ativo": true,
      "erros": [],
      "indexado": false
+    },
+    {
+     "pasta": "pesquisa-extensao-ifes",
+     "slug": "pesquisa-extensao-ifes",
+     "nome": "Pesquisa, Extensão e Produção Científica (Ifes)",
+     "ativo": false,
+     "erros": [
+      "View 'vfact_extensao_acao_resolved' não existe no dados.db.",
+      "View 'vfact_extensao_participacao_resolved' não existe no dados.db.",
+      "View 'vfact_projeto_pesquisa_resolved' não existe no dados.db.",
+      "View 'vfact_orientacao_bolsa_resolved': embed_columns inexistentes: titulo_plano_trabalho, campus.",
+      "View 'vfact_orientacao_bolsa_resolved': local_search_columns inexistentes: nome_orientado.",
+      "View 'vfact_producao_cientifica_resolved' não existe no dados.db.",
+      "View 'vfact_grupo_pesquisa_membro_resolved' não existe no dados.db."
+     ],
+     "indexado": false
     }
    ]
   }

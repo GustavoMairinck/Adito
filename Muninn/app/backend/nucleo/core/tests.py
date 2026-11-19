@@ -280,6 +280,50 @@ class Resposta:
         self.status_code, self.data = status, data
 
 
+class PainelContextosTests(AppDbTestCase):
+    """Aba Contextos de dados: a carga lê o app e a pasta de dados juntos e lista a situação de cada um."""
+
+    def setUp(self):
+        super().setUp()
+        self.dados = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dados.cleanup)
+        dados_db = Path(self.dados.name) / "dados.db"
+        sqlite3.connect(dados_db).close()  # dados.db vazio: nenhuma tabela existe
+        env = patch.dict(os.environ, {
+            "MUNINN_DATA_DIR": self.dados.name, "MUNINN_DADOS_DB": str(dados_db),
+            "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "",
+        })
+        env.start()
+        self.addCleanup(env.stop)
+        user_ctx = Path(self.dados.name) / "contexts"
+        for slug in ("meu-contexto", "exemplo-vendas"):
+            (user_ctx / slug).mkdir(parents=True)
+            (user_ctx / slug / "views.json").write_text(
+                json.dumps({"contexto": slug, "nome": slug, "views": [{"name": "tabela_que_nao_existe"}]}), encoding="utf-8",
+            )
+
+    def test_carga_le_o_app_e_a_pasta_de_dados_sem_vendas(self):
+        status, body = call("admin.bootstrap")
+        self.assertEqual(status, 200, body)
+        pastas = {c["pasta"] for c in body["contextos"]}
+        self.assertIn("pesquisa-extensao-ifes", pastas)  # contexto do app
+        self.assertIn("meu-contexto", pastas)            # contexto da pasta de dados
+        self.assertNotIn("exemplo-vendas", pastas)
+        self.assertTrue((Path(self.dados.name) / "contexts.removidos" / "exemplo-vendas").exists())
+
+    def test_lista_de_contextos_com_situacao_e_erros(self):
+        call("admin.bootstrap")
+        status, lista = call("admin.contextos")
+        self.assertEqual(status, 200, lista)
+        por_slug = {c["slug"]: c for c in lista}
+        self.assertNotIn("exemplo-vendas", por_slug)
+        meu = por_slug["meu-contexto"]
+        self.assertFalse(meu["ativo"])
+        self.assertEqual(meu["tabelas"], ["tabela_que_nao_existe"])
+        self.assertTrue(any("tabela_que_nao_existe" in e for e in meu["erros"]))
+        self.assertEqual((meu["rag_itens"], meu["valores"]), (0, 0))
+
+
 class ChaveGeminiTests(AppDbTestCase):
     """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""
 

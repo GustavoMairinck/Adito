@@ -1,5 +1,5 @@
 """
-Contextos: carregam o views.json de quem forneceu os dados, validam contra o dados.duckdb,
+Contextos: carregam o views.json de quem forneceu os dados, validam contra o dados.db,
 montam a política de leitura e o prompt do agente, e geram o RAG do contexto.
 
 Pasta de um contexto:
@@ -72,7 +72,7 @@ def pick_contexto(tenant: Tenant, requested_id=None) -> Contexto | None:
 
 
 def read_policy_for(contexto: Contexto | str | None) -> ReadPolicy:
-    """Sem contexto, nada fica exposto: o agente não lê nada do dados.duckdb."""
+    """Sem contexto, nada fica exposto: o agente não lê nada do dados.db."""
     if not isinstance(contexto, Contexto):
         contexto = get_contexto(contexto)
     if contexto is None:
@@ -148,7 +148,7 @@ def validate_contexto(contexto: Contexto, dados_path=None) -> list[str]:
             continue
         columns = {column.lower() for column, _ in view_columns(name, dados_path)}
         if not columns:
-            errors.append(f"View '{name}' não existe no dados.duckdb.")
+            errors.append(f"View '{name}' não existe no dados.db.")
             continue
         for key in ("sensitive_columns", "embed_columns", "local_search_columns"):
             missing = [column for column in view.get(key, []) if column.lower() not in columns]
@@ -226,38 +226,40 @@ def _afastar_contextos_removidos(user_contexts: Path) -> None:
         shutil.move(str(folder), str(destino))
 
 
-def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
-    """Sincroniza os contextos das pastas do repositório e da pasta do usuário."""
-    context_folders: dict[str, Path] = {}
+def context_folders() -> list[Path]:
+    """Pastas de contexto: as do app (contexts/) mais as da pasta de dados, que têm prioridade
+    quando o nome se repete. Contextos removidos do produto ficam de fora (e saem do caminho)."""
+    folders: dict[str, Path] = {}
     repo_contexts = REPO_APP_DIR / "contexts"
     if repo_contexts.exists():
         for p in repo_contexts.glob("*"):
             if (p / "views.json").exists():
-                context_folders[p.name] = p
-
+                folders[p.name] = p
     user_contexts = data_dir() / "contexts"
     if user_contexts.exists():
         _afastar_contextos_removidos(user_contexts)
         for p in user_contexts.glob("*"):
             if (p / "views.json").exists():
-                context_folders[p.name] = p
+                folders[p.name] = p
+    return [p for _, p in sorted(folders.items()) if _slug_da_pasta(p) not in CONTEXTOS_REMOVIDOS]
 
+
+def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
+    """Sincroniza os contextos das pastas do repositório e da pasta do usuário."""
     synced: list[Contexto] = []
-    for folder in context_folders.values():
-        if _slug_da_pasta(folder) in CONTEXTOS_REMOVIDOS:
-            continue
+    for folder in context_folders():
         try:
             ctx, _, _ = load_context_dir(folder, tenant, dados_path=dados_path)
             synced.append(ctx)
         except Exception:
             continue
 
-    # Valida contextos já salvos no banco para desativar os que não existem mais no dados.duckdb
+    # Valida contextos já salvos no banco para desativar os que não existem mais no dados.db
     for ctx in Contexto.select("tenant_id = ? AND is_active = 1", [to_db_id(tenant.id)]):
         try:
             errors = validate_contexto(ctx, dados_path=dados_path)
         except FileNotFoundError:
-            errors = ["dados.duckdb não encontrado."]
+            errors = ["dados.db não encontrado."]
         if errors:
             ctx.is_active = False
             ctx.update("is_active")
