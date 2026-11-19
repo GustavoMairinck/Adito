@@ -3,7 +3,7 @@ import { buildChart, isScalarResultData } from "@/modules/chat/composables/useCh
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
 import { computed, ref } from "vue";
 
-const STORAGE_PREFIX = "muninn_esx_chat_history";
+const STORAGE_PREFIX = "muninn_chat_history";
 
 function createWelcomeMessage(): ChatMessage {
   return {
