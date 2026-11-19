@@ -25,13 +25,13 @@ Decisões tomadas para levar o Oraculo-ESX (web, em Docker) para um aplicativo d
 | [US-006](stories/US-006_contextos.md) | Trabalhar com vários contextos de dados | Done |
 | [US-007](stories/US-007_entrada-arquivo-sqlite.md) | Trazer meus dados num arquivo SQLite pronto | In Progress |
 | [US-008](stories/US-008_agente-mesmo-processo.md) | Agente BI no mesmo processo do backend | Done |
-| [US-009](stories/US-009_demo-vendas.md) | Testar o app com a demonstração de vendas | Done |
+| [US-009](stories/US-009_demo-vendas.md) | Testar o app com a demonstração de vendas | Removida |
 | [US-010](stories/US-010_telas-herdadas.md) | Tirar do app as telas que só faziam sentido na web | Done |
 | [US-011](stories/US-011_instalador.md) | Instalar o app sem ferramentas de desenvolvimento | Backlog |
 | [US-012](stories/US-012_limite-linhas-llm.md) | Respeitar o limite de linhas do contexto no envio ao LLM | Backlog |
 | [US-013](stories/US-013_backend-orfao.md) | Não deixar o backend rodando quando o app morre | Done |
 | [US-014](stories/US-014_busca-local-nomes.md) | Resolver nomes de pessoas sem enviá-los à nuvem | Backlog |
-| [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard e Explorar Dados por contexto | Backlog |
+| [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard por contexto | Backlog |
 | [US-016](stories/US-016_nucleo-local-sem-http.md) | Núcleo local sem servidor HTTP | In Review |
 
 ## ETL do Muninn (EPIC-07)

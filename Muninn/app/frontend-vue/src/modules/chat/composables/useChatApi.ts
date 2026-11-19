@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { call, stream } from '@/common/api/core'
 import type { ChatMessage } from '@/modules/chat/types'
+import { chartKeys } from '@/common/utils/chartKeys'
 
 function parseNumeric(value: unknown) {
   if (value === null || value === undefined || value === '') return null
@@ -11,10 +12,6 @@ function parseNumeric(value: unknown) {
 
   const parsed = Number(String(value).trim())
   return Number.isFinite(parsed) ? parsed : null
-}
-
-function isNumeric(value: unknown) {
-  return parseNumeric(value) !== null
 }
 
 function normalizeLabel(value: string) {
@@ -34,18 +31,15 @@ export function buildChart(data?: Array<Record<string, any>>) {
     return null
   }
 
-  const keys = Object.keys(data[0] || {})
-  const numericKeys = keys.filter(key => data.some(row => isNumeric(row[key])))
-  if (numericKeys.length === 0) return null
-
-  const rows = data
-  const dimensionKeys = keys.filter(key => !numericKeys.includes(key))
+  // Mesma regra do Meu painel: ano, mês e colunas de texto viram o eixo; o resto, séries.
+  const { dimensionKeys, metricKeys } = chartKeys(data)
+  if (metricKeys.length === 0) return null
 
   return {
-    categories: rows.map((row, index) => buildCategory(row, dimensionKeys, `Item ${index + 1}`)),
-    series: numericKeys.map(key => ({
+    categories: data.map((row, index) => buildCategory(row, dimensionKeys, `Item ${index + 1}`)),
+    series: metricKeys.map(key => ({
       name: normalizeLabel(key),
-      data: rows.map(row => parseNumeric(row[key]) || 0)
+      data: data.map(row => parseNumeric(row[key]) || 0)
     }))
   }
 }

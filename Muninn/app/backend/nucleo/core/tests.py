@@ -280,168 +280,142 @@ class Resposta:
         self.status_code, self.data = status, data
 
 
-class ExplorerTests(AppDbTestCase):
+class PainelContextosTests(AppDbTestCase):
+    """Aba Contextos de dados: a carga lê o app e a pasta de dados juntos e lista a situação de cada um."""
+
     def setUp(self):
         super().setUp()
-        tenant_env = patch.dict(os.environ, {'DEFAULT_TENANT_NAME': 'Campus Serra'})
-        tenant_env.start()
-        self.addCleanup(tenant_env.stop)
-        user = get_local_user()
-        self.contexto = Contexto(
-            tenant_id=user.tenant_id, slug='unificado', name='Modelo unificado',
-            views=[
-                {'name': 'v_fato_projeto', 'sensitive_columns': ['cpf']},
-                {'name': 'dim_area'},
-                {'name': 'iniciativa', 'label': 'Iniciativas'},
-                {'name': 'projetos_pesquisa', 'kind': 'fact', 'label': 'Projetos de pesquisa'},
-            ],
-        ).insert()
-        self.foreign = Contexto(
-            tenant_id=Tenant(name='Outro campus').insert().id, slug='outro', name='Outro contexto',
-        ).insert()
-        self.folder = tempfile.TemporaryDirectory()
-        self.addCleanup(self.folder.cleanup)
-        self.db_path = Path(self.folder.name) / 'dados.db'
-        self.env = patch.dict(os.environ, {'MUNINN_DADOS_DB': str(self.db_path)})
-        self.env.start()
-        self.addCleanup(self.env.stop)
+        self.dados = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dados.cleanup)
+        dados_db = Path(self.dados.name) / "dados.db"
+        sqlite3.connect(dados_db).close()  # dados.db vazio: nenhuma tabela existe
+        env = patch.dict(os.environ, {
+            "MUNINN_DATA_DIR": self.dados.name, "MUNINN_DADOS_DB": str(dados_db),
+            "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "",
+        })
+        env.start()
+        self.addCleanup(env.stop)
+        user_ctx = Path(self.dados.name) / "contexts"
+        for slug in ("meu-contexto", "exemplo-vendas"):
+            (user_ctx / slug).mkdir(parents=True)
+            (user_ctx / slug / "views.json").write_text(
+                json.dumps({"contexto": slug, "nome": slug, "views": [{"name": "tabela_que_nao_existe"}]}), encoding="utf-8",
+            )
+
+    def test_carga_le_o_app_e_a_pasta_de_dados_sem_vendas(self):
+        status, body = call("admin.bootstrap")
+        self.assertEqual(status, 200, body)
+        pastas = {c["pasta"] for c in body["contextos"]}
+        self.assertIn("pesquisa-extensao-ifes", pastas)  # contexto do app
+        self.assertIn("meu-contexto", pastas)            # contexto da pasta de dados
+        self.assertNotIn("exemplo-vendas", pastas)
+        self.assertTrue((Path(self.dados.name) / "contexts.removidos" / "exemplo-vendas").exists())
+
+    def test_lista_de_contextos_com_situacao_e_erros(self):
+        call("admin.bootstrap")
+        status, lista = call("admin.contextos")
+        self.assertEqual(status, 200, lista)
+        por_slug = {c["slug"]: c for c in lista}
+        self.assertNotIn("exemplo-vendas", por_slug)
+        meu = por_slug["meu-contexto"]
+        self.assertFalse(meu["ativo"])
+        self.assertEqual(meu["tabelas"], ["tabela_que_nao_existe"])
+        self.assertTrue(any("tabela_que_nao_existe" in e for e in meu["erros"]))
+        self.assertEqual((meu["rag_itens"], meu["valores"]), (0, 0))
+
+
+class EmbedderFalso:
+    """Devolve um vetor por texto; pode recusar com 429 nas chamadas escolhidas."""
+
+    def __init__(self, recusas=(), erro="429 RESOURCE_EXHAUSTED. Please retry in 12.5s."):
+        self.recusas, self.erro, self.chamadas, self.textos = set(recusas), erro, 0, []
+
+    def embed_documents(self, texts):
+        self.chamadas += 1
+        if self.chamadas in self.recusas:
+            raise RuntimeError(self.erro)
+        self.textos.extend(texts)
+        return [[float(len(t)), 1.0] for t in texts]
+
+    def embed_query(self, text):
+        return self.embed_documents([text])[0]
+
+
+class EmbedderComEsperaTests(unittest.TestCase):
+    """Cota por minuto do Gemini: espera o tempo pedido e tenta de novo; cota diária para com aviso."""
+
+    def test_espera_o_tempo_pedido_e_tenta_de_novo(self):
+        from analytics_index.embedder import EmbedderComEspera
+        esperas = []
+        real = EmbedderFalso(recusas={1, 2})
+        self.assertEqual(EmbedderComEspera(real, dormir=esperas.append).embed_documents(["ab"]), [[2.0, 1.0]])
+        self.assertEqual(esperas, [13.5, 13.5])
+
+    def test_cota_diaria_nao_espera(self):
+        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
+        esperas = []
+        real = EmbedderFalso(recusas={1}, erro="429 RESOURCE_EXHAUSTED quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier")
+        with self.assertRaisesRegex(CotaEsgotada, "cota diária"):
+            EmbedderComEspera(real, dormir=esperas.append).embed_query("x")
+        self.assertEqual(esperas, [])
+
+    def test_desiste_depois_das_tentativas_e_outros_erros_passam_direto(self):
+        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
+        with self.assertRaises(CotaEsgotada):
+            EmbedderComEspera(EmbedderFalso(recusas={1, 2, 3}), dormir=lambda s: None, tentativas=3).embed_query("x")
+        with self.assertRaisesRegex(RuntimeError, "chave inválida"):
+            EmbedderComEspera(EmbedderFalso(recusas={1}, erro="400 chave inválida"), dormir=lambda s: None).embed_query("x")
+
+
+class IndexacaoIncrementalTests(AppDbTestCase):
+    """A carga continua de onde parou: não apaga o que já foi indexado e só envia o que falta."""
+
+    def setUp(self):
+        super().setUp()
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        self.dados_db = Path(pasta.name) / "dados.db"
+        self._gravar_nomes([f"nome {i}" for i in range(5)])
+        env = patch.dict(os.environ, {"MUNINN_DADOS_DB": str(self.dados_db)})
+        env.start()
+        self.addCleanup(env.stop)
+        _, tenant = session.current()
+        self.ctx = Contexto(tenant_id=tenant.id, slug="teste", name="Teste", views=[{"name": "t", "embed_columns": ["nome"]}])
+        self.ctx.insert()
+
+    def _gravar_nomes(self, nomes):
         close_dados()
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            conn.execute('''
-                CREATE TABLE area (id INTEGER PRIMARY KEY, nome TEXT);
-            ''')
-            conn.execute("INSERT INTO area VALUES (1, 'Computação')")
-            conn.execute("INSERT INTO area VALUES (2, 'Educação')")
-            conn.execute('''
-                CREATE TABLE projeto (id INTEGER PRIMARY KEY, titulo TEXT, id_area INTEGER, ano INTEGER, cpf TEXT);
-            ''')
-            conn.execute('''
-                CREATE VIEW v_fato_projeto AS
-                    SELECT p.id, p.titulo, a.nome AS area, p.ano, p.cpf
-                    FROM projeto p JOIN area a ON a.id = p.id_area;
-            ''')
-            conn.execute("CREATE VIEW dim_area AS SELECT * FROM area;")
-            conn.execute("CREATE VIEW iniciativa AS SELECT id, titulo FROM projeto;")
-            conn.execute("CREATE VIEW projetos_pesquisa AS SELECT id, titulo FROM projeto;")
-            conn.executemany('INSERT INTO projeto VALUES (?, ?, ?, ?, ?)', [
-                (i, 'Projeto 100%_IFES' if i == 1 else f'Projeto {i}', 1 + i % 2, 2025 + i % 2, 'restrito')
-                for i in range(1, 34)
-            ])
-            conn.commit()
-        finally:
-            conn.close()
+        conn = sqlite3.connect(self.dados_db)
+        conn.execute("DROP TABLE IF EXISTS t")
+        conn.execute("CREATE TABLE t (nome TEXT)")
+        conn.executemany("INSERT INTO t VALUES (?)", [(n,) for n in nomes])
+        conn.commit()
+        conn.close()
 
-    def catalog(self, **params):
-        return Resposta(*call('explorer.tables', {'contexto_id': str(self.contexto.id), **params}))
+    def _indexados(self):
+        return db.execute("SELECT COUNT(*) FROM analytics_text_embedding").fetchone()[0]
 
-    def rows(self, **params):
-        return Resposta(*call('explorer.rows', {
-            'contexto_id': str(self.contexto.id), 'table': 'v_fato_projeto', **params,
-        }))
+    def test_continua_de_onde_parou_e_apaga_o_que_sumiu(self):
+        from analytics_index.services import update_text_embeddings
+        # Lotes de 2: o 2º lote falha, o 1º fica gravado.
+        with self.assertRaises(RuntimeError):
+            update_text_embeddings(self.ctx, EmbedderFalso(recusas={2}, erro="rede caiu"), batch_size=2)
+        self.assertEqual(self._indexados(), 2)
 
-    def test_catalog_uses_context_metadata_and_hides_sensitive_columns(self):
-        response = self.catalog()
-        self.assertEqual(response.status_code, 200)
-        tables = response.data['tables']
-        self.assertEqual([table['kind'] for table in tables], ['fact', 'dimension', 'entity', 'fact'])
-        self.assertEqual(tables[2]['label'], 'Iniciativas')
-        self.assertNotIn('cpf', [column['name'] for column in tables[0]['columns']])
+        segundo = EmbedderFalso()
+        resumo = update_text_embeddings(self.ctx, segundo, batch_size=2)
+        self.assertEqual((resumo["created"], resumo["skipped"]), (3, 2))
+        self.assertEqual(len(segundo.textos), 3)  # só o que faltava foi enviado
+        self.assertEqual(self._indexados(), 5)
 
-    def test_paginated_rows_sorting_and_last_page(self):
-        first = self.rows()
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(first.data['total'], 33)
-        self.assertEqual(len(first.data['rows']), 25)
-        self.assertEqual(first.data['rows'][0]['id'], 1)
-        self.assertNotIn('cpf', first.data['rows'][0])
-        last = self.rows(page=999, sort='id', direction='desc')
-        self.assertEqual(last.data['page'], 2)
-        self.assertEqual(len(last.data['rows']), 8)
-        self.assertEqual(last.data['rows'][-1]['id'], 1)
+        self._gravar_nomes(["nome 0", "nome novo"])
+        resumo = update_text_embeddings(self.ctx, EmbedderFalso(), batch_size=2)
+        self.assertEqual((resumo["created"], resumo["removed"]), (1, 4))
+        self.assertEqual(self._indexados(), 2)
 
-    def test_search_escapes_wildcards_and_sql_is_parameterized(self):
-        self.assertEqual(self.rows(search='100%_').data['total'], 1)
-        self.assertEqual(self.rows(search="' OR 1=1 --").data['total'], 0)
-        self.assertEqual(self.rows(search='restrito').data['total'], 0)
 
-    def test_filters_and_distribution_use_all_matching_rows(self):
-        response = self.rows(filter_column='ano', filter_value='2026', group_by='area')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['total'], 17)
-        self.assertEqual(response.data['distribution'], [{'value': 'Educação', 'count': 17}])
-        all_rows = self.rows(group_by='area')
-        self.assertEqual(sum(item['count'] for item in all_rows.data['distribution']), 33)
-
-    def test_dimensions_entities_and_empty_results(self):
-        self.assertEqual(self.rows(table='dim_area').data['total'], 2)
-        self.assertEqual(self.rows(table='iniciativa').data['total'], 33)
-        empty = self.rows(search='inexistente')
-        self.assertEqual(empty.data['rows'], [])
-        self.assertEqual(empty.data['total'], 0)
-        self.assertEqual(empty.data['page'], 1)
-
-    def test_null_and_binary_values_and_relations_with_only_sensitive_columns(self):
-        close_dados()
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            conn.execute('CREATE TABLE dim_nullable (codigo INTEGER, arquivo BLOB)')
-            conn.executemany('INSERT INTO dim_nullable VALUES (?, ?)', [(None, b'\xff'), (0, b'')])
-            conn.commit()
-        finally:
-            conn.close()
-        self.contexto.views.append({'name': 'dim_nullable'})
-        self.contexto.views[2]['sensitive_columns'] = ['id', 'titulo']
-        self.contexto.update('views')
-        response = self.rows(table='dim_nullable', group_by='codigo')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['total'], 2)
-        self.assertIsNone(response.data['rows'][0]['codigo'])
-        self.assertEqual(response.data['rows'][0]['arquivo'], '0xff')
-        self.assertFalse(self.catalog().data['tables'][2]['available'])
-        self.assertEqual(self.rows(table='iniciativa').status_code, 400)
-
-    def test_rejects_unexposed_tables_sensitive_columns_and_invalid_parameters(self):
-        self.assertEqual(self.rows(table='projeto').status_code, 404)
-        self.assertEqual(self.rows(table='projeto; DROP TABLE area').status_code, 404)
-        for params in [
-            {'sort': 'cpf'}, {'filter_column': 'cpf', 'filter_value': 'restrito'},
-            {'group_by': 'cpf'}, {'sort': 'id DESC; DROP TABLE area'},
-            {'page': 0}, {'page_size': 1000}, {'direction': 'invalido'},
-            {'contexto_id': 'invalido'}, {'filter_value': '2026'},
-        ]:
-            with self.subTest(params=params):
-                self.assertEqual(self.rows(**params).status_code, 400)
-
-    def test_requires_an_active_context_from_same_tenant(self):
-        self.assertEqual(self.catalog(contexto_id=str(self.foreign.id)).status_code, 404)
-        self.assertEqual(self.rows(contexto_id=str(self.foreign.id)).status_code, 404)
-        self.contexto.is_active = False
-        self.contexto.update('is_active')
-        self.assertEqual(self.catalog().status_code, 404)
-
-    def test_exploration_works_without_a_gemini_key(self):
-        with patch.dict(os.environ, {'GEMINI_API_KEY': '', 'GOOGLE_API_KEY': ''}):
-            self.assertEqual(self.catalog().status_code, 200)
-            response = self.rows()
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.data['total'], 33)
-
-    def test_missing_database_and_stale_context_return_actionable_errors(self):
-        with self.assertLogs('rpc.explorer', level='ERROR'), patch.dict(
-            os.environ, {'MUNINN_DADOS_DB': str(self.db_path) + '.missing'},
-        ):
-            self.assertEqual(self.catalog().status_code, 503)
-            self.assertEqual(self.rows().status_code, 503)
-        close_dados()
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            conn.execute('DROP VIEW v_fato_projeto')
-            conn.commit()
-        finally:
-            conn.close()
-        self.assertFalse(self.catalog().data['tables'][0]['available'])
-        self.assertEqual(self.rows().status_code, 400)
+class ChaveGeminiTests(AppDbTestCase):
+    """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""
 
     def test_gemini_key_validation_uses_google_header_and_configured_model(self):
         from agents.config import GEMINI_MODEL
@@ -607,7 +581,138 @@ class PersistenciaTests(AppDbTestCase):
         a, b = get_local_user(), get_local_user()
         self.assertEqual(a.id, b.id)
         self.assertTrue(a.is_staff)
-        self.assertTrue(a.password.startswith("!"))
+
+
+# Esquema de um app.db criado pela versão com Django (antes da versão 2), só o necessário.
+_DDL_DJANGO = """
+CREATE TABLE "django_migrations" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "app" varchar(255) NOT NULL, "name" varchar(255) NOT NULL, "applied" datetime NOT NULL);
+CREATE TABLE "django_content_type" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "app_label" varchar(100) NOT NULL, "model" varchar(100) NOT NULL);
+CREATE TABLE "auth_permission" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "content_type_id" integer NOT NULL REFERENCES "django_content_type" ("id") DEFERRABLE INITIALLY DEFERRED, "codename" varchar(100) NOT NULL, "name" varchar(255) NOT NULL);
+CREATE TABLE "auth_group" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "name" varchar(150) NOT NULL UNIQUE);
+CREATE TABLE "auth_group_permissions" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "group_id" integer NOT NULL REFERENCES "auth_group" ("id") DEFERRABLE INITIALLY DEFERRED, "permission_id" integer NOT NULL REFERENCES "auth_permission" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_tenant" ("id" char(32) NOT NULL PRIMARY KEY, "name" varchar(255) NOT NULL, "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL);
+CREATE TABLE "core_user" ("password" varchar(128) NOT NULL, "last_login" datetime NULL, "is_superuser" bool NOT NULL, "username" varchar(150) NOT NULL UNIQUE, "first_name" varchar(150) NOT NULL, "last_name" varchar(150) NOT NULL, "email" varchar(254) NOT NULL, "is_staff" bool NOT NULL, "is_active" bool NOT NULL, "date_joined" datetime NOT NULL, "id" char(32) NOT NULL PRIMARY KEY, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "tenant_id" char(32) NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_user_groups" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "group_id" integer NOT NULL REFERENCES "auth_group" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "core_user_user_permissions" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "permission_id" integer NOT NULL REFERENCES "auth_permission" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE "django_admin_log" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "object_id" text NULL, "object_repr" varchar(200) NOT NULL, "action_flag" smallint unsigned NOT NULL, "change_message" text NOT NULL, "content_type_id" integer NULL REFERENCES "django_content_type" ("id") DEFERRABLE INITIALLY DEFERRED, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED, "action_time" datetime NOT NULL);
+CREATE TABLE "django_session" ("session_key" varchar(40) NOT NULL PRIMARY KEY, "session_data" text NOT NULL, "expire_date" datetime NOT NULL);
+CREATE TABLE "checkpoints" ("thread_id" TEXT NOT NULL, "checkpoint_ns" TEXT NOT NULL DEFAULT '', "checkpoint_id" TEXT NOT NULL, "dados" TEXT);
+CREATE TABLE "writes" ("thread_id" TEXT NOT NULL, "checkpoint_ns" TEXT NOT NULL DEFAULT '', "checkpoint_id" TEXT NOT NULL, "dados" TEXT);
+"""
+
+
+class MigracaoV2Tests(unittest.TestCase):
+    """Um app.db da versão com Django chega à versão 2 sem Django, sem vendas e sem perder o resto."""
+
+    T, U = "aa" * 16, "bb" * 16
+    PESQ, VENDAS = "cc" * 16, "dd" * 16
+    CONV_PESQ, CONV_VENDAS = "11" * 16, "22" * 16
+    AGORA = "2026-11-10 12:00:00"
+
+    def setUp(self):
+        self.pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(self.pasta.cleanup)
+        self.app_db = Path(self.pasta.name) / "app.db"
+        env = patch.dict(os.environ, {"MUNINN_APP_DB": str(self.app_db), "MUNINN_DATA_DIR": self.pasta.name})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(db.close)
+        self.addCleanup(session.reset)
+        self._criar_banco_antigo()
+
+    def _criar_banco_antigo(self):
+        from core.schema import SCHEMA_SQL
+
+        c = sqlite3.connect(self.app_db)
+        c.executescript(_DDL_DJANGO)
+        c.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))  # demais tabelas (IF NOT EXISTS)
+        a = self.AGORA
+        c.execute("INSERT INTO django_migrations (app, name, applied) VALUES ('knowledge', '0002_reset_embeddings_for_gemini', ?)", [a])
+        c.execute("INSERT INTO core_tenant VALUES (?, 'padrao', 1, ?, ?)", [self.T, a, a])
+        c.execute(
+            "INSERT INTO core_user VALUES ('!x', NULL, 0, 'local', '', '', '', 1, 1, ?, ?, ?, ?, ?)",
+            [a, self.U, a, a, self.T],
+        )
+        for cid, slug in ((self.PESQ, "pesquisa-extensao-ifes"), (self.VENDAS, "exemplo-vendas")):
+            c.execute(
+                "INSERT INTO core_contexto (id, slug, name, description, views, rules, is_active, created_at, updated_at, tenant_id) "
+                "VALUES (?, ?, ?, '', '[]', '', ?, ?, ?, ?)", [cid, slug, slug, int(slug != "exemplo-vendas"), a, a, self.T],
+            )
+        for conv, ctx in ((self.CONV_PESQ, self.PESQ), (self.CONV_VENDAS, self.VENDAS)):
+            c.execute("INSERT INTO chat_conversation VALUES (?, 't', ?, ?, ?, ?, ?)", [conv, a, a, ctx, self.T, self.U])
+            msg = conv[:30] + "ff"
+            c.execute("INSERT INTO chat_message VALUES (?, 'assistant', 'r', '{}', ?, ?)", [msg, a, conv])
+            c.execute(
+                "INSERT INTO chat_queryexecution VALUES (?, 'p', 'SELECT 1', 1, NULL, NULL, ?, ?, ?, ?, ?)",
+                [conv[:30] + "ee", a, ctx, msg, self.T, self.U],
+            )
+            dash = "99" * 16
+            c.execute("INSERT OR IGNORE INTO dashboard_dashboard VALUES (?, 'principal', '', ?, ?, ?, ?)", [dash, a, a, self.T, self.U])
+            c.execute(
+                "INSERT INTO dashboard_widget VALUES (?, 'w', '?', 'SELECT 1', 'bar', 'static', 4, 'medium', 0, 0, 4, 4, 0, 'none', 'OK', NULL, ?, ?, ?, ?)",
+                [conv[:30] + "dd", a, a, ctx, dash],
+            )
+            fio = f"tenant_x:user_y:conv_{db.from_db_id(conv)}"
+            c.execute("INSERT INTO checkpoints VALUES (?, '', 'c1', NULL)", [fio])
+            c.execute("INSERT INTO writes VALUES (?, '', 'c1', NULL)", [fio])
+        c.commit()
+        c.close()
+
+    def _tabelas(self):
+        return {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+    def test_banco_antigo_vai_para_a_versao_2(self):
+        from core.schema import TABELAS_DJANGO, VERSAO
+
+        self.assertEqual(ensure_schema(), VERSAO)
+        self.assertEqual(VERSAO, 2)
+        self.assertTrue(Path(str(self.app_db) + ".bak-v1").exists(), "faltou a cópia de segurança")
+        self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
+        colunas = [r[1] for r in db.execute("PRAGMA table_info(core_user)")]
+        self.assertEqual(sorted(colunas), sorted(
+            ["id", "username", "first_name", "last_name", "email", "is_staff", "created_at", "updated_at", "tenant_id"]))
+        self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        self.assertEqual(db.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+
+        # Vendas sai inteiro; pesquisa fica intacto.
+        slugs = [r[0] for r in db.execute("SELECT slug FROM core_contexto")]
+        self.assertEqual(slugs, ["pesquisa-extensao-ifes"])
+        conversas = [r[0] for r in db.execute("SELECT id FROM chat_conversation")]
+        self.assertEqual(conversas, [self.CONV_PESQ])
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_message").fetchone()[0], 1)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_queryexecution").fetchone()[0], 1)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM dashboard_widget").fetchone()[0], 1)
+        fios = [r[0] for r in db.execute("SELECT thread_id FROM checkpoints")]
+        self.assertEqual(len(fios), 1)
+        self.assertIn(db.from_db_id(self.CONV_PESQ), fios[0])
+
+        # O usuário local continua o mesmo e o app abre com ele.
+        user = get_local_user()
+        self.assertEqual(user.id, db.from_db_id(self.U))
+        self.assertEqual(ensure_schema(), VERSAO)  # já em dia: não migra de novo
+
+    def test_banco_novo_nasce_na_versao_2_sem_django(self):
+        from core.schema import TABELAS_DJANGO, VERSAO
+
+        novo = Path(self.pasta.name) / "novo.db"
+        with patch.dict(os.environ, {"MUNINN_APP_DB": str(novo)}):
+            self.assertEqual(ensure_schema(), VERSAO)
+            self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
+            self.assertNotIn("password", [r[1] for r in db.execute("PRAGMA table_info(core_user)")])
+            self.assertFalse(Path(str(novo) + ".bak-v1").exists())
+
+    def test_pasta_de_vendas_na_pasta_de_dados_sai_do_caminho(self):
+        from core.contexts import sync_default_contexts
+        from core.records import Tenant as T
+
+        ensure_schema()
+        pasta = Path(self.pasta.name) / "contexts" / "exemplo-vendas"
+        pasta.mkdir(parents=True)
+        (pasta / "views.json").write_text(json.dumps({"contexto": "exemplo-vendas", "views": [{"name": "x"}]}), encoding="utf-8")
+        sync_default_contexts(T.first())
+        self.assertFalse(pasta.exists())
+        self.assertTrue((Path(self.pasta.name) / "contexts.removidos" / "exemplo-vendas" / "views.json").exists())
+        self.assertEqual([r[0] for r in db.execute("SELECT slug FROM core_contexto WHERE slug = 'exemplo-vendas'")], [])
 
 
 class AgentesMemoriaEscopoTests(unittest.TestCase):

@@ -304,45 +304,6 @@ async function handleWipeRetrain() {
 // TAB 2: PREPARAR DADOS (US-023)
 // ════════════════════════════════════════════════════
 
-// Todos os campos de vFactPagamentoResolved
-interface FactPagamentoRow {
-  FatoPagamentoKey: string
-  IdPagamentoOriginalFK: string
-  ValorAgendado: string
-  ValorPago: string
-  ValorBonus: string
-  ValorOriginal: string
-  IdPessoaNK: string
-  Sexo: string
-  Raca: string
-  Bairro: string
-  Municipio: string
-  UfLocalidade: string
-  Sigla: string
-  DescricaoModalidade: string
-  IdProjetoNK: string
-  NomeProjeto: string
-  OrcamentoTotal: string
-  OrcamentoBolsa: string
-  NomeEdital: string
-  AreaTecnica: string
-  DescricaoStatus: string
-  DataPagamento: string
-  Ano: string
-  Mes: string
-  NomeMes: string
-  Trimestre: string
-}
-
-interface EtlDiffRow {
-  tableName: string
-  rowId: string
-  type: 'updated' | 'inserted' | 'deleted'
-  changedFields: string[]
-  before: FactPagamentoRow | null
-  after: FactPagamentoRow | null
-}
-
 interface EtlTriggeredRun {
   dagId: string
   label: string
@@ -358,13 +319,12 @@ interface EtlLog {
   status: 'running' | 'success' | 'error'
   totalRecords: number
   changedRecords: number
-  rows: EtlDiffRow[]
+  rows?: unknown[]  // históricos antigos (versão web) tinham linhas aqui
   runs: EtlTriggeredRun[]
 }
 
 const etlSyncing = ref(false)
 const etlDispatchLocked = ref(false)
-const etlPollingHandle = ref<number | null>(null)
 const expandedLog = ref<number | null>(null)
 
 // ─── Data Bootstrap Pagination & Filters ───
@@ -412,36 +372,6 @@ watch(etlSearchQuery, () => {
   etlCurrentPage.value = 1
 })
 
-// Campos exibidos na comparacao (label: chave)
-const factFields: { label: string; key: keyof FactPagamentoRow }[] = [
-  { label: 'FatoPagamentoKey',      key: 'FatoPagamentoKey' },
-  { label: 'IdPagamentoOriginalFK', key: 'IdPagamentoOriginalFK' },
-  { label: 'ValorAgendado',         key: 'ValorAgendado' },
-  { label: 'ValorPago',             key: 'ValorPago' },
-  { label: 'ValorBonus',            key: 'ValorBonus' },
-  { label: 'ValorOriginal',         key: 'ValorOriginal' },
-  { label: 'IdPessoaNK',            key: 'IdPessoaNK' },
-  { label: 'Sexo',                  key: 'Sexo' },
-  { label: 'Raca',                  key: 'Raca' },
-  { label: 'Bairro',                key: 'Bairro' },
-  { label: 'Municipio',             key: 'Municipio' },
-  { label: 'UfLocalidade',          key: 'UfLocalidade' },
-  { label: 'Sigla',                 key: 'Sigla' },
-  { label: 'DescricaoModalidade',   key: 'DescricaoModalidade' },
-  { label: 'IdProjetoNK',           key: 'IdProjetoNK' },
-  { label: 'NomeProjeto',           key: 'NomeProjeto' },
-  { label: 'OrcamentoTotal',        key: 'OrcamentoTotal' },
-  { label: 'OrcamentoBolsa',        key: 'OrcamentoBolsa' },
-  { label: 'NomeEdital',            key: 'NomeEdital' },
-  { label: 'AreaTecnica',           key: 'AreaTecnica' },
-  { label: 'DescricaoStatus',       key: 'DescricaoStatus' },
-  { label: 'DataPagamento',         key: 'DataPagamento' },
-  { label: 'Ano',                   key: 'Ano' },
-  { label: 'Mes',                   key: 'Mes' },
-  { label: 'NomeMes',               key: 'NomeMes' },
-  { label: 'Trimestre',             key: 'Trimestre' },
-]
-
 const etlLogs = ref<EtlLog[]>((() => {
   try {
     const saved = localStorage.getItem('muninn_etl_logs')
@@ -460,11 +390,41 @@ function releaseEtlLock() {
   etlSyncing.value = false
 }
 
-function stopEtlPolling() {
-  if (etlPollingHandle.value !== null) {
-    window.clearTimeout(etlPollingHandle.value)
-    etlPollingHandle.value = null
+// ─── Contextos carregados no app.db (situação atual) ───
+interface ContextoCarregado {
+  id: string
+  slug: string
+  nome: string
+  descricao: string
+  ativo: boolean
+  tabelas: string[]
+  rag_itens: number
+  valores: number
+  atualizado_em: string | null
+  erros: string[]
+}
+
+const contextosCarregados = ref<ContextoCarregado[]>([])
+const loadingContextos = ref(false)
+const contextosError = ref('')
+
+async function fetchContextos() {
+  loadingContextos.value = true
+  contextosError.value = ''
+  try {
+    contextosCarregados.value = await call<ContextoCarregado[]>('admin.contextos')
+  } catch (error: any) {
+    contextosError.value = error?.message || 'Não foi possível ler os contextos.'
+  } finally {
+    loadingContextos.value = false
   }
+}
+
+/** Resultado de um contexto numa carga, em português e com a cor do estado. */
+function runStateLabel(state: string) {
+  if (state === 'success') return { text: 'Indexado', cls: 'text-emerald-600 dark:text-emerald-400' }
+  if (state === 'pending') return { text: 'Válido, sem indexação', cls: 'text-amber-600 dark:text-amber-400' }
+  return { text: 'Com erro', cls: 'text-red-600 dark:text-red-400' }
 }
 
 async function handleSync() {
@@ -473,13 +433,12 @@ async function handleSync() {
   }
 
   etlDispatchLocked.value = true
-  stopEtlPolling()
   etlSyncing.value = true
   try {
     // Sem limite de tempo: a indexação roda no núcleo local e pode levar minutos.
     const response = await call('admin.bootstrap')
 
-    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.duckdb e indexação do RAG).
+    // Desktop: uma etapa por contexto da pasta de dados (validação no dados.db e indexação do RAG).
     const data = response || {}
     const contextos: any[] = data.contextos || []
     const triggeredAt = new Date().toISOString()
@@ -507,11 +466,11 @@ async function handleSync() {
       status: falhou ? 'error' : 'success',
       totalRecords: contextos.length,
       changedRecords: validos,
-      rows: [],
       runs: stages
     })
 
     releaseEtlLock()
+    fetchContextos()
   } catch (error: any) {
     const newLog: EtlLog = {
       id: Date.now(),
@@ -520,11 +479,11 @@ async function handleSync() {
       status: 'error',
       totalRecords: 0,
       changedRecords: 0,
-      rows: [],
       runs: []
     }
     etlLogs.value.unshift(newLog)
     releaseEtlLock()
+    fetchContextos()
   }
 }
 
@@ -661,10 +620,13 @@ watch(activeTab, (val) => {
   if (val === 'audit') {
     fetchQueryExecutions()
   }
+
+  if (val === 'etl') {
+    fetchContextos()
+  }
 }, { immediate: true })
 
 onBeforeUnmount(() => {
-  stopEtlPolling()
   if (sysPolling) clearInterval(sysPolling)
 })
 </script>
@@ -1084,8 +1046,8 @@ onBeforeUnmount(() => {
               <div class="space-y-1">
                 <h2 class="text-xl font-semibold text-text-primary">Contextos de dados</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
-                  Valida os contextos da pasta de dados contra o dados.duckdb e, com a chave do Gemini configurada,
-                  gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
+                  Lê os contextos do app e da sua pasta de dados, confere se as tabelas existem no dados.db e,
+                  com a chave do Gemini configurada, gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
                 </p>
               </div>
             </div>
@@ -1102,6 +1064,68 @@ onBeforeUnmount(() => {
               {{ hasRunningEtl ? 'Indexando contextos…' : 'Carregar e indexar contextos' }}
             </button>
           </div>
+          <p v-if="hasRunningEtl" class="mt-4 text-sm text-text-muted">
+            Pode levar alguns minutos: o Gemini limita os pedidos por minuto e o Muninn espera quando precisa.
+            Se parar no meio, o que já foi indexado fica salvo e a próxima carga continua de onde parou.
+          </p>
+        </div>
+
+        <!-- Contextos carregados -->
+        <div class="premium-card overflow-hidden">
+          <div class="flex items-center justify-between gap-4 border-b border-border-subtle bg-surface/20 px-8 py-6">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-accent/10 rounded-lg">
+                <Database class="h-5 w-5 text-accent" stroke-width="2" />
+              </div>
+              <h2 class="text-lg font-semibold text-text-primary">Contextos carregados</h2>
+            </div>
+            <button
+              class="flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
+              :disabled="loadingContextos"
+              @click="fetchContextos"
+            >
+              <RefreshCw :class="['h-4 w-4', loadingContextos ? 'animate-spin' : '']" />
+              Atualizar
+            </button>
+          </div>
+
+          <p v-if="contextosError" class="px-8 py-6 text-sm text-red-600 dark:text-red-400">{{ contextosError }}</p>
+          <p v-else-if="!loadingContextos && contextosCarregados.length === 0" class="px-8 py-6 text-sm text-text-muted">
+            Nenhum contexto no app ainda. Use "Carregar e indexar contextos".
+          </p>
+          <ul v-else class="divide-y divide-border-subtle">
+            <li v-for="ctx in contextosCarregados" :key="ctx.id" class="flex flex-col gap-3 px-8 py-5">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <p class="text-base font-semibold text-text-primary">{{ ctx.nome }}</p>
+                <span class="font-mono text-xs text-text-muted">{{ ctx.slug }}</span>
+                <span
+                  :class="[
+                    'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                    ctx.ativo && ctx.erros.length === 0
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                  ]"
+                >{{ ctx.ativo && ctx.erros.length === 0 ? 'Ativo' : 'Inativo' }}</span>
+              </div>
+              <p v-if="ctx.descricao" class="max-w-3xl text-sm text-text-secondary">{{ ctx.descricao }}</p>
+              <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-text-secondary">
+                <span><b class="font-semibold text-text-primary">{{ ctx.tabelas.length }}</b> tabela{{ ctx.tabelas.length === 1 ? '' : 's' }}</span>
+                <span><b class="font-semibold text-text-primary">{{ ctx.rag_itens.toLocaleString('pt-BR') }}</b> itens de RAG</span>
+                <span><b class="font-semibold text-text-primary">{{ ctx.valores.toLocaleString('pt-BR') }}</b> valores indexados</span>
+                <span v-if="ctx.atualizado_em">Atualizado em {{ new Date(ctx.atualizado_em).toLocaleString('pt-BR') }}</span>
+              </div>
+              <p v-if="ctx.ativo && ctx.erros.length === 0 && ctx.rag_itens === 0" class="text-xs text-amber-700 dark:text-amber-400">
+                Ainda sem RAG: o chat funciona, mas com menos exemplos. Configure a chave do Gemini e use "Carregar e indexar contextos".
+              </p>
+              <ul v-if="ctx.erros.length" class="space-y-1 rounded-lg border border-red-100 bg-red-50/60 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
+                <li v-for="erro in ctx.erros" :key="erro">{{ erro }}</li>
+              </ul>
+              <details class="text-xs text-text-muted">
+                <summary class="cursor-pointer select-none">Tabelas do contexto</summary>
+                <p class="mt-2 font-mono leading-relaxed">{{ ctx.tabelas.join(' · ') }}</p>
+              </details>
+            </li>
+          </ul>
         </div>
 
         <!-- Reports accordion -->
@@ -1148,11 +1172,8 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-3">
-                  <span v-if="log.changedRecords > 0" class="text-xs text-slate-400 dark:text-slate-500">
-                    {{ log.changedRecords.toLocaleString('pt-BR') }} linhas na view
-                  </span>
-                  <span v-else-if="log.runs.length > 0" class="text-xs text-slate-400 dark:text-slate-500">
-                    {{ log.runs.length }} etapa{{ log.runs.length > 1 ? 's' : '' }}
+                  <span v-if="log.runs.length > 0" class="text-xs text-slate-400 dark:text-slate-500">
+                    {{ log.changedRecords }} de {{ log.runs.length }} contexto{{ log.runs.length > 1 ? 's' : '' }} válido{{ log.changedRecords === 1 ? '' : 's' }}
                   </span>
                   <span v-else-if="log.status === 'running'" class="text-xs font-semibold text-amber-600 dark:text-amber-400">Em execucao</span>
                   <span v-else-if="log.status === 'error'" class="text-xs text-red-500 font-semibold">Falha na preparação</span>
@@ -1176,7 +1197,7 @@ onBeforeUnmount(() => {
                   >
                     {{ log.message }}
                     <ul v-if="log.runs.length" class="mt-2 space-y-1">
-                      <li v-for="run in log.runs.filter(item => item.state === 'failed')" :key="run.dagId">
+                      <li v-for="(run, i) in log.runs.filter(item => item.state === 'failed')" :key="run.dagId + i">
                         {{ run.label }} — {{ run.dagRunId }}
                       </li>
                     </ul>
@@ -1187,19 +1208,19 @@ onBeforeUnmount(() => {
                     <div v-if="log.runs.length > 0" class="mb-4 space-y-3">
                       <div class="rounded-lg border border-border-subtle bg-white/80 p-4 dark:bg-slate-900/60">
                         <p class="text-sm font-semibold text-slate-900 dark:text-white">
-                          {{ log.status === 'running' ? 'Preparação em andamento' : 'Preparação concluída' }}
+                          {{ log.status === 'running' ? 'Carga em andamento' : 'Carga concluída' }}
                         </p>
                         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {{ log.status === 'running'
-                            ? 'Aguarde a conclusão das etapas de schema, dados, treinamento e embeddings.'
-                            : 'As etapas abaixo registram o que foi aplicado no banco e na base de conhecimento.'
+                            ? 'O núcleo está validando e indexando os contextos.'
+                            : 'Resultado de cada contexto nesta carga.'
                           }}
                         </p>
                       </div>
 
                       <div
-                        v-for="run in log.runs"
-                        :key="run.dagRunId"
+                        v-for="(run, i) in log.runs"
+                        :key="run.dagId + i"
                         class="rounded-lg border border-border-subtle bg-white px-4 py-3 dark:bg-slate-900"
                       >
                         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1207,8 +1228,8 @@ onBeforeUnmount(() => {
                             <p class="text-sm font-semibold text-slate-900 dark:text-white">{{ run.label }}</p>
                             <p class="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">{{ run.dagId }}</p>
                           </div>
-                          <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                            {{ run.state }}
+                          <span :class="['text-xs font-semibold', runStateLabel(run.state).cls]">
+                            {{ runStateLabel(run.state).text }}
                           </span>
                         </div>
                         <div class="mt-3 grid gap-2 text-xs text-slate-500 dark:text-slate-400 md:grid-cols-2">
@@ -1218,157 +1239,6 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
 
-                    <div v-if="log.rows.length > 0" class="mb-4 flex flex-wrap gap-8 text-sm">
-                      <div class="flex items-center gap-2">
-                        <span class="text-slate-500 dark:text-slate-400">Total de registros analisados:</span>
-                        <span class="font-bold text-slate-900 dark:text-white">{{ log.totalRecords.toLocaleString('pt-BR') }}</span>
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-slate-500 dark:text-slate-400">Linhas alteradas:</span>
-                        <span class="font-bold text-slate-900 dark:text-white">{{ log.changedRecords }}</span>
-                      </div>
-                    </div>
-
-                    <div v-if="log.rows.length > 0" class="max-h-[480px] space-y-3 overflow-y-auto pr-1">
-                      <div
-                        v-for="diffRow in log.rows"
-                        :key="diffRow.tableName + diffRow.rowId"
-                        class="overflow-hidden rounded border border-gray-200 bg-white dark:border-white/10 dark:bg-slate-900"
-                      >
-                        <!-- Cabecalho da linha -->
-                        <div
-                          :class="[
-                            'flex items-center justify-between border-b px-4 py-2.5',
-                            diffRow.type === 'inserted'
-                              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/40'
-                              : diffRow.type === 'deleted'
-                                ? 'border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/40'
-                                : 'border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-slate-800'
-                          ]"
-                        >
-                          <div class="flex items-center gap-3">
-                            <span class="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                              {{ diffRow.tableName }}
-                            </span>
-                            <span class="font-mono text-sm font-semibold text-slate-700 dark:text-slate-100">{{ diffRow.rowId }}</span>
-                          </div>
-                          <span
-                            :class="[
-                              'text-xs font-semibold uppercase tracking-wider',
-                              diffRow.type === 'inserted'
-                                ? 'text-emerald-700 dark:text-emerald-400'
-                                : diffRow.type === 'deleted'
-                                  ? 'text-red-700 dark:text-red-400'
-                                  : 'text-slate-500 dark:text-slate-400'
-                            ]"
-                          >
-                            {{ diffRow.type === 'inserted' ? '+ Inserido' : diffRow.type === 'deleted' ? '− Removido' : 'Atualizado' }}
-                            <span v-if="diffRow.changedFields.length > 0"> &middot; {{ diffRow.changedFields.length }} campo(s)</span>
-                          </span>
-                        </div>
-
-                        <!-- Comparacao lado a lado -->
-                        <div class="grid grid-cols-2 divide-x divide-gray-200 dark:divide-white/10">
-                          <!-- ANTES -->
-                          <div>
-                            <div class="border-b border-gray-200 bg-gray-100/60 px-4 py-2 dark:border-white/10 dark:bg-slate-800/80">
-                              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">Antes</span>
-                            </div>
-                            <div class="divide-y divide-gray-100 dark:divide-white/5">
-                              <template v-if="diffRow.before">
-                                <div
-                                  v-for="field in factFields"
-                                  :key="'b-' + field.key"
-                                  :class="[
-                                    'flex items-center gap-4 px-4 py-2',
-                                    diffRow.type === 'deleted'
-                                      ? 'bg-red-50/60 dark:bg-red-900/10'
-                                      : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                        ? 'border-l-2 border-amber-400 bg-amber-100 dark:bg-amber-900/30'
-                                        : ''
-                                  ]"
-                                >
-                                  <span
-                                    :class="[
-                                      'w-44 shrink-0 text-xs',
-                                      diffRow.type === 'deleted'
-                                        ? 'font-medium text-red-700 dark:text-red-400'
-                                        : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                          ? 'font-semibold text-amber-800 dark:text-amber-300'
-                                          : 'text-slate-500 dark:text-slate-400'
-                                    ]"
-                                  >{{ field.label }}</span>
-                                  <span
-                                    :class="[
-                                      'text-xs',
-                                      diffRow.type === 'deleted'
-                                        ? 'font-medium text-red-900 dark:text-red-300'
-                                        : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                          ? 'font-semibold text-slate-900 dark:text-white'
-                                          : 'text-slate-700 dark:text-slate-200'
-                                    ]"
-                                  >{{ diffRow.before[field.key] }}</span>
-                                </div>
-                              </template>
-                              <div v-else class="px-4 py-4 text-sm italic text-slate-400 dark:text-slate-500">Registro novo &mdash; sem estado anterior.</div>
-                            </div>
-                          </div>
-
-                          <!-- DEPOIS -->
-                          <div>
-                            <div class="border-b border-gray-200 bg-gray-100/60 px-4 py-2 dark:border-white/10 dark:bg-slate-800/80">
-                              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">Depois</span>
-                            </div>
-                            <div class="divide-y divide-gray-100 dark:divide-white/5">
-                              <template v-if="diffRow.after">
-                                <div
-                                  v-for="field in factFields"
-                                  :key="'a-' + field.key"
-                                  :class="[
-                                    'flex items-center gap-4 px-4 py-2',
-                                    diffRow.type === 'inserted'
-                                      ? 'bg-emerald-50/60 dark:bg-emerald-900/10'
-                                      : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                        ? 'border-l-2 border-amber-400 bg-amber-100 dark:bg-amber-900/30'
-                                        : ''
-                                  ]"
-                                >
-                                  <span
-                                    :class="[
-                                      'w-44 shrink-0 text-xs',
-                                      diffRow.type === 'inserted'
-                                        ? 'font-medium text-emerald-700 dark:text-emerald-400'
-                                        : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                          ? 'font-semibold text-amber-800 dark:text-amber-300'
-                                          : 'text-slate-500 dark:text-slate-400'
-                                    ]"
-                                  >{{ field.label }}</span>
-                                  <span
-                                    :class="[
-                                      'text-xs',
-                                      diffRow.type === 'inserted'
-                                        ? 'font-medium text-emerald-900 dark:text-emerald-300'
-                                        : (diffRow.type === 'updated' && diffRow.changedFields.includes(field.key))
-                                          ? 'font-semibold text-slate-900 dark:text-white'
-                                          : 'text-slate-700 dark:text-slate-200'
-                                    ]"
-                                  >{{ diffRow.after[field.key] }}</span>
-                                </div>
-                              </template>
-                              <div v-else class="px-4 py-4 text-sm italic text-slate-400 dark:text-slate-500">Registro removido.</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <p v-if="log.rows.length === 0" class="rounded border border-dashed border-border-subtle bg-white/70 px-4 py-3 text-sm text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
-                      O detalhamento por registros ainda nao esta disponivel nesta tela. Quando necessario, ele sera obtido por consultas ao banco.
-                    </p>
-
-                    <p v-if="log.changedRecords > log.rows.length" class="mt-3 text-center text-xs text-slate-400">
-                      Exibindo {{ log.rows.length }} de {{ log.changedRecords }} linhas registradas.
-                    </p>
                   </template>
                 </div>
               </Transition>
@@ -1376,7 +1246,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-else class="flex flex-col items-center justify-center py-12 text-center text-slate-500">
             <Calendar class="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
-            <p>Nenhum preparo de dados encontrado para o filtro aplicado.</p>
+            <p>Nenhuma carga de contextos encontrada para o filtro aplicado.</p>
           </div>
 
           <!-- Paginacao -->

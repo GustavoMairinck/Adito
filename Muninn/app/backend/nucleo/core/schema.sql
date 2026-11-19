@@ -1,9 +1,8 @@
--- Esquema do app.db, idêntico ao que as migrations do Django criavam (só as tabelas do app).
--- Instalações antigas já têm estas tabelas (e as do Django contrib, que ficam intocadas).
+-- Esquema do app.db (versão 2). Bancos antigos chegam aqui pela migração em core/schema.py.
 
 CREATE TABLE IF NOT EXISTS "core_tenant" ("id" char(32) NOT NULL PRIMARY KEY, "name" varchar(255) NOT NULL, "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL);
 
-CREATE TABLE IF NOT EXISTS "core_user" ("password" varchar(128) NOT NULL, "last_login" datetime NULL, "is_superuser" bool NOT NULL, "username" varchar(150) NOT NULL UNIQUE, "first_name" varchar(150) NOT NULL, "last_name" varchar(150) NOT NULL, "email" varchar(254) NOT NULL, "is_staff" bool NOT NULL, "is_active" bool NOT NULL, "date_joined" datetime NOT NULL, "id" char(32) NOT NULL PRIMARY KEY, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "tenant_id" char(32) NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE IF NOT EXISTS "core_user" ("id" char(32) NOT NULL PRIMARY KEY, "username" varchar(150) NOT NULL UNIQUE, "first_name" varchar(150) NOT NULL, "last_name" varchar(150) NOT NULL, "email" varchar(254) NOT NULL, "is_staff" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "tenant_id" char(32) NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED);
 CREATE INDEX IF NOT EXISTS "core_user_tenant_id_8a6e30cc" ON "core_user" ("tenant_id");
 
 CREATE TABLE IF NOT EXISTS "core_contexto" ("id" char(32) NOT NULL PRIMARY KEY, "slug" varchar(100) NOT NULL, "name" varchar(255) NOT NULL, "description" text NOT NULL, "views" text NOT NULL CHECK ((JSON_VALID("views") OR "views" IS NULL)), "rules" text NOT NULL, "llm_row_limit" integer unsigned NULL CHECK ("llm_row_limit" >= 0), "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "tenant_id" char(32) NOT NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED, CONSTRAINT "uniq_contexto_tenant_slug" UNIQUE ("tenant_id", "slug"));

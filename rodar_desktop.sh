@@ -23,8 +23,41 @@ VITE_PID=""
 cleanup() { [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
+# Só reaproveita o Vite da 5173 se ele for desta pasta. Um Vite de outra cópia do projeto
+# (outra worktree, a pasta principal) serviria outro front para este núcleo.
+FRONT_DIR="$(cd "$APP/frontend-vue" && pwd -P)"
+pasta_do_vite() {
+  local pid
+  pid="$(lsof -t -iTCP:5173 -sTCP:LISTEN 2>/dev/null | head -1 || true)"
+  [ -n "$pid" ] || return 0
+  echo "$pid $(readlink -f "/proc/$pid/cwd" 2>/dev/null || lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')"
+}
+
 if curl -s -o /dev/null http://localhost:5173; then
-  echo "→ Vite já está rodando na 5173; reaproveitando."
+  read -r OUTRO_PID OUTRA_PASTA <<<"$(pasta_do_vite)" || true
+  if [ "${OUTRA_PASTA:-}" != "$FRONT_DIR" ]; then
+    if [ -z "${OUTRO_PID:-}" ]; then
+      echo "A porta 5173 está ocupada por um processo que não dá para identificar. Encerre-o e rode de novo."
+      exit 1
+    fi
+    # Só encerra se for mesmo um Vite; qualquer outro serviço na 5173 fica com o usuário.
+    OUTRO_CMD="$(ps -p "$OUTRO_PID" -o args= 2>/dev/null || true)"
+    if [[ "$OUTRO_CMD" != *vite* ]]; then
+      echo "A porta 5173 está ocupada por outro programa (pid $OUTRO_PID: ${OUTRO_CMD:-desconhecido}). Encerre-o e rode de novo."
+      exit 1
+    fi
+    echo "→ O Vite na 5173 é de outra pasta (${OUTRA_PASTA:-desconhecida}); encerrando para subir o desta."
+    kill "$OUTRO_PID" 2>/dev/null || true
+    for _ in $(seq 1 20); do curl -s -o /dev/null http://localhost:5173 || break; sleep 0.5; done
+    if curl -s -o /dev/null http://localhost:5173; then
+      echo "O Vite da outra pasta (pid $OUTRO_PID) não encerrou. Encerre-o e rode de novo."
+      exit 1
+    fi
+  fi
+fi
+
+if curl -s -o /dev/null http://localhost:5173; then
+  echo "→ Vite desta pasta já está rodando na 5173; reaproveitando."
 else
   echo "→ Subindo o Vite (log: $VITE_LOG)..."
   (cd "$APP/frontend-vue" && exec ./node_modules/.bin/vite) >"$VITE_LOG" 2>&1 &

@@ -6,7 +6,9 @@
 **Prioridade:** Média
 **Story Points:** -
 **Sprint:** -
-**Status:** Done
+**Status:** Removida
+
+> **Removida no PR #65** (commit `593775f`, mesclado em 2026-11-19): a demonstração de vendas herdada do Oráculo-ESX saiu do Muninn, que passou a ter só o contexto `pesquisa-extensao-ifes`. Depois, a migração da versão 2 do `app.db` apagou o contexto `exemplo-vendas` que restava em instalações antigas, e o núcleo passou a mover cópias dessa pasta para `contexts.removidos/`.
 
 ---
 
