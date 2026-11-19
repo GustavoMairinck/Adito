@@ -8,6 +8,7 @@
 *.env
 __pycache__/
 *.py[cod]
+.venv
 *.duckdb
 *.duckdb.wal
 /ScrumAIDev-*

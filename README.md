@@ -11,6 +11,30 @@ Os dados vêm dos pipelines, painéis e agentes do **[ifesserra-lab](https://git
 
 ---
 
+## 🛠️ Comandos de Desenvolvimento (Makefile)
+
+O projeto conta com um **Makefile centralizado na raiz** para agilizar todo o ciclo de desenvolvimento, preparação de dados e testes:
+
+| Comando | O que faz |
+|---|---|
+| `make` ou `make help` | Exibe o menu com todos os comandos disponíveis e descrições |
+| `make all` ou `make dev` | **Atalho mestre:** verifica setup, reconstrói o banco/fatos e sobe o app desktop completo |
+| `make desktop` | Inicia a aplicação desktop (`./rodar_desktop.sh`) com a base SQLite existente |
+| `make db` | Reconstrói o banco relacional e as 6 Views dinâmicas das fatos no SQLite (~1.2s) |
+| `make etl` | Ciclo completo de ETL: extração externa na web, cruzamento e carga no SQLite |
+| `make etl-extract` | Executa a extração completa de dados da web (SRC, SigPesq, CNPq, Lattes) |
+| `make etl-ver` | Abre o explorador interativo de dados acadêmicos no terminal |
+| `make test` | Executa sequencialmente as suítes de testes automatizados do backend/ETL (ETL, núcleo, STDIO, contrato RPC) |
+| `make setup` | Cria os ambientes virtuais Python (`.venv` do app e do ETL) e instala todas as dependências |
+| `make clean` | Remove arquivos temporários de log do Muninn, caches de compilação e pytest |
+| `make clean-all` | Limpa também os diretórios de build gerados pelo frontend e Tauri (`dist/`, `target/`) |
+
+> **Primeira vez no projeto?** Execute `make setup` para configurar os ambientes virtuais e dependências e depois `make dev` para iniciar o sistema.  
+> **Compatibilidade de Sistema Operacional:** O `Makefile` foi projetado para ambientes **Linux**, **WSL** (Windows Subsystem for Linux) e **macOS** (com bash). No Windows nativo, recomenda-se executar os comandos via WSL.
+
+
+---
+
 ## Painéis em produção
 
 | # | Painel | O que é |

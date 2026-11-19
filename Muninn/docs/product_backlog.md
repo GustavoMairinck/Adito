@@ -12,6 +12,10 @@ Extração do bruto de SRC, SigPesq, CNPq/DGP e Lattes, cruzamento das bases por
 Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada analítica (6 VIEWs de fatos dinâmicas) em um único banco SQLite (`dados.db`) gerado diretamente por script Python (`sqlite3`), eliminando Docker, PostgreSQL, JSONs intermediários e DuckDB, e adaptando o backend núcleo com segurança estrita (`mode=ro`, `set_authorizer`), busca sem acentos e transpilação `sqlglot`. Origem: `docs/discovery/migracao-arquitetura-sqlite.md`, `docs/requirements/migracao-arquitetura-sqlite.md` e ADRs 0001 a 0004.
 - **Stories**: US-SQLITE-01 a US-SQLITE-04.
 
+### EPIC-09: Produtividade de Desenvolvimento & Automação Local (DevEx)
+Criação de ponto de entrada único via Makefile na raiz do monorepo para unificar setup de ambientes virtuais e dependências, reconstrução do banco relacional com fatos em < 5s, inicialização do app desktop e execução consolidada das suítes de testes automatizados. Origem: `docs/discovery/automacao-makefiles-devex.md` e `docs/requirements/automacao-makefiles-devex.md`.
+- **Stories**: US-DEVEX-01.
+
 ---
 
 ## User Stories Priorizadas
@@ -42,6 +46,17 @@ Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada an
 > Total EPIC-08: 18 pts (100% Concluído em 18/11/2026).  
 > - **Vertical Slice 1 (10 pts):** `US-SQLITE-01` + `US-SQLITE-02` (Geração e validação do banco `dados.db` 100% funcional em SQLite). Concluído.  
 > - **Vertical Slice 2 (8 pts):** `US-SQLITE-03` + `US-SQLITE-04` (Integração segura com backend núcleo, agente de BI resiliente e expurgo de legados). Concluído.  
+
+---
+
+### 🗂️ EPIC-09 — Produtividade de Desenvolvimento & Automação Local (DevEx) (aprovado em 18/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-DEVEX-01](stories/US-DEVEX-01_automacao-comandos-makefile-unico.md) | Automação de Comandos do Desenvolvedor via Makefile Único | EPIC-09 | 3 | 🔴 Alta | — | FR01–FR09, BR01–BR04, NFR01–NFR03 | ✅ Concluída |
+
+> Total EPIC-09: 3 pts (100% Concluído em 18/11/2026).  
+> - **Vertical Slice 1 (3 pts):** `US-DEVEX-01` (Implementação do Makefile raiz, testes operacionais dos alvos e documentação no README). Concluído.
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
