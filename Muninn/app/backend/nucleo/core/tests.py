@@ -966,5 +966,50 @@ class AgentesRevisaoTests(unittest.TestCase):
         self.assertIn("research group", prompt)
 
 
+class EvalAcuraciaComparatorTests(unittest.TestCase):
+    """Valida comparador semântico e integridade do dataset gabarito (US-QA-04)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        scripts_dir = str(RAIZ_REPO / "Muninn" / "app" / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+
+    def test_compare_result_sets_tolera_aliases_float_acentos_e_ordem(self) -> None:
+        from eval_acuracia import compare_result_sets
+
+        ok, _ = compare_result_sets(
+            [{"grande_area": "Ciências Exatas", "total": 100.0}],
+            [{"area": "ciencias exatas", "qtd": 100.02}],
+        )
+        self.assertTrue(ok)
+
+        ok_ord, _ = compare_result_sets(
+            [{"ano": 2024, "n": 10}, {"ano": 2023, "n": 5}],
+            [{"ano": 2023, "n": 5}, {"ano": 2024, "n": 10}],
+            order_matters=False,
+        )
+        self.assertTrue(ok_ord)
+
+        fail_ord, _ = compare_result_sets(
+            [{"ano": 2024, "n": 10}, {"ano": 2023, "n": 5}],
+            [{"ano": 2023, "n": 5}, {"ano": 2024, "n": 10}],
+            order_matters=True,
+        )
+        self.assertFalse(fail_ord)
+
+    def test_eval_dataset_sem_data_leakage_com_examples_json(self) -> None:
+        dataset = json.loads((RAIZ_REPO / "Muninn" / "app" / "scripts" / "eval_dataset.json").read_text(encoding="utf-8"))
+        examples = json.loads(
+            (RAIZ_REPO / "Muninn" / "app" / "contexts" / "pesquisa-extensao-ifes" / "examples.json").read_text(encoding="utf-8")
+        )
+        ex_questions = {e["question"].strip().lower() for e in examples}
+        self.assertGreaterEqual(len(dataset), 20)
+        for case in dataset:
+            self.assertNotIn(case["pergunta"].strip().lower(), ex_questions, case["id"])
+            if case["tipo"] == "analytics":
+                self.assertTrue(case.get("sql_gabarito"), case["id"])
+
+
 if __name__ == "__main__":
     unittest.main()
