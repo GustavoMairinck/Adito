@@ -1,7 +1,7 @@
 """
 Núcleo local do Muninn falando com o Tauri por stdin/stdout, uma mensagem JSON por linha.
 
-Pedido     (Tauri → núcleo): {"id": 7, "method": "explorer.rows", "params": {...}}
+Pedido     (Tauri → núcleo): {"id": 7, "method": "dashboard.kpis", "params": {...}}
 Resposta   (núcleo → Tauri): {"id": 7, "ok": true, "result": ...}
 Erro                         {"id": 7, "ok": false, "error": {"status": 404, "data": {...}}}
 Evento de stream             {"id": 7, "event": "token", "data": {...}}   (antes da resposta)

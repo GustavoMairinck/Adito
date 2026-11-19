@@ -31,7 +31,7 @@ Decisões tomadas para levar o Oraculo-ESX (web, em Docker) para um aplicativo d
 | [US-012](stories/US-012_limite-linhas-llm.md) | Respeitar o limite de linhas do contexto no envio ao LLM | Backlog |
 | [US-013](stories/US-013_backend-orfao.md) | Não deixar o backend rodando quando o app morre | Done |
 | [US-014](stories/US-014_busca-local-nomes.md) | Resolver nomes de pessoas sem enviá-los à nuvem | Backlog |
-| [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard e Explorar Dados por contexto | Backlog |
+| [US-015](stories/US-015_filtros-por-contexto.md) | Filtros do dashboard por contexto | Backlog |
 | [US-016](stories/US-016_nucleo-local-sem-http.md) | Núcleo local sem servidor HTTP | In Review |
 
 ## ETL do Muninn (EPIC-07)

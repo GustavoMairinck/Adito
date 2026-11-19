@@ -1,7 +1,7 @@
 /**
  * Chamadas ao núcleo local do Muninn (Python), via Tauri, sem servidor HTTP.
  *
- * O front chama `call('explorer.rows', {...})`; o Tauri escreve o pedido no stdin do núcleo
+ * O front chama `call('dashboard.kpis', {...})`; o Tauri escreve o pedido no stdin do núcleo
  * e devolve a resposta que volta pelo stdout (ver src-tauri/src/lib.rs e backend/nucleo/rpc/server.py).
  * `stream` faz o mesmo e entrega os eventos (token, status, result, error) antes do fim.
  *
