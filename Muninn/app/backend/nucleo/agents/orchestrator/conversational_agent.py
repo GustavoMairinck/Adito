@@ -2,18 +2,18 @@ from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, Human
 from .state import MultiAgentState
 from agents.config import CONVERSATIONAL_SYSTEM_PROMPT, get_chat_llm
 
-# Só as últimas mensagens vão para o LLM; respostas longas (ex.: dados do bi_agent) são cortadas.
+# Só as últimas mensagens vão para o LLM, e cada uma (do usuário ou do assistente) é cortada.
 MAX_HISTORY_MESSAGES = 12
 MAX_MESSAGE_CHARS = 1500
 
 
-def history_for_llm(messages: list[BaseMessage]) -> list[BaseMessage]:
+def history_for_llm(messages: list[BaseMessage], limit: int = MAX_HISTORY_MESSAGES) -> list[BaseMessage]:
     history = [m for m in messages if hasattr(m, "content") and m.content and str(m.content).strip()]
-    history = history[-MAX_HISTORY_MESSAGES:]
+    history = history[-limit:]
     trimmed = []
     for m in history:
         text = str(m.content)
-        if isinstance(m, AIMessage) and len(text) > MAX_MESSAGE_CHARS:
+        if len(text) > MAX_MESSAGE_CHARS:
             m = m.model_copy(update={"content": text[:MAX_MESSAGE_CHARS] + " […]"})
         trimmed.append(m)
     return trimmed

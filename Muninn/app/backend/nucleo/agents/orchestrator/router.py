@@ -3,6 +3,10 @@ from .state import MultiAgentState
 from .models import RouterDecision
 from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, get_chat_llm
 from .guard import INTENT_BLOCKED, detect_injection
+from .conversational_agent import history_for_llm
+
+# Mensagens anteriores enviadas ao roteador como contexto (cortadas como no conversacional).
+ROUTER_HISTORY_MESSAGES = 8
 
 mcp_tools = []
 
@@ -24,7 +28,7 @@ async def orchestrator_node(state: MultiAgentState):
     # O orquestrador recebe contexto para resolver follow-ups ("E em 2025?", "E por campus?"),
     # mas o prompt instrui a rotear APENAS a última mensagem — nunca re-rotear perguntas antigas.
     all_messages = state.get("messages", [])
-    context_messages = all_messages[:-1][-8:] if len(all_messages) > 1 else []
+    context_messages = history_for_llm(all_messages[:-1], ROUTER_HISTORY_MESSAGES) if len(all_messages) > 1 else []
     current_message = all_messages[-1:] if all_messages else [HumanMessage(content=state.get("user_input", ""))]
     messages = [SystemMessage(content=system_prompt)] + context_messages + current_message
     decision: RouterDecision = await structured_llm.ainvoke(messages)

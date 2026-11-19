@@ -110,7 +110,8 @@ def answer_from_rows(question: str, rows: list[dict], limit: int) -> str | None:
     )
     try:
         resposta = get_chat_llm(temperature=0.0).invoke(
-            [SystemMessage(content=ANSWER_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+            [SystemMessage(content=ANSWER_SYSTEM_PROMPT), HumanMessage(content=prompt)],
+            config={"callbacks": langfuse_callbacks(), "run_name": "bi_answer_from_rows"},
         )
         texto = (resposta.text or "").strip()
         return texto or None

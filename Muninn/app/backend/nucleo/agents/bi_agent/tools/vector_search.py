@@ -1,5 +1,5 @@
 import json
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,8 +33,14 @@ def configure_vector_search(
     contexto: Contexto,
     embedder: Embeddings,
     top_k: int = TEXT_EMBEDDING_TOP_K,
-) -> None:
-    _busca.set(_Busca(contexto=contexto, embedder=embedder, top_k=top_k))
+) -> Token:
+    """Liga a busca desta execução; devolva o token a `reset_vector_search` ao terminar."""
+    return _busca.set(_Busca(contexto=contexto, embedder=embedder, top_k=top_k))
+
+
+def reset_vector_search(token: Token) -> None:
+    """Solta o contexto e o embedder da execução (não ficam presos ao contexto da thread)."""
+    _busca.reset(token)
 
 
 def vector_search_results() -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]]]:

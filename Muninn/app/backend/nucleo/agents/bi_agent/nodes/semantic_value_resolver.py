@@ -21,6 +21,7 @@ from ..config import BI_VALUE_RESOLVER_SYSTEM_PROMPT, ValueResolverResponse
 from ..state import BiAgentState
 from ..tools.vector_search import (
     configure_vector_search,
+    reset_vector_search,
     search_analytics_values,
     vector_search_results,
 )
@@ -64,22 +65,23 @@ def semantic_value_resolver(
         log_node_end("semantic_value_resolver", "sem candidatos")
         return _empty_resolution()
 
-    configure_vector_search(contexto=contexto, embedder=embedder, top_k=top_k)
-
+    token = configure_vector_search(contexto=contexto, embedder=embedder, top_k=top_k)
     try:
-        agent = create_react_agent(
-            model=llm_model,
-            tools=[search_analytics_values],
-            prompt=BI_VALUE_RESOLVER_SYSTEM_PROMPT,
-            response_format=ValueResolverResponse,
-        )
-        result = agent.invoke({"messages": [{"role": "user", "content": user_input}]})
-    except Exception as exc:
-        log_error("rewrite", f"Falha no agente resolvedor de valores: {exc}")
-        log_node_end("semantic_value_resolver", "falha; sem candidatos")
-        return _empty_resolution()
-
-    collected_candidates, searched_terms, search_calls = vector_search_results()
+        try:
+            agent = create_react_agent(
+                model=llm_model,
+                tools=[search_analytics_values],
+                prompt=BI_VALUE_RESOLVER_SYSTEM_PROMPT,
+                response_format=ValueResolverResponse,
+            )
+            result = agent.invoke({"messages": [{"role": "user", "content": user_input}]})
+        except Exception as exc:
+            log_error("rewrite", f"Falha no agente resolvedor de valores: {exc}")
+            log_node_end("semantic_value_resolver", "falha; sem candidatos")
+            return _empty_resolution()
+        collected_candidates, searched_terms, search_calls = vector_search_results()
+    finally:
+        reset_vector_search(token)
     structured = result.get("structured_response")
     if structured:
         searched_terms = searched_terms or list(structured.searched_terms)

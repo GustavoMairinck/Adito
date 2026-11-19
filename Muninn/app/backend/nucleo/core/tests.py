@@ -10,7 +10,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents.bi_agent.agent import BIAgent
 from agents.bi_agent.sql_security import validate_read_only_sql
@@ -775,6 +775,33 @@ class AgentesMemoriaEscopoTests(unittest.TestCase):
         self.assertEqual(len(historico), MAX_HISTORY_MESSAGES)
         self.assertLessEqual(len(historico[-1].content), MAX_MESSAGE_CHARS + 10)
 
+        # Mensagens longas do usuário também são cortadas.
+        longas = history_for_llm([HumanMessage(content="y" * 5000)])
+        self.assertLessEqual(len(longas[0].content), MAX_MESSAGE_CHARS + 10)
+
+    def test_roteador_corta_o_historico_e_mantem_a_pergunta(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from agents.orchestrator import router
+        from agents.orchestrator.conversational_agent import MAX_MESSAGE_CHARS
+        from agents.orchestrator.models import AgentCall, RouterDecision
+
+        estruturado = MagicMock()
+        estruturado.ainvoke = AsyncMock(return_value=RouterDecision(
+            calls=[AgentCall(intent="conversational", delegation_instruction="oi")]
+        ))
+        llm = MagicMock()
+        llm.with_structured_output.return_value = estruturado
+        mensagens = [HumanMessage(content=f"p{i}") for i in range(10)] + [AIMessage(content="z" * 5000)]
+        mensagens.append(HumanMessage(content="pergunta atual"))
+        with patch.object(router, "get_chat_llm", return_value=llm):
+            asyncio.run(router.orchestrator_node({"messages": mensagens, "user_input": "pergunta atual"}))
+
+        enviadas = estruturado.ainvoke.call_args[0][0]
+        contexto = enviadas[1:-1]
+        self.assertEqual(len(contexto), router.ROUTER_HISTORY_MESSAGES)
+        self.assertTrue(all(len(str(m.content)) <= MAX_MESSAGE_CHARS + 10 for m in contexto))
+        self.assertEqual(enviadas[-1].content, "pergunta atual")
+
 
 class AgentesRevisaoTests(unittest.TestCase):
     """Correções da revisão dos agentes de 2026-11-18 (LLM e banco simulados)."""
@@ -830,6 +857,24 @@ class AgentesRevisaoTests(unittest.TestCase):
             self.assertEqual(termos, [f"termo-{nome}"])
             self.assertEqual([c["embedding_text"] for c in candidatos], [f"{nome}:termo-{nome}"])
 
+
+    def test_busca_de_valores_e_solta_ao_terminar(self):
+        from agents.bi_agent.tools import vector_search as vs
+
+        token = vs.configure_vector_search(contexto="X", embedder=MagicMock(), top_k=3)
+        self.assertIsNotNone(vs._busca.get())
+        vs.reset_vector_search(token)
+        self.assertIsNone(vs._busca.get())
+
+    def test_resposta_dos_dados_passa_callbacks_do_langfuse(self):
+        from agents.bi_agent import tool
+
+        llm = MagicMock()
+        llm.invoke.return_value = MagicMock(text="São 3 projetos.")
+        with patch.object(tool, "get_chat_llm", return_value=llm), \
+                patch.object(tool, "langfuse_callbacks", return_value=["cb"]):
+            self.assertEqual(tool.answer_from_rows("quantos?", [{"total": 3}], 20), "São 3 projetos.")
+        self.assertEqual(llm.invoke.call_args.kwargs["config"]["callbacks"], ["cb"])
     def _run_bi(self, resultado_ask, resposta_llm="Existem 42 projetos.", limite=7):
         from langchain_core.messages import AIMessage
         from agents.bi_agent import tool
