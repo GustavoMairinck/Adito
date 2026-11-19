@@ -32,19 +32,35 @@ RESPOSTA_BLOQUEADA = (
 )
 
 # Texto comparado já sem acentos e em minúsculas (ver _normalizar).
+#
+# "orientação" e "regra" são termos do domínio (orientações de mestrado, regras do edital) e
+# "atue/aja como" aparece em filtros ("em que o docente atue como coordenador"). Por isso esses
+# termos só contam quando apontam para o próprio assistente: possessivo ("suas regras") ou
+# qualificador ("do sistema", "anteriores", "acima"). O roteador (intent `blocked`) cobre o resto.
+_VERBO_DESCARTE = r"\b(?:ignor|esquec|desconsider|descart)\w*\s+"
+_PALAVRAS = r"(?:\w+\s+){0,3}"
+_POSSESSIVO = r"(?:suas?|seus?|teus?|tuas?)\s+"
+_QUALIFICADOR = (
+    r"\s+(?:do\s+sistema|de\s+sistema|iniciais|originais|previas|acima|"
+    r"anteriores(?!\s+(?:a|ao|aos|as|de|do|da|dos|das)\b))"
+)
 _PADROES_INJECAO = [
-    # sobrescrever instruções (pt e en)
-    r"\b(?:ignor|esquec|desconsider|descart)\w*\s+(?:\w+\s+){0,4}(?:instruc|regra|prompt|orientac)\w*",
-    r"\b(?:ignore|disregard|forget|override)\s+(?:\w+\s+){0,3}(?:instructions?|rules|prompt)",
+    # sobrescrever instruções (pt)
+    _VERBO_DESCARTE + _PALAVRAS + r"(?:instruc(?!\w*\s+normativ)|prompt|diretriz)\w*",
+    _VERBO_DESCARTE + _PALAVRAS + _POSSESSIVO + r"(?:\w+\s+)?(?:regra|orientac)\w*",
+    _VERBO_DESCARTE + _PALAVRAS + r"(?:regra|orientac)\w*" + _QUALIFICADOR,
+    # sobrescrever instruções (en)
+    r"\b(?:ignore|disregard|forget|override)\s+(?:\w+\s+){0,3}(?:instructions?|prompt)",
+    r"\b(?:ignore|disregard|forget|override)\s+(?:\w+\s+){0,2}(?:your|previous|prior|above|system)\s+rules",
     # extrair o prompt
     r"\b(?:system\s*prompt|prompt\s+(?:do\s+)?sistema|instrucoes\s+(?:do\s+)?sistema)",
     r"\b(?:mostr|revel|exib|imprim|repit|repet|copi|reveal|show|print|repeat)\w*\s+"
-    r"(?:\w+\s+){0,4}(?:seu|seus|sua|suas|teu|tuas|your)\s+(?:prompt|instruc\w*|instructions?|regras|rules)",
+    r"(?:\w+\s+){0,4}(?:(?:seu|seus|sua|suas|teu|tuas|your)\s+(?:instruc\w*|instructions?|regras|rules)|prompt)",
     # trocar de papel
     r"\b(?:modo|mode)\s+(?:desenvolvedor|developer|dan|jailbreak|deus|god|irrestrito|sem\s+restric\w*)\b",
     r"\bjailbreak\b",
     r"\ba\s+partir\s+de\s+agora\s+(?:voce\s+)?(?:e|sera|vai\s+ser|age|atua|responde)\b",
-    r"\b(?:finja|finge|pretend|act\s+as|aja\s+como|atue\s+como)\b",
+    r"\b(?:finja|finge|pretend|act\s+as)\b",
     # marcação imitando mensagens de sistema
     r"</?\s*(?:system|instructions?|prompt)\s*>",
     r"\[\s*(?:system|sistema)\s*\]",
