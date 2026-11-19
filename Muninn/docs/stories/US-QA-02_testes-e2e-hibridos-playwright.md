@@ -75,7 +75,7 @@ Nenhum ponto pendente (dependência `@playwright/test` aprovada no Gate G1).
 
 ### Dependencias
 - [x] Aprovação da `devDependency`: `@playwright/test` (aprovada no Gate G1).
-- [ ] `US-QA-01` concluída (base de testes do frontend organizada).
+- [x] `US-QA-01` concluída (base de testes do frontend organizada).
 
 ### Consideracoes de Performance
 - `make test-e2e` deve completar em < 45s (`NFR01`).

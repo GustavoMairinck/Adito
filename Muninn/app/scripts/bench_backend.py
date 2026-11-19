@@ -196,7 +196,12 @@ def prepare_isolated_data_dir(banco_path: Path) -> Path:
     return temp_dir
 
 
-def benchmark_views(data_dir: Path, iterations: int, warmup: int) -> list[LatencyStats]:
+def benchmark_views(
+    data_dir: Path,
+    iterations: int,
+    warmup: int,
+    view_slo_ms: float = DEFAULT_SLOS_MS["view_query_p95_ms"],
+) -> list[LatencyStats]:
     """Mede consultas analíticas nas 6 views fato via `core.datastore.connect_dados`."""
     if str(NUCLEO_DIR) not in sys.path:
         sys.path.insert(0, str(NUCLEO_DIR))
@@ -220,7 +225,7 @@ def benchmark_views(data_dir: Path, iterations: int, warmup: int) -> list[Latenc
                     raise RuntimeError(f"Consulta retornou None na view {view_name}")
                 samples.append(elapsed_ms)
 
-            results.append(summarize_samples(view_name, samples, DEFAULT_SLOS_MS["view_query_p95_ms"]))
+            results.append(summarize_samples(view_name, samples, view_slo_ms))
     finally:
         close_dados()
     return results
@@ -337,7 +342,20 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=20, help="Requisições concorrentes na rajada STDIO")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Diretório de saída dos relatórios")
     parser.add_argument("--no-fail", action="store_true", help="Não retorna exit code 1 se algum SLO estourar")
+    parser.add_argument("--slo-cold-start", type=float, default=DEFAULT_SLOS_MS["cold_start_ms"], help="SLO de cold-start em ms")
+    parser.add_argument("--slo-health", type=float, default=DEFAULT_SLOS_MS["rpc_health_p95_ms"], help="SLO p95 de health/me em ms")
+    parser.add_argument("--slo-dashboard", type=float, default=DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"], help="SLO p95 do dashboard em ms")
+    parser.add_argument("--slo-explorer", type=float, default=DEFAULT_SLOS_MS["rpc_explorer_p95_ms"], help="SLO p95 do explorer em ms")
+    parser.add_argument("--slo-view", type=float, default=DEFAULT_SLOS_MS["view_query_p95_ms"], help="SLO p95 das views fato em ms")
     args = parser.parse_args()
+
+    slos_ms = {
+        "cold_start_ms": args.slo_cold_start,
+        "rpc_health_p95_ms": args.slo_health,
+        "rpc_dashboard_p95_ms": args.slo_dashboard,
+        "rpc_explorer_p95_ms": args.slo_explorer,
+        "view_query_p95_ms": args.slo_view,
+    }
 
     if not args.banco.is_file():
         print(f"❌ Erro: banco SQLite não encontrado em '{args.banco}'.", file=sys.stderr)
@@ -356,7 +374,7 @@ def main() -> int:
         if ready.get("event") != "ready":
             raise RuntimeError(f"Evento inicial inesperado do núcleo: {ready}")
         cold_startup_ms = ready.get("data", {}).get("startup_ms", cold_wall_ms)
-        cold_passed = cold_wall_ms <= DEFAULT_SLOS_MS["cold_start_ms"]
+        cold_passed = cold_wall_ms <= slos_ms["cold_start_ms"]
         print(f"  [1/4] Cold-start: {cold_wall_ms} ms (interno: {cold_startup_ms} ms) {'✓' if cold_passed else '✗'}")
 
         # Identifica contexto real carregado
@@ -367,18 +385,18 @@ def main() -> int:
 
         # 2. RPCs críticas
         rpc_cases: list[tuple[str, str, dict[str, Any], float]] = [
-            ("health", "health", {}, DEFAULT_SLOS_MS["rpc_health_p95_ms"]),
-            ("me", "me", {}, DEFAULT_SLOS_MS["rpc_health_p95_ms"]),
-            ("contextos.list", "contextos.list", {}, DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"]),
-            ("dashboard.kpis", "dashboard.kpis", {}, DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"]),
-            ("dashboard.charts", "dashboard.charts", {}, DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"]),
-            ("dashboard.top_projects", "dashboard.top_projects", {}, DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"]),
-            ("explorer.tables", "explorer.tables", {"contexto_id": contexto_id}, DEFAULT_SLOS_MS["rpc_explorer_p95_ms"]),
+            ("health", "health", {}, slos_ms["rpc_health_p95_ms"]),
+            ("me", "me", {}, slos_ms["rpc_health_p95_ms"]),
+            ("contextos.list", "contextos.list", {}, slos_ms["rpc_dashboard_p95_ms"]),
+            ("dashboard.kpis", "dashboard.kpis", {}, slos_ms["rpc_dashboard_p95_ms"]),
+            ("dashboard.charts", "dashboard.charts", {}, slos_ms["rpc_dashboard_p95_ms"]),
+            ("dashboard.top_projects", "dashboard.top_projects", {}, slos_ms["rpc_dashboard_p95_ms"]),
+            ("explorer.tables", "explorer.tables", {"contexto_id": contexto_id}, slos_ms["rpc_explorer_p95_ms"]),
             (
                 "explorer.rows (padrão)",
                 "explorer.rows",
                 {"contexto_id": contexto_id, "table": "vfact_orientacao_bolsa_resolved", "page": 1, "page_size": 25},
-                DEFAULT_SLOS_MS["rpc_explorer_p95_ms"],
+                slos_ms["rpc_explorer_p95_ms"],
             ),
             (
                 "explorer.rows (busca sem acento)",
@@ -390,7 +408,7 @@ def main() -> int:
                     "page": 1,
                     "page_size": 25,
                 },
-                DEFAULT_SLOS_MS["rpc_explorer_p95_ms"],
+                slos_ms["rpc_explorer_p95_ms"],
             ),
             (
                 "explorer.rows (ordenado)",
@@ -403,7 +421,7 @@ def main() -> int:
                     "page": 1,
                     "page_size": 25,
                 },
-                DEFAULT_SLOS_MS["rpc_explorer_p95_ms"],
+                slos_ms["rpc_explorer_p95_ms"],
             ),
         ]
 
@@ -434,7 +452,7 @@ def main() -> int:
         client = None
 
         # 4. Consultas analíticas nas 6 views fato
-        view_stats = benchmark_views(data_dir, args.iterations, args.warmup)
+        view_stats = benchmark_views(data_dir, args.iterations, args.warmup, slos_ms["view_query_p95_ms"])
         print(f"  [4/4] 6 Views fato medidas (p95 máx: {max(v.p95_ms for v in view_stats)} ms)")
 
         overall_passed = (
@@ -463,7 +481,7 @@ def main() -> int:
             "cold_start": {
                 "wall_ms": cold_wall_ms,
                 "startup_ms": cold_startup_ms,
-                "slo_ms": DEFAULT_SLOS_MS["cold_start_ms"],
+                "slo_ms": slos_ms["cold_start_ms"],
                 "passed": cold_passed,
             },
             "rpcs": [asdict(r) for r in rpc_stats],

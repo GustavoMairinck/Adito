@@ -27,7 +27,7 @@
     "id": "EVAL-04",
     "categoria": "src_participacao",
     "tipo": "analytics",
-    "pergunta": "Quantas participações em atividades de extensão ocorreram nos 5 anos mais recentes com registro?",
+    "pergunta": "Quantas participações em atividades de extensão ocorreram por ano nos 5 anos mais recentes com registro?",
     "sql_gabarito": "SELECT ano_participacao, SUM(qtd_participacoes) AS total_participacoes FROM vfact_extensao_participacao_resolved WHERE ano_participacao IS NOT NULL GROUP BY ano_participacao ORDER BY ano_participacao DESC LIMIT 5",
     "ordem_importa": true
   },
@@ -100,7 +100,7 @@
     "categoria": "complexa",
     "tipo": "analytics",
     "pergunta": "Quantos projetos de pesquisa aprovados pela diretoria pertencem à grande área de Ciências Exatas e da Terra?",
-    "sql_gabarito": "SELECT COUNT(DISTINCT id_projeto) AS total_projetos FROM vfact_projeto_pesquisa_resolved WHERE flag_aprovado = 1 AND grande_area LIKE '%Ciencias Exatas%'",
+    "sql_gabarito": "SELECT COUNT(DISTINCT id_projeto) AS total_projetos FROM vfact_projeto_pesquisa_resolved WHERE flag_aprovado = 1 AND grande_area LIKE '%Ciências Exatas%'",
     "ordem_importa": false
   },
   {

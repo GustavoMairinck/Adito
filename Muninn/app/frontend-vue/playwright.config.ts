@@ -1,9 +1,12 @@
 import { defineConfig } from '@playwright/test'
 import fs from 'node:fs'
 
-const systemChrome = ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find((p) =>
-  fs.existsSync(p),
-)
+const systemChrome = [
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/snap/bin/chromium',
+].find((p) => fs.existsSync(p))
 
 const isLive = process.env.E2E_LIVE === '1'
 const port = Number(process.env.E2E_VITE_PORT || 5174)

@@ -998,6 +998,43 @@ class EvalAcuraciaComparatorTests(unittest.TestCase):
         )
         self.assertFalse(fail_ord)
 
+    def test_compare_result_sets_reprova_coluna_errada_extra_trocada_e_erro_monetario(self) -> None:
+        from eval_acuracia import compare_result_sets
+
+        # 1. Valor certo numa coluna extra não pode mascarar coluna principal errada
+        ok_extra, _ = compare_result_sets(
+            [{"investimento": 236}],
+            [{"qtd_projetos": 236, "investimento": 999999}],
+        )
+        self.assertFalse(ok_extra)
+
+        # 2. Mesmos nomes de coluna com valores invertidos deve reprovar
+        ok_swapped_keys, _ = compare_result_sets(
+            [{"ano": 2024, "n": 10}],
+            [{"n": 2024, "ano": 10}],
+        )
+        self.assertFalse(ok_swapped_keys)
+
+        # 3. Aliases diferentes em ordem trocada deve reprovar
+        ok_swapped_pos, _ = compare_result_sets(
+            [{"ano": 2024, "n": 10}],
+            [{"qtd": 10, "year": 2024}],
+        )
+        self.assertFalse(ok_swapped_pos)
+
+        # 4. Tolerância monetária estrita (centavos): R$ 1.000.900 != R$ 1.000.000
+        ok_money_err, _ = compare_result_sets(
+            [{"investimento": 1_000_000.0}],
+            [{"investimento": 1_000_900.0}],
+        )
+        self.assertFalse(ok_money_err)
+
+        ok_money_cents, _ = compare_result_sets(
+            [{"investimento": 1_000_000.00}],
+            [{"investimento": 1_000_000.02}],
+        )
+        self.assertTrue(ok_money_cents)
+
     def test_eval_dataset_sem_data_leakage_com_examples_json(self) -> None:
         dataset = json.loads((RAIZ_REPO / "Muninn" / "app" / "scripts" / "eval_dataset.json").read_text(encoding="utf-8"))
         examples = json.loads(
@@ -1009,6 +1046,27 @@ class EvalAcuraciaComparatorTests(unittest.TestCase):
             self.assertNotIn(case["pergunta"].strip().lower(), ex_questions, case["id"])
             if case["tipo"] == "analytics":
                 self.assertTrue(case.get("sql_gabarito"), case["id"])
+
+    def test_eval_dataset_gabaritos_retornam_dados_positivos_no_dados_db(self) -> None:
+        dados_db = RAIZ_REPO / "Muninn" / "app" / "data" / "dados.db"
+        if not dados_db.is_file():
+            self.skipTest("dados.db não encontrado no ambiente de teste")
+        dataset = json.loads((RAIZ_REPO / "Muninn" / "app" / "scripts" / "eval_dataset.json").read_text(encoding="utf-8"))
+        conn = sqlite3.connect(f"file:{dados_db}?mode=ro", uri=True)
+        try:
+            for case in dataset:
+                sql = case.get("sql_gabarito")
+                if not sql:
+                    continue
+                rows = conn.execute(sql).fetchall()
+                self.assertGreater(len(rows), 0, f"{case['id']} retornou 0 linhas")
+                if len(rows) == 1:
+                    self.assertFalse(
+                        all(v in (0, 0.0, None) for v in rows[0]),
+                        f"{case['id']} retornou apenas zero/nulo: {rows[0]}",
+                    )
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

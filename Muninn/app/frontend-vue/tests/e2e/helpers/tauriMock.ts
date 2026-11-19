@@ -51,11 +51,20 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       },
     ]
 
+    const EXTRA_ORIENTACOES = Array.from({ length: 23 }, (_, idx) => ({
+      ano: idx === 22 ? 2026 : 2025,
+      titulo_projeto: idx === 22 ? 'Projeto Página 2 Exclusivo' : `Iniciação Científica Lote ${idx + 1}`,
+      nome_orientador: `Docente Extra ${idx + 1}`,
+      modalidade: idx % 2 === 0 ? 'BOLSISTA' : 'VOLUNTARIO',
+      investimento_total_estimado: idx % 2 === 0 ? 4800 : 0,
+    }))
+
     const ALL_ROWS: Record<string, Array<Record<string, unknown>>> = {
       vfact_orientacao_bolsa_resolved: [
         { ano: 2024, titulo_projeto: 'Monitoramento Inteligente de Redes', nome_orientador: 'Docente A', modalidade: 'BOLSISTA', investimento_total_estimado: 9600 },
         { ano: 2024, titulo_projeto: 'Plataforma de Dados Educacionais', nome_orientador: 'Docente B', modalidade: 'VOLUNTARIO', investimento_total_estimado: 0 },
         { ano: 2023, titulo_projeto: 'Robótica Aplicada à Indústria', nome_orientador: 'Docente C', modalidade: 'BOLSISTA', investimento_total_estimado: 8400 },
+        ...EXTRA_ORIENTACOES,
       ],
       vfact_projeto_pesquisa_resolved: [
         { ano_inicio: 2024, titulo_projeto: 'Visão Computacional no Campus Serra', grande_area: 'Engenharias', parecer_diretoria: 'APROVADO' },
@@ -269,18 +278,35 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         case 'explorer.rows': {
           const table = String(params.table || 'vfact_orientacao_bolsa_resolved')
           const search = String(params.search || '').trim().toLowerCase()
+          const sortCol = String(params.sort || '')
+          const direction = String(params.direction || 'desc')
+          const page = Math.max(1, Number(params.page || 1))
+          const pageSize = Math.max(1, Number(params.page_size || 25))
           const source = ALL_ROWS[table] || []
           const filtered = search
             ? source.filter((row) => JSON.stringify(row).toLowerCase().includes(search))
-            : source
-          const columns = filtered.length > 0 ? Object.keys(filtered[0]) : []
+            : [...source]
+          if (sortCol) {
+            filtered.sort((a, b) => {
+              const av = a[sortCol]
+              const bv = b[sortCol]
+              if (av === bv) return 0
+              const cmp = typeof av === 'number' && typeof bv === 'number'
+                ? av - bv
+                : String(av ?? '').localeCompare(String(bv ?? ''), 'pt-BR')
+              return direction === 'asc' ? cmp : -cmp
+            })
+          }
+          const start = (page - 1) * pageSize
+          const paged = filtered.slice(start, start + pageSize)
+          const columns = source.length > 0 ? Object.keys(source[0]) : []
           return {
             table,
             columns,
-            rows: filtered,
+            rows: paged,
             total: filtered.length,
-            page: Number(params.page || 1),
-            page_size: Number(params.page_size || 25),
+            page,
+            page_size: pageSize,
           }
         }
         case 'chat.conversations.list':

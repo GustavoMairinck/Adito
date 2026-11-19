@@ -110,7 +110,7 @@ def _to_float(value: Any) -> float | None:
     return None
 
 
-def _values_equal(expected: Any, actual: Any, abs_tol: float = 0.05, rel_tol: float = 1e-3) -> bool:
+def _values_equal(expected: Any, actual: Any, abs_tol: float = 0.05, rel_tol: float = 1e-9) -> bool:
     if expected is None and actual is None:
         return True
     ef, af = _to_float(expected), _to_float(actual)
@@ -122,20 +122,30 @@ def _values_equal(expected: Any, actual: Any, abs_tol: float = 0.05, rel_tol: fl
 
 
 def _row_matches(exp_vals: list[Any], act_vals: list[Any]) -> bool:
-    """Verifica se os valores de uma linha esperada aparecem na linha obtida (agnóstico a aliases/ordem de colunas)."""
-    if len(exp_vals) > len(act_vals):
+    """Compara os valores na ordem exata das colunas do gabarito (mesma quantidade de colunas)."""
+    if len(exp_vals) != len(act_vals):
         return False
-    used = [False] * len(act_vals)
-    for ev in exp_vals:
-        matched = False
-        for idx, av in enumerate(act_vals):
-            if not used[idx] and _values_equal(ev, av):
-                used[idx] = True
-                matched = True
-                break
-        if not matched:
+    return all(_values_equal(ev, av) for ev, av in zip(exp_vals, act_vals))
+
+
+def _dict_row_matches(exp_row: dict[str, Any], act_row: dict[str, Any]) -> bool:
+    """Compara duas linhas SQL exigindo a mesma quantidade de colunas.
+
+    - Se os nomes de colunas (normalizados) forem idênticos, casa coluna a coluna por nome
+      (evitando aprovar valores trocados como {ano: 2024, n: 10} vs {n: 2024, ano: 10}).
+    - Se os aliases diferirem, exige igualdade em qualquer coluna compartilhada pelo mesmo nome
+      e compara os valores na ordem exata das colunas do gabarito.
+    """
+    if len(exp_row) != len(act_row):
+        return False
+    exp_norm = {k.strip().lower(): v for k, v in exp_row.items()}
+    act_norm = {k.strip().lower(): v for k, v in act_row.items()}
+    if set(exp_norm.keys()) == set(act_norm.keys()):
+        return all(_values_equal(exp_norm[k], act_norm[k]) for k in exp_norm)
+    for shared_key in set(exp_norm.keys()) & set(act_norm.keys()):
+        if not _values_equal(exp_norm[shared_key], act_norm[shared_key]):
             return False
-    return True
+    return _row_matches(list(exp_row.values()), list(act_row.values()))
 
 
 def compare_result_sets(
@@ -143,7 +153,7 @@ def compare_result_sets(
     actual_rows: list[dict[str, Any]],
     order_matters: bool = False,
 ) -> tuple[bool, str]:
-    """Compara dois conjuntos de linhas SQL tolerando aliases, arredondamento e ordem (quando irrelevante)."""
+    """Compara dois conjuntos de linhas SQL tolerando aliases, centavos e ordem de linhas (quando irrelevante)."""
     if not expected_rows and not actual_rows:
         return True, "ambos vazios"
     if not actual_rows:
@@ -151,26 +161,23 @@ def compare_result_sets(
     if len(expected_rows) != len(actual_rows):
         return False, f"contagem divergente (esperado={len(expected_rows)}, obtido={len(actual_rows)})"
 
-    exp_list = [list(r.values()) for r in expected_rows]
-    act_list = [list(r.values()) for r in actual_rows]
-
     if order_matters:
-        for i, (ev, av) in enumerate(zip(exp_list, act_list)):
-            if not _row_matches(ev, av):
-                return False, f"divergência na linha {i + 1}: esperado={ev}, obtido={av}"
-        return True, f"match exato em ordem ({len(exp_list)} linha(s))"
+        for i, (er, ar) in enumerate(zip(expected_rows, actual_rows)):
+            if not _dict_row_matches(er, ar):
+                return False, f"divergência na linha {i + 1}: esperado={er}, obtido={ar}"
+        return True, f"match exato em ordem ({len(expected_rows)} linha(s))"
 
-    used = [False] * len(act_list)
-    for ev in exp_list:
+    used = [False] * len(actual_rows)
+    for er in expected_rows:
         found = False
-        for idx, av in enumerate(act_list):
-            if not used[idx] and _row_matches(ev, av):
+        for idx, ar in enumerate(actual_rows):
+            if not used[idx] and _dict_row_matches(er, ar):
                 used[idx] = True
                 found = True
                 break
         if not found:
-            return False, f"linha esperada não encontrada: {ev}"
-    return True, f"match semântico ({len(exp_list)} linha(s))"
+            return False, f"linha esperada não encontrada: {er}"
+    return True, f"match semântico ({len(expected_rows)} linha(s))"
 
 
 def percentile(values: list[float], p: float) -> float:

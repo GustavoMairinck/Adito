@@ -9,6 +9,22 @@ test.describe('Explorar dados', () => {
 
     await expect(page.getByText('Monitoramento Inteligente de Redes')).toBeVisible()
     await expect(page.getByText('Plataforma de Dados Educacionais')).toBeVisible()
+    await expect(page.getByText('Projeto Página 2 Exclusivo')).toBeHidden()
+
+    // Paginação: avança para página 2 e confirma registro exclusivo da página 2
+    await expect(page.getByText('Página 1 de 2')).toBeVisible()
+    await page.getByRole('button', { name: 'Próxima página' }).click()
+    await expect(page.getByText('Página 2 de 2')).toBeVisible()
+    await expect(page.getByText('Projeto Página 2 Exclusivo')).toBeVisible()
+    await page.getByRole('button', { name: 'Página anterior' }).click()
+    await expect(page.getByText('Página 1 de 2')).toBeVisible()
+
+    // Ordenação: clica na coluna `ano` (inverte ordem de asc para desc, trazendo registro de 2026 primeiro)
+    const anoHeader = page.getByRole('columnheader', { name: 'ano' })
+    await expect(anoHeader).toHaveAttribute('aria-sort', 'ascending')
+    await anoHeader.getByRole('button', { name: 'ano' }).click()
+    await expect(anoHeader).toHaveAttribute('aria-sort', 'descending')
+    await expect(page.locator('tbody tr').first()).toContainText('Projeto Página 2 Exclusivo')
 
     const searchInput = page.locator('input[type="search"], input[placeholder*="Buscar"], input[placeholder*="Filtrar"]').first()
     await searchInput.fill('Robótica')
