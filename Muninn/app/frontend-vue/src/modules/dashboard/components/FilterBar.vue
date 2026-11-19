@@ -86,7 +86,7 @@ const selectCls = `w-full min-h-[44px] rounded-lg border border-border-subtle bg
         <input
           v-model="projetoInput"
           :class="[selectCls, 'pr-10']"
-          placeholder="Produto ou cliente..."
+          placeholder="Projeto ou orientador..."
           type="text"
           @blur="aplicarProjeto"
           @keydown.enter="aplicarProjeto"
