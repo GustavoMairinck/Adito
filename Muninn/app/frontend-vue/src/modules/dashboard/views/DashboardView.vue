@@ -246,12 +246,12 @@ const lineChartSeries = computed(() => [{
 
     <!-- Filters Section -->
     <FilterBar
-      v-model:filtros="filtros"
+      :filtros="filtros"
       :anos-disponiveis="charts.anos_disponiveis"
       :areas-disponiveis="charts.areas_disponiveis"
       :modalidades-disponiveis="charts.modalidades_disponiveis"
       :status-disponiveis="charts.statuses_disponiveis"
-      @update:filtros="fetchData"
+      @update:filtros="updateFilters"
       @clear="updateFilters({ ano: '', area: '', modalidade: '', status: '', projeto: '' })"
     />
 
