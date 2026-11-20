@@ -255,3 +255,42 @@ def trainings_create(params):
 
     item = KnowledgeItem(tenant_id=tenant.id, item_type=item_type, content=content, metadata=metadata, embedding=embedding)
     return training_json(item.insert())
+
+
+# ── Atualização da base (dados.db publicado pela equipe) ─────────────────────
+
+@rpc("admin.dados_situacao")
+def dados_situacao(params):
+    """Versão da base instalada e a publicada no manifest (não baixa nada)."""
+    from core import atualizacao_dados
+
+    _staff()
+    return atualizacao_dados.situacao()
+
+
+@rpc("admin.dados_atualizar", stream=True)
+async def dados_atualizar(params, emit):
+    """Baixa e instala a base publicada; eventos `progresso` com a etapa e a fração baixada."""
+    import asyncio
+
+    from core import atualizacao_dados
+    from core.contexts import sync_default_contexts
+
+    _user, tenant = _staff()
+    loop = asyncio.get_running_loop()
+
+    def progresso(etapa, fracao):
+        asyncio.run_coroutine_threadsafe(emit("progresso", {"etapa": etapa, "fracao": fracao}), loop)
+
+    try:
+        instalada = await asyncio.to_thread(atualizacao_dados.atualizar, progresso)
+    except Exception as exc:
+        log_error("dados_atualizar", str(exc))
+        raise bad_request({"detail": f"A base não foi atualizada: {exc}"})
+
+    # Revalida os contextos na base nova (sem reindexar: isso gasta a cota do LLM e fica com o
+    # botão "Carregar e indexar contextos").
+    await emit("progresso", {"etapa": "validando contextos", "fracao": None})
+    contextos = await asyncio.to_thread(sync_default_contexts, tenant) if tenant else []
+    log_success("dados_atualizar", f"base {instalada['versao']} instalada")
+    return {"instalada": instalada, "contextos_validos": sum(1 for c in contextos if c.is_active)}

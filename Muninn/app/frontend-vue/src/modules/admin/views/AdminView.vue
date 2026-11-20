@@ -25,10 +25,11 @@ import {
   Search,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-vue-next'
 
-import { call } from '@/common/api/core'
+import { call, stream } from '@/common/api/core'
 import TrainingItemCard from '@/modules/admin/components/TrainingItemCard.vue'
 import AddTrainingModal from '@/modules/admin/components/AddTrainingModal.vue'
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
@@ -427,6 +428,72 @@ function runStateLabel(state: string) {
   return { text: 'Com erro', cls: 'text-red-600 dark:text-red-400' }
 }
 
+// ─── Base de dados publicada (botão "Atualizar base") ───
+interface DadosSituacao {
+  instalada: { versao: string; instalada_em: string } | null
+  publicada: { versao: string; tamanho?: number; publicado_em?: string } | null
+  tem_atualizacao: boolean
+  precisa_app_novo: boolean
+  manifest_url: string
+  erro: string | null
+}
+
+const dadosSituacao = ref<DadosSituacao | null>(null)
+const dadosVerificando = ref(false)
+const dadosAtualizando = ref(false)
+const dadosEtapa = ref('')
+const dadosFracao = ref<number | null>(null)
+const dadosMensagem = ref<{ texto: string; erro: boolean } | null>(null)
+
+function formatarTamanho(bytes?: number) {
+  if (!bytes) return ''
+  return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`
+}
+
+async function verificarBase() {
+  dadosVerificando.value = true
+  try {
+    dadosSituacao.value = await call<DadosSituacao>('admin.dados_situacao')
+  } catch (error: any) {
+    dadosMensagem.value = { texto: error?.message || 'Não foi possível verificar a base.', erro: true }
+  } finally {
+    dadosVerificando.value = false
+  }
+}
+
+async function atualizarBase() {
+  if (dadosAtualizando.value) return
+  dadosAtualizando.value = true
+  dadosMensagem.value = null
+  dadosEtapa.value = 'iniciando'
+  dadosFracao.value = null
+  try {
+    const res = await stream<{ instalada: { versao: string }; contextos_validos: number }>(
+      'admin.dados_atualizar',
+      {},
+      (event, data) => {
+        if (event === 'progresso') {
+          dadosEtapa.value = data.etapa
+          dadosFracao.value = data.fracao
+        }
+      }
+    )
+    dadosMensagem.value = {
+      texto: `Base ${res.instalada.versao} instalada; ${res.contextos_validos} contexto(s) válidos. Use "Carregar e indexar contextos" para refazer o índice.`,
+      erro: false
+    }
+    fetchContextos()
+  } catch (error: any) {
+    dadosMensagem.value = {
+      texto: error?.data?.detail || error?.message || 'A base não foi atualizada.',
+      erro: true
+    }
+  } finally {
+    dadosAtualizando.value = false
+    verificarBase()
+  }
+}
+
 async function handleSync() {
   if (etlDispatchLocked.value || hasRunningEtl.value) {
     return
@@ -623,6 +690,7 @@ watch(activeTab, (val) => {
 
   if (val === 'etl') {
     fetchContextos()
+    verificarBase()
   }
 }, { immediate: true })
 
@@ -1035,6 +1103,74 @@ onBeforeUnmount(() => {
       <!-- TAB 3: PREPARAR DADOS                       -->
       <!-- ════════════════════════════════════════════ -->
       <template v-else-if="activeTab === 'etl'">
+
+        <!-- Base de dados publicada pela equipe -->
+        <div class="premium-card overflow-hidden">
+          <div class="flex flex-col gap-8 p-8 md:flex-row md:items-center md:justify-between">
+            <div class="flex items-center gap-6">
+              <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-accent/10 border border-accent/20">
+                <Download class="h-8 w-8 text-accent" stroke-width="1.5" />
+              </div>
+              <div class="space-y-1">
+                <h2 class="text-xl font-semibold text-text-primary">Base de dados</h2>
+                <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
+                  Instalada:
+                  <strong class="text-text-primary">{{ dadosSituacao?.instalada?.versao || 'nenhuma (ou instalada à mão)' }}</strong>
+                  <template v-if="dadosSituacao?.publicada">
+                    · Publicada:
+                    <strong class="text-text-primary">{{ dadosSituacao.publicada.versao }}</strong>
+                    <span v-if="dadosSituacao.publicada.tamanho"> ({{ formatarTamanho(dadosSituacao.publicada.tamanho) }})</span>
+                  </template>
+                </p>
+                <p v-if="dadosSituacao?.erro" class="text-sm text-amber-600 dark:text-amber-400">
+                  Não foi possível consultar a base publicada: {{ dadosSituacao.erro }}
+                </p>
+                <p v-else-if="dadosSituacao?.precisa_app_novo" class="text-sm text-amber-600 dark:text-amber-400">
+                  A base publicada precisa de uma versão mais nova do Muninn.
+                </p>
+                <p v-else-if="dadosSituacao && !dadosSituacao.tem_atualizacao" class="text-sm text-emerald-600 dark:text-emerald-400">
+                  A base está atualizada.
+                </p>
+              </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-3">
+              <button
+                class="flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
+                :disabled="dadosVerificando || dadosAtualizando"
+                @click="verificarBase"
+              >
+                <RefreshCw :class="['h-4 w-4', dadosVerificando ? 'animate-spin' : '']" />
+                Verificar
+              </button>
+              <button
+                :disabled="dadosAtualizando || !dadosSituacao?.tem_atualizacao"
+                :class="[
+                  'btn-primary flex items-center gap-3 px-5 py-3 text-sm',
+                  dadosAtualizando || !dadosSituacao?.tem_atualizacao ? 'opacity-50 cursor-not-allowed' : ''
+                ]"
+                @click="atualizarBase"
+              >
+                <Loader2 v-if="dadosAtualizando" class="h-5 w-5 animate-spin" />
+                <Download v-else class="h-5 w-5" stroke-width="2.5" />
+                {{ dadosAtualizando ? 'Atualizando…' : 'Atualizar base' }}
+              </button>
+            </div>
+          </div>
+          <div v-if="dadosAtualizando" class="px-8 pb-6">
+            <p class="mb-2 text-sm text-text-muted capitalize">{{ dadosEtapa }}…</p>
+            <div class="h-2 w-full overflow-hidden rounded-full bg-surface">
+              <div
+                class="h-full bg-accent transition-all"
+                :class="dadosFracao === null ? 'animate-pulse w-full opacity-40' : ''"
+                :style="dadosFracao !== null ? { width: `${Math.round(dadosFracao * 100)}%` } : {}"
+              />
+            </div>
+          </div>
+          <p
+            v-if="dadosMensagem"
+            :class="['px-8 pb-6 text-sm', dadosMensagem.erro ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400']"
+          >{{ dadosMensagem.texto }}</p>
+        </div>
 
         <!-- Sync Action Card (full-width horizontal) -->
         <div class="premium-card overflow-hidden">

@@ -1,0 +1,75 @@
+# Monta e publica o site do GitHub Pages do Muninn:
+#   /            página com as instruções de instalação
+#   /apt/        repositório apt "flat", assinado com GPG, com o .deb do último Release
+#   /dados/      manifest.json + dados-<versão>.db.gz lidos pelo botão "Atualizar base"
+# Roda depois de cada release e também à mão (para publicar só uma base nova).
+name: Muninn · pages
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: muninn-pages
+  cancel-in-progress: false
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Base de dados (FICTÍCIA neste teste)
+        run: |
+          python3 Muninn/scripts/gerar_base_demo.py --saida dist/dados.db
+          python3 Muninn/scripts/publicar_base.py --base dist/dados.db \
+            --versao "$(date -u +%Y.%m.%d.%H%M)-demo" --saida site/dados
+
+      - name: .deb do último Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site/apt/pool
+          gh release download --repo "${{ github.repository }}" --pattern '*.deb' --dir site/apt/pool \
+            "$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName')"
+
+      - name: Repositório apt assinado
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        working-directory: site/apt
+        run: |
+          sudo apt-get install -y dpkg-dev apt-utils >/dev/null
+          dpkg-scanpackages --multiversion pool > Packages
+          gzip -k -f Packages
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=Muninn \
+            -o APT::FTPArchive::Release::Label=Muninn \
+            release . > Release
+          export GNUPGHOME="$(mktemp -d)"
+          echo "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --yes --clearsign -o InRelease Release
+          gpg --batch --yes -abs -o Release.gpg Release
+          gpg --armor --export > muninn.asc
+          rm -rf "$GNUPGHOME"
+
+      - name: Página de instruções
+        run: |
+          URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          sed "s#{{URL}}#${URL}#g; s#{{REPO}}#${{ github.repository }}#g" Muninn/docs/distribuicao/pages-index.html > site/index.html
+          touch site/.nojekyll
+          find site -maxdepth 3 | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

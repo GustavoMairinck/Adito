@@ -25,7 +25,8 @@ from typing import Any, Iterator, Sequence
 APP_DIR_NAME = "br.edu.ifes.leds.muninn"
 # Nome da pasta na época do Oraculo-ESX/Adito; só serve para migrar os dados para o Muninn.
 LEGACY_APP_DIR_NAME = "br.edu.ifes.leds.oraculo-esx"
-REPO_APP_DIR = Path(__file__).resolve().parents[3]
+# Empacotado (PyInstaller), os contextos e demais arquivos do app ficam na pasta extraída do binário.
+REPO_APP_DIR = Path(getattr(sys, "_MEIPASS")) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[3]
 DEFAULT_REPO_SQLITE = REPO_APP_DIR / "data" / "dados.db"
 
 _RE_LEADING_EXPLAIN = re.compile(r"^\s*EXPLAIN\s+", re.IGNORECASE)

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muninn · Instalação</title>
+<style>
+  :root { --bg:#fafaf9; --fg:#1c1917; --muted:#57534e; --card:#fff; --border:#e7e5e4; --code:#f5f5f4; --accent:#0f766e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0c0a09; --fg:#f5f5f4; --muted:#a8a29e; --card:#1c1917; --border:#292524; --code:#292524; --accent:#2dd4bf; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 0 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 32px; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  pre { background: var(--code); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: .85rem; margin: 8px 0; }
+  a { color: var(--accent); }
+  .aviso { border-color: #f59e0b; }
+  small { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Muninn</h1>
+  <p class="lead">Painel de pesquisa e extensão do Ifes Campus Serra. Ambiente de <strong>teste</strong>.</p>
+
+  <section class="aviso">
+    <h2>⚠️ Base fictícia</h2>
+    <p>A base publicada aqui é gerada automaticamente com nomes e títulos inventados. Serve só para testar a instalação e a atualização.</p>
+  </section>
+
+  <section>
+    <h2>Windows</h2>
+    <p>Baixe o instalador <code>.exe</code> (ou o <code>.msi</code>) do <a href="https://github.com/{{REPO}}/releases/latest">último Release</a> e execute.</p>
+  </section>
+
+  <section>
+    <h2>Linux (Debian / Ubuntu)</h2>
+    <p>Cadastre o repositório uma vez:</p>
+    <pre>curl -fsSL {{URL}}/apt/muninn.asc | sudo tee /usr/share/keyrings/muninn.asc &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/muninn.asc] {{URL}}/apt ./" | sudo tee /etc/apt/sources.list.d/muninn.list
+sudo apt update &amp;&amp; sudo apt install muninn</pre>
+    <p>Depois, as versões novas chegam com <code>sudo apt upgrade</code>.</p>
+    <small>Sem repositório: baixe o <code>.deb</code> do Release e rode <code>sudo apt install ./Muninn_*.deb</code>.</small>
+  </section>
+
+  <section>
+    <h2>Dados</h2>
+    <p>O instalador não traz a base. No app, abra <strong>Administração → Contextos de dados → Atualizar base</strong>: ele baixa a versão publicada em <a href="{{URL}}/dados/manifest.json">dados/manifest.json</a>, confere o sha256 e troca o arquivo, guardando a base anterior.</p>
+  </section>
+</main>
+</body>
+</html>
