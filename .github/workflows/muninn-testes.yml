@@ -5,7 +5,7 @@ name: Muninn · testes
 
 on:
   push:
-    branches: [main, development]
+    branches: ["**"]   # qualquer branch: o erro aparece antes de abrir o PR
   pull_request:
     branches: [main, development]
   workflow_dispatch:
