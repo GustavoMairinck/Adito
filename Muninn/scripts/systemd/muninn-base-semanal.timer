@@ -1,0 +1,11 @@
+[Unit]
+Description=Muninn: roda o ETL toda segunda de madrugada
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00
+# Se a máquina estava desligada na hora, roda assim que ligar.
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

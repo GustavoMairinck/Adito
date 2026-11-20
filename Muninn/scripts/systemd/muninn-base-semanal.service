@@ -1,0 +1,14 @@
+# Serviço de usuário que roda o ETL e publica a base. Disparado por muninn-base-semanal.timer.
+# @MUNINN@ é trocado pelo caminho da pasta Muninn/ na instalação (ver README.md).
+[Unit]
+Description=Muninn: ETL semanal e publicação da base
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/muninn/semanal.env
+ExecStart=@MUNINN@/scripts/atualizar_base_semanal.sh
+# O ETL inteiro (Lattes incluso) pode levar horas; acima disso algo travou.
+TimeoutStartSec=8h
+Nice=10
