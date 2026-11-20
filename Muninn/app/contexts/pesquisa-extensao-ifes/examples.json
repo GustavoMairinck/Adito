@@ -89,10 +89,10 @@
   },
   {
     "question": "[Base Lattes - Produção Científica] Quantos softwares sem registro de patente distintos foram produzidos no Lattes por ano, incluindo os registros sem ano informado?",
-    "sql": "SELECT COALESCE(CAST(ano AS TEXT), 'Sem Ano') AS ano_producao, COUNT(DISTINCT id_producao) AS total_softwares_sem_patente FROM vfact_producao_cientifica_resolved WHERE flag_software_sem_patente = 1 GROUP BY ano_producao ORDER BY ano_producao DESC"
+    "sql": "SELECT COALESCE(CAST(ano AS TEXT), 'Sem Ano') AS ano_producao, COUNT(DISTINCT id_producao) AS total_softwares_sem_patente FROM vfact_producao_cientifica_resolved WHERE flag_software_sem_patente = 1 GROUP BY ano_producao ORDER BY CASE WHEN ano_producao = 'Sem Ano' THEN 1 ELSE 0 END ASC, ano_producao DESC"
   },
   {
-    "question": "[Base CNPq DGP - Grupos de Pesquisa] Quais os 5 grupos de pesquisa certificados com mais líderes ativos e qual o tempo médio de atuação dos membros em dias? Desempate pelo nome do grupo.",
-    "sql": "SELECT nome_grupo, SUM(CASE WHEN flag_lider = 1 AND flag_ativo = 1 THEN 1 ELSE 0 END) AS lideres_ativos, COUNT(DISTINCT id_membro_grupo) AS total_vinculos, ROUND(AVG(tempo_participacao_dias), 1) AS media_dias_atuacao FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo = 'CERTIFICADO' GROUP BY nome_grupo ORDER BY lideres_ativos DESC, nome_grupo ASC LIMIT 5"
+    "question": "[Base CNPq DGP - Grupos de Pesquisa] Quais os 5 grupos de pesquisa certificados com mais membros ativos e qual o tempo médio de atuação dos membros em dias? Desempate pelo nome do grupo.",
+    "sql": "SELECT nome_grupo, SUM(flag_ativo) AS membros_ativos, COUNT(DISTINCT id_membro_grupo) AS total_vinculos, ROUND(AVG(tempo_participacao_dias), 1) AS media_dias_atuacao FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo = 'CERTIFICADO' GROUP BY nome_grupo ORDER BY membros_ativos DESC, nome_grupo ASC LIMIT 5"
   }
 ]

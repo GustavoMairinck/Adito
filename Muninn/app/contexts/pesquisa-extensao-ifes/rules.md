@@ -23,7 +23,7 @@ O banco de dados acadêmicos **SQLite 3 (`dados.db`)** expõe exclusivamente **6
 
 4. **`vfact_orientacao_bolsa_resolved` (Grão: 1 Concessão de Orientação/Bolsa por linha — `id_orientacao`)**
    - Use quando a pergunta tratar de **bolsas de iniciação científica/tecnológica, orientações, planos de trabalho de alunos, programas de fomento (`programa_fomento`), modalidade (`'BOLSISTA'` vs `'VOLUNTARIO'`), agências financiadoras (`agencia_financiadora`: FAPES, CNPq, Ifes) ou estimativas financeiras de bolsas**.
-   - **Valores reais de `programa_fomento`:** os códigos são armazenados em **minúsculas e com underscore**: `'pibic'`, `'pibic_jr'`, `'pibiti'`, `'pivic'`, `'propos'`, `'pibic_af'`, `'piviti'`, `'pibic_em'`, `'jtc'`, `'finep'`, `'picti'` (além de `'Não Especificado'`). Ao filtrar um programa específico, use `LOWER(programa_fomento) = 'pibic_em'` (nunca `'PIBIC-EM'` com hífen) ou `LIKE` usando underscore.
+   - **Valores reais de `programa_fomento`:** os códigos são armazenados em **minúsculas e com underscore**: `'pibic'`, `'pibic_jr'`, `'pibiti'`, `'pivic'`, `'propos'`, `'pibic_af'`, `'piviti'`, `'pibic_em'`, `'jtc'`, `'finep'`, `'picti'` (além de `'Não Especificado'`). Ao filtrar um programa específico, use sempre `LOWER(programa_fomento) = 'pibic_em'` (nunca `'PIBIC-EM'` com hífen).
    - **Métricas financeiras (EXCLUSIVAMENTE ESTIMATIVAS):**
      - `valor_bolsa_mensal`: valor mensal nominal previsto para a cota.
      - `investimento_total_estimado`: **estimativa** calculada por datas considerando cortes de cancelamento (`data_cancelado`).
@@ -50,9 +50,9 @@ As 6 views combinam colunas com **texto padronizado** e colunas com **`NULL` rea
   - Projetos: `coordenador_nome`, `natureza_projeto`, `parecer_diretoria`, `data_inicio`, `data_fim`, `ano_inicio`, `ano_fim`, `duracao_meses_prevista`, `grande_area`, `palavras_chave`.
   - Bolsas: `titulacao_orientador`, `nivel_treinamento_aluno`, `curso_orientado`, `nome_cancelador`, `data_cancelado`.
   - Produções: `ano`, `veiculo_publicacao`, `doi`, `issn_isbn`, `natureza_artigo`.
-  - Grupos: `sigla_grupo`, `data_inicio`, `data_fim`, `tempo_participacao_dias`.
+  - Grupos: `sigla_grupo`, `grande_area`, `data_inicio`, `data_fim`, `tempo_participacao_dias`.
 - **Regra obrigatória para "sem X informado":** sempre verifique **`col IS NULL OR TRIM(col) = ''`** combinado com o texto padronizado quando aplicável (ex.: `programa_fomento IS NULL OR TRIM(programa_fomento) = '' OR programa_fomento IN ('Não Especificado', 'Não Informado')`). Nunca assuma que ausências existem apenas como texto.
-- **Buscas textuais:** em SQLite 3 no Muninn, `LIKE '%termo%'` é **case-insensitive e acento-insensível**, mas igualdade `=` continua case-sensitive e hífen (`-`) não casa com underscore (`_`).
+- **Buscas textuais:** em SQLite 3 no Muninn, `LIKE '%termo%'` é **case-insensitive e acento-insensível**, mas `_` dentro de `LIKE` atua como curinga de 1 caractere; apenas na igualdade (`=` ou `LOWER(...) = '...'`) hífen (`-`) não casa com underscore (`_`).
 - Nunca selecione colunas sensíveis de CPF ou e-mail e prefira listar colunas explicitamente em vez de `SELECT *`.
 
 ---
@@ -61,7 +61,7 @@ As 6 views combinam colunas com **texto padronizado** e colunas com **`NULL` rea
 
 Quando o usuário pedir panorama ou cruzamento envolvendo **múltiplas bases simultaneamente**, combine as views usando CTEs (`WITH ...`) ou `UNION ALL` pelas dimensões conformadas:
 - **Por Pessoa / Pesquisador:** `vfact_extensao_acao_resolved.coordenador_nome` = `vfact_projeto_pesquisa_resolved.coordenador_nome` = `vfact_orientacao_bolsa_resolved.nome_orientador` = `vfact_producao_cientifica_resolved.nome_autor` = `vfact_grupo_pesquisa_membro_resolved.nome_membro`.
-- **Por Grande Área:** `grande_area` em Extensão, Projetos, Bolsas e Grupos CNPq (lembre que Extensão usa `'Não Informada'` e Projetos pode conter `NULL`).
+- **Por Grande Área:** `grande_area` em Extensão, Projetos, Bolsas e Grupos CNPq (lembre que Extensão usa `'Não Informada'`, enquanto Projetos e Grupos admitem `NULL`).
 - **Por Ano:** `ano_cadastro` (SRC Ações), `ano_participacao` (SRC Participações), `ano_inicio` (SigPesq Projetos), `ano` (SigPesq Bolsas e Lattes) e `ano_formacao` (CNPq Grupos).
 - **Sempre agregue cada tabela fato na sua própria CTE antes de fazer `JOIN`** para evitar produto cartesiano (*fan-out trap*).
 
