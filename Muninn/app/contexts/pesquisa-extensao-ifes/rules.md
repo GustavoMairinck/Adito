@@ -21,7 +21,7 @@ O banco de dados acadêmicos **SQLite 3 (`dados.db`)** expõe exclusivamente **6
    - Diferencie rigorosamente **projeto de pesquisa** (`vfact_projeto_pesquisa_resolved`) de **projeto/ação de extensão** (`vfact_extensao_acao_resolved`).
 
 4. **`vfact_orientacao_bolsa_resolved` (Grão: 1 Concessão de Orientação/Bolsa por linha — `id_orientacao`)**
-   - Use quando a pergunta tratar de **bolsas de iniciação científica/tecnológica, orientações, planos de trabalho de alunos, programas de fomento (`programa_fomento`: PIBIC, PIBITI, PIVIC, PIBIC-EM, JTC, PICTI, etc.), modalidade (`'BOLSISTA'` vs `'VOLUNTARIO'`), agências financiadoras (`agencia_financiadora`: FAPES, CNPq, Ifes) ou valores financeiros de bolsas**.
+   - Use quando a pergunta tratar de **bolsas de iniciação científica/tecnológica, orientações, planos de trabalho de alunos, programas de fomento (`programa_fomento` — armazenado em minúsculas: `'pibic'`, `'pibiti'`, `'pivic'`, `'pibic_jr'`, `'pibic_em'`, `'pibic_af'`, `'piviti'`, `'propos'`, `'finep'`, `'jtc'`, `'picti'`; use `LOWER(programa_fomento) = 'pibic'` ao filtrar), modalidade (`'BOLSISTA'` vs `'VOLUNTARIO'`), agências financiadoras (`agencia_financiadora`: FAPES, CNPq, Ifes) ou valores financeiros de bolsas**.
    - **Métricas financeiras:**
      - `valor_bolsa_mensal`: valor mensal nominal pago ao bolsista.
      - `investimento_total_estimado`: valor total efetivamente investido na bolsa considerando cortes de cancelamento (`SUM(investimento_total_estimado)`).

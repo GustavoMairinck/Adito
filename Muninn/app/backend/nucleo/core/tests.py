@@ -1174,5 +1174,111 @@ class EvalAcuraciaComparatorTests(unittest.TestCase):
             conn.close()
 
 
+class SemanticValueResolverTests(AppDbTestCase):
+    """Regressão do erro de prefilling no Gemini e preservação de candidatos no resolvedor."""
+
+    def _criar_contexto_indexado(self, com_valores: bool = True):
+        _, tenant = session.current()
+        ctx = Contexto(
+            tenant_id=tenant.id,
+            slug="teste-resolver",
+            name="Teste Resolver",
+            views=[{"name": "vfact_orientacao_bolsa_resolved", "embed_columns": ["programa_fomento"]}],
+        ).insert()
+        if com_valores:
+            from core.records import AnalyticsTextEmbedding
+            AnalyticsTextEmbedding(
+                tenant_id=tenant.id,
+                contexto_id=ctx.id,
+                source_table="vfact_orientacao_bolsa_resolved",
+                embedding_text="programa_fomento: pibic",
+                payload_json='{"programa_fomento": "pibic"}',
+                value_hash="hash-pibic",
+                embedding=[1.0, 0.0],
+            ).insert()
+        return ctx
+
+    def test_nao_passa_response_format_e_inclui_views_no_prompt(self) -> None:
+        import importlib
+        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
+        from agents.bi_agent.tools import vector_search as vs
+
+        ctx = self._criar_contexto_indexado(com_valores=True)
+        captured: dict = {}
+
+        class FakeAgent:
+            def invoke(self, payload):
+                busca = vs._busca.get()
+                busca.searched_terms.append("PIBIC")
+                busca.candidates.append({
+                    "source_table": "vfact_orientacao_bolsa_resolved",
+                    "embedding_text": "programa_fomento: pibic",
+                    "payload_json": '{"programa_fomento": "pibic"}',
+                    "distance": 0.05,
+                })
+                busca.search_calls.append({"query": "PIBIC", "source_table": "vfact_orientacao_bolsa_resolved"})
+                return {"messages": []}
+
+        def fake_create_react_agent(**kwargs):
+            captured.update(kwargs)
+            return FakeAgent()
+
+        with patch.object(svr, "create_react_agent", side_effect=fake_create_react_agent):
+            out = svr.semantic_value_resolver(
+                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
+                llm_model=object(),
+                embedder=object(),
+            )
+
+        self.assertNotIn("response_format", captured)
+        self.assertIn("vfact_orientacao_bolsa_resolved", captured["prompt"])
+        self.assertIn("programa_fomento", captured["prompt"])
+        self.assertEqual(len(out["rewrite_candidates"]), 1)
+        self.assertEqual(out["value_search_queries"], ["PIBIC"])
+
+    def test_pula_llm_quando_nao_ha_valores_indexados(self) -> None:
+        import importlib
+        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
+
+        ctx = self._criar_contexto_indexado(com_valores=False)
+        with patch.object(svr, "create_react_agent") as mocked_agent:
+            out = svr.semantic_value_resolver(
+                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
+                llm_model=object(),
+                embedder=object(),
+            )
+
+        mocked_agent.assert_not_called()
+        self.assertEqual(out["rewrite_candidates"], [])
+
+    def test_preserva_candidatos_ja_coletados_se_agente_falhar_depois(self) -> None:
+        import importlib
+        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
+        from agents.bi_agent.tools import vector_search as vs
+
+        ctx = self._criar_contexto_indexado(com_valores=True)
+
+        class FailingAfterToolAgent:
+            def invoke(self, payload):
+                busca = vs._busca.get()
+                busca.searched_terms.append("PIBIC")
+                busca.candidates.append({
+                    "source_table": "vfact_orientacao_bolsa_resolved",
+                    "embedding_text": "programa_fomento: pibic",
+                    "payload_json": '{"programa_fomento": "pibic"}',
+                    "distance": 0.05,
+                })
+                raise RuntimeError("erro tardio")
+
+        with patch.object(svr, "create_react_agent", return_value=FailingAfterToolAgent()):
+            out = svr.semantic_value_resolver(
+                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
+                llm_model=object(),
+                embedder=object(),
+            )
+
+        self.assertEqual(len(out["rewrite_candidates"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

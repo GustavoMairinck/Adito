@@ -57,7 +57,7 @@
     },
     {
       "name": "vfact_orientacao_bolsa_resolved",
-      "description": "Uma linha por concessão de bolsa ou orientação de pesquisa (id_orientacao), com programa_fomento (PIBIC, PIBITI, PIVIC, PIBIC-EM, JTC, PICTI, etc.), modalidade (BOLSISTA/VOLUNTARIO), valor_bolsa_mensal, duracao_meses_efetiva, investimento_total_estimado, investimento_previsto_original, titulo_edital, titulo_plano_trabalho, nome_orientador, nome_orientado e agencia_financiadora.",
+      "description": "Uma linha por concessão de bolsa ou orientação de pesquisa (id_orientacao), com programa_fomento em minúsculas ('pibic', 'pibiti', 'pivic', 'pibic_jr', 'pibic_em', 'pibic_af', 'piviti', 'propos', 'finep', 'jtc', 'picti'), modalidade (BOLSISTA/VOLUNTARIO), valor_bolsa_mensal, duracao_meses_efetiva, investimento_total_estimado, investimento_previsto_original, titulo_edital, titulo_plano_trabalho, nome_orientador, nome_orientado e agencia_financiadora.",
       "sensitive_columns": [],
       "embed_columns": [
         "programa_fomento",
