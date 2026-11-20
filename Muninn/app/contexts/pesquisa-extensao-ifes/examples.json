@@ -74,5 +74,25 @@
   {
     "question": "[Base CNPq DGP - Grupos de Pesquisa] Qual a distribuição de membros ativos e egressos nos grupos de pesquisa por papel desempenhado?",
     "sql": "SELECT papel_membro, status_participacao, COUNT(DISTINCT id_membro_grupo) AS total_vinculos FROM vfact_grupo_pesquisa_membro_resolved GROUP BY papel_membro, status_participacao ORDER BY total_vinculos DESC"
+  },
+  {
+    "question": "[Base SRC - Ações] Quantas ações de extensão possuem fomento externo versus recurso próprio e quantas atividades vinculadas cada grupo soma?",
+    "sql": "SELECT CASE WHEN orgao_fomento = 'Recurso Próprio / Sem Fomento' THEN 'Recurso Próprio / Sem Fomento' ELSE 'Com Fomento Externo' END AS tipo_fomento, COUNT(DISTINCT id_acao) AS total_acoes, SUM(qtd_atividades_vinculadas) AS total_atividades FROM vfact_extensao_acao_resolved GROUP BY tipo_fomento ORDER BY total_acoes DESC"
+  },
+  {
+    "question": "[Base SRC - Participações] Qual o total de participações, pessoas distintas atendidas, certificados emitidos e a taxa de certificação em extensão por ano?",
+    "sql": "SELECT ano_participacao, SUM(qtd_participacoes) AS total_participacoes, COUNT(DISTINCT nome_participante) AS pessoas_distintas, SUM(flag_certificado) AS total_certificados, ROUND(100.0 * SUM(flag_certificado) / NULLIF(SUM(qtd_participacoes), 0), 2) AS taxa_certificacao_pct FROM vfact_extensao_participacao_resolved WHERE ano_participacao IS NOT NULL GROUP BY ano_participacao ORDER BY ano_participacao DESC"
+  },
+  {
+    "question": "[Base Lattes - Produção Científica] Quantas obras distintas e quantas autorias existem no Lattes por campus de lotação, separando autores do Ifes e vínculos externos?",
+    "sql": "SELECT campus, COUNT(DISTINCT id_producao) AS total_obras_distintas, SUM(qtd_autorias) AS total_autorias FROM vfact_producao_cientifica_resolved GROUP BY campus ORDER BY total_obras_distintas DESC, campus ASC"
+  },
+  {
+    "question": "[Base Lattes - Produção Científica] Quantos softwares sem registro de patente distintos foram produzidos no Lattes por ano, incluindo os registros sem ano informado?",
+    "sql": "SELECT COALESCE(CAST(ano AS TEXT), 'Sem Ano') AS ano_producao, COUNT(DISTINCT id_producao) AS total_softwares_sem_patente FROM vfact_producao_cientifica_resolved WHERE flag_software_sem_patente = 1 GROUP BY ano_producao ORDER BY ano_producao DESC"
+  },
+  {
+    "question": "[Base CNPq DGP - Grupos de Pesquisa] Quais os 5 grupos de pesquisa certificados com mais líderes ativos e qual o tempo médio de atuação dos membros em dias? Desempate pelo nome do grupo.",
+    "sql": "SELECT nome_grupo, SUM(CASE WHEN flag_lider = 1 AND flag_ativo = 1 THEN 1 ELSE 0 END) AS lideres_ativos, COUNT(DISTINCT id_membro_grupo) AS total_vinculos, ROUND(AVG(tempo_participacao_dias), 1) AS media_dias_atuacao FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo = 'CERTIFICADO' GROUP BY nome_grupo ORDER BY lideres_ativos DESC, nome_grupo ASC LIMIT 5"
   }
 ]
