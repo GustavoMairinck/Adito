@@ -15,7 +15,6 @@ export function trackPageErrors(page: Page): () => string[] {
 export interface TauriMockOptions {
   llmConfigured?: boolean
   chatError503?: boolean
-  explorerError503?: boolean
   role?: 'admin' | 'user'
 }
 
@@ -28,7 +27,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   const config = {
     llmConfigured: options.llmConfigured ?? true,
     chatError503: options.chatError503 ?? false,
-    explorerError503: options.explorerError503 ?? false,
     role: options.role ?? 'admin',
   }
 
@@ -50,30 +48,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         ],
       },
     ]
-
-    const EXTRA_ORIENTACOES = Array.from({ length: 23 }, (_, idx) => ({
-      ano: idx === 22 ? 2026 : 2025,
-      titulo_projeto: idx === 22 ? 'Projeto Página 2 Exclusivo' : `Iniciação Científica Lote ${idx + 1}`,
-      nome_orientador: `Docente Extra ${idx + 1}`,
-      modalidade: idx % 2 === 0 ? 'BOLSISTA' : 'VOLUNTARIO',
-      investimento_total_estimado: idx % 2 === 0 ? 4800 : 0,
-    }))
-
-    const ALL_ROWS: Record<string, Array<Record<string, unknown>>> = {
-      vfact_orientacao_bolsa_resolved: [
-        { ano: 2024, titulo_projeto: 'Monitoramento Inteligente de Redes', nome_orientador: 'Docente A', modalidade: 'BOLSISTA', investimento_total_estimado: 9600 },
-        { ano: 2024, titulo_projeto: 'Plataforma de Dados Educacionais', nome_orientador: 'Docente B', modalidade: 'VOLUNTARIO', investimento_total_estimado: 0 },
-        { ano: 2023, titulo_projeto: 'Robótica Aplicada à Indústria', nome_orientador: 'Docente C', modalidade: 'BOLSISTA', investimento_total_estimado: 8400 },
-        ...EXTRA_ORIENTACOES,
-      ],
-      vfact_projeto_pesquisa_resolved: [
-        { ano_inicio: 2024, titulo_projeto: 'Visão Computacional no Campus Serra', grande_area: 'Engenharias', parecer_diretoria: 'APROVADO' },
-        { ano_inicio: 2023, titulo_projeto: 'Análise de Séries Temporais Acadêmicas', grande_area: 'Ciências Exatas', parecer_diretoria: 'APROVADO' },
-      ],
-      vfact_extensao_acao_resolved: [
-        { ano_cadastro: 2024, titulo_acao: 'Oficina de Programação para Escolas Públicas', tipo_acao: 'CURSO', campus: 'Serra' },
-      ],
-    }
 
     const widgets: Array<Record<string, unknown>> = [
       {
@@ -224,91 +198,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           if (idx >= 0) widgets.splice(idx, 1)
           return { ok: true }
         }
-        case 'explorer.tables':
-          if (cfg.explorerError503) {
-            throw {
-              status: 503,
-              data: { detail: 'Não foi possível ler os dados. Verifique o dados.db e recarregue os contextos em Administração.' },
-            }
-          }
-          return {
-            tables: [
-              {
-                name: 'vfact_orientacao_bolsa_resolved',
-                label: 'Orientações e Bolsas',
-                description: 'Bolsas e orientações de pesquisa',
-                kind: 'fact',
-                available: true,
-                columns: [
-                  { name: 'ano', type: 'INTEGER' },
-                  { name: 'titulo_projeto', type: 'TEXT' },
-                  { name: 'nome_orientador', type: 'TEXT' },
-                  { name: 'modalidade', type: 'TEXT' },
-                  { name: 'investimento_total_estimado', type: 'REAL' },
-                ],
-              },
-              {
-                name: 'vfact_projeto_pesquisa_resolved',
-                label: 'Projetos de Pesquisa',
-                description: 'Projetos SigPesq',
-                kind: 'fact',
-                available: true,
-                columns: [
-                  { name: 'ano_inicio', type: 'INTEGER' },
-                  { name: 'titulo_projeto', type: 'TEXT' },
-                  { name: 'grande_area', type: 'TEXT' },
-                  { name: 'parecer_diretoria', type: 'TEXT' },
-                ],
-              },
-              {
-                name: 'vfact_extensao_acao_resolved',
-                label: 'Ações de Extensão',
-                description: 'Ações SRC',
-                kind: 'fact',
-                available: true,
-                columns: [
-                  { name: 'ano_cadastro', type: 'INTEGER' },
-                  { name: 'titulo_acao', type: 'TEXT' },
-                  { name: 'tipo_acao', type: 'TEXT' },
-                  { name: 'campus', type: 'TEXT' },
-                ],
-              },
-            ],
-          }
-        case 'explorer.rows': {
-          const table = String(params.table || 'vfact_orientacao_bolsa_resolved')
-          const search = String(params.search || '').trim().toLowerCase()
-          const sortCol = String(params.sort || '')
-          const direction = String(params.direction || 'desc')
-          const page = Math.max(1, Number(params.page || 1))
-          const pageSize = Math.max(1, Number(params.page_size || 25))
-          const source = ALL_ROWS[table] || []
-          const filtered = search
-            ? source.filter((row) => JSON.stringify(row).toLowerCase().includes(search))
-            : [...source]
-          if (sortCol) {
-            filtered.sort((a, b) => {
-              const av = a[sortCol]
-              const bv = b[sortCol]
-              if (av === bv) return 0
-              const cmp = typeof av === 'number' && typeof bv === 'number'
-                ? av - bv
-                : String(av ?? '').localeCompare(String(bv ?? ''), 'pt-BR')
-              return direction === 'asc' ? cmp : -cmp
-            })
-          }
-          const start = (page - 1) * pageSize
-          const paged = filtered.slice(start, start + pageSize)
-          const columns = source.length > 0 ? Object.keys(source[0]) : []
-          return {
-            table,
-            columns,
-            rows: paged,
-            total: filtered.length,
-            page,
-            page_size: pageSize,
-          }
-        }
         case 'chat.conversations.list':
           return conversations
         case 'chat.message_rows':
@@ -326,6 +215,21 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             llm: { configured: llmConfigured, model: 'gemini-3.5-flash-lite' },
             embeddings: { total: 420 },
           }
+        case 'admin.contextos':
+          return [
+            {
+              id: CONTEXTOS[0].id,
+              slug: 'pesquisa-extensao-ifes',
+              nome: 'Pesquisa, Extensão e Produção Científica (Ifes)',
+              descricao: CONTEXTOS[0].description,
+              ativo: true,
+              tabelas: CONTEXTOS[0].views.map((v) => v.name),
+              rag_itens: 18,
+              valores: 420,
+              atualizado_em: '2026-11-19T12:00:00Z',
+              erros: [],
+            },
+          ]
         case 'admin.query_executions':
           return { results: [], count: 0 }
         case 'admin.trainings.list':
