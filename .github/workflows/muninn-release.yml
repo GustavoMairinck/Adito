@@ -89,8 +89,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          ls -la pacotes
-          gh release create "$TAG" pacotes/* \
+          find pacotes -type f
+          mapfile -t ARQUIVOS < <(find pacotes -type f)
+          # Reexecução: se o Release já existe, só substitui os arquivos.
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ARQUIVOS[@]}" --clobber --repo "${{ github.repository }}"
+            exit 0
+          fi
+          gh release create "$TAG" "${ARQUIVOS[@]}" \
             --repo "${{ github.repository }}" \
             --prerelease \
             --title "Muninn ${TAG#muninn-v}" \
