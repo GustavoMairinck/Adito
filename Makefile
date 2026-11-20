@@ -62,7 +62,7 @@ help: ## Exibe esta mensagem de ajuda com todos os comandos disponíveis
 # 🖥️ Aplicação Desktop & Frontend
 # ------------------------------------------------------------------------------
 all: check-setup check-front check-desktop ## Roda ETL (se brutos/ não existir), prepara banco/fatos e inicia o app desktop (#73, #88)
-	@if [ ! -d "$(ETL_DIR)/brutos" ] || [ -z "$$(find "$(ETL_DIR)/brutos" -type f 2>/dev/null | head -n 1)" ]; then \
+	@if [ ! -d "$(ETL_DIR)/brutos" ] || [ -z "$$(find "$(ETL_DIR)/brutos" -type f ! -name '.*' 2>/dev/null | head -n 1)" ]; then \
 		echo -e "$(COLOR_YELLOW)→ Pasta Muninn/etl/brutos/ vazia ou ausente; executando ETL inicial antes de subir o app...$(COLOR_RESET)"; \
 		$(MAKE) etl; \
 	else \
@@ -89,7 +89,7 @@ build-front: check-front ## Gera o build de produção do frontend Vue
 
 dev-tauri: check-desktop ## Roda a casca desktop Tauri diretamente via cargo run
 	@echo -e "$(COLOR_CYAN)→ Executando Tauri via Cargo...$(COLOR_RESET)"
-	@cd "$(TAURI_DIR)" && cargo run
+	@cd "$(TAURI_DIR)" && { command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && cargo run
 
 # ------------------------------------------------------------------------------
 # 🔄 Banco de Dados & Fatos Analíticas (SQLite)
@@ -193,7 +193,7 @@ test-eval: check-setup ## Executa avaliação híbrida de acurácia da IA (SQL g
 
 test-tauri: check-desktop ## Executa os testes unitários em Rust da casca Tauri
 	@echo -e "$(COLOR_CYAN)→ Executando testes do Tauri (Rust)...$(COLOR_RESET)"
-	@cd "$(TAURI_DIR)" && cargo test
+	@cd "$(TAURI_DIR)" && { command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && cargo test
 
 # ------------------------------------------------------------------------------
 # ⚙️ Instalação, Setup & Verificações
@@ -233,8 +233,10 @@ check-desktop:
 		exit 1; \
 	fi
 
+# popular_banco.py lê obrigatoriamente brutos/{src,sigpesq,lattes,cnpq} além de trabalho/pessoas.json;
+# ignoramos arquivos ocultos (ex.: .gitkeep) para não tratar pasta vazia como populada.
 check-brutos:
-	@if [ ! -d "$(ETL_DIR)/brutos" ] || [ -z "$$(find "$(ETL_DIR)/brutos" -type f 2>/dev/null | head -n 1)" ]; then \
+	@if [ ! -d "$(ETL_DIR)/brutos" ] || [ -z "$$(find "$(ETL_DIR)/brutos" -type f ! -name '.*' 2>/dev/null | head -n 1)" ]; then \
 		echo -e "$(COLOR_RED)❌ Erro: Dados brutos do ETL não encontrados em:$(COLOR_RESET)"; \
 		echo -e "   $(ETL_DIR)/brutos"; \
 		echo -e "Execute '$(COLOR_BOLD)make etl$(COLOR_RESET)' ou '$(COLOR_BOLD)make all$(COLOR_RESET)' primeiro para extrair os dados.\n"; \

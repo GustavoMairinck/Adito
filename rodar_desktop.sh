@@ -82,21 +82,48 @@ else
 fi
 
 # 3. Janela Tauri
-# Limpa variáveis injetadas pelo terminal do VS Code Snap (apontando para /snap/),
-# que causam conflito de glibc/libpthread e erro de GSettings schema no GTK3.
-for _var in GTK_PATH GIO_MODULE_DIR GSETTINGS_SCHEMA_DIR LD_LIBRARY_PATH GTK_EXE_PREFIX GTK_IM_MODULE_FILE; do
+# Filtra apenas as entradas apontando para /snap/ (injetadas pelo terminal do VS Code Snap),
+# preservando caminhos legítimos em variáveis de lista separadas por ':' (como LD_LIBRARY_PATH).
+SNAP_DETECTADO=0
+[ -n "${SNAP:-}" ] && SNAP_DETECTADO=1
+
+for _var in GTK_PATH GIO_MODULE_DIR GSETTINGS_SCHEMA_DIR LD_LIBRARY_PATH; do
+  _val="${!_var:-}"
+  if [[ "$_val" == *"/snap/"* ]]; then
+    SNAP_DETECTADO=1
+    _limpo=""
+    IFS=':' read -r -a _partes <<< "$_val"
+    for _p in "${_partes[@]}"; do
+      if [ -n "$_p" ] && [[ "$_p" != *"/snap/"* ]]; then
+        _limpo="${_limpo:+${_limpo}:}${_p}"
+      fi
+    done
+    if [ -n "$_limpo" ]; then
+      export "$_var=$_limpo"
+    else
+      unset "$_var"
+    fi
+  fi
+done
+for _var in GTK_EXE_PREFIX GTK_IM_MODULE_FILE; do
   if [[ "${!_var:-}" == *"/snap/"* ]]; then
+    SNAP_DETECTADO=1
     unset "$_var"
   fi
 done
-unset _var
+unset _var _val _limpo _partes _p
 
 # No Wayland, o renderizador DMA-BUF do WebKitGTK costuma deixar a janela em branco
-# (principalmente com NVIDIA) e o GTK3 aborta com ausência da chave antialiasing no GNOME.
-# Desligado/forçado para XWayland por padrão; exporte manualmente para sobrescrever.
+# (principalmente com NVIDIA). Desligado por padrão; exporte =0 para religar.
+# Quando rodando a partir de ambiente Snap (ex.: terminal do VS Code Snap) ou com
+# MUNINN_FORCE_X11=1, também força GDK_BACKEND=x11 para contornar o erro de schema
+# 'antialiasing' no GTK3 sem impactar sessões Wayland nativas (escala fracionária / sem XWayland).
+# Exporte GDK_BACKEND manualmente (ex.: GDK_BACKEND=x11 ou GDK_BACKEND=wayland) para sobrescrever.
 if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
   export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
-  export GDK_BACKEND="${GDK_BACKEND:-x11}"
+  if [ "$SNAP_DETECTADO" -eq 1 ] || [ "${MUNINN_FORCE_X11:-0}" = "1" ]; then
+    export GDK_BACKEND="${GDK_BACKEND:-x11}"
+  fi
 fi
 
 echo "→ Abrindo a janela do Muninn (o núcleo sobe junto)."

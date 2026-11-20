@@ -69,6 +69,9 @@ Nenhum ponto pendente.
 ### Dependencias
 - [x] Zero novas dependências externas (Python `stdlib`: `ast`, `csv`, `argparse`, `pathlib`).
 
+### Follow-up / Evolução Prevista
+- **Desacoplamento de `Etls/Horizon/`:** atualmente `gerar_lista_lattes.py` lê `ROSTER_IDS` do script legado `Etls/Horizon/Etl/src/scripts/generate_docentes_executive.py` via `ast` (com fallback claro caso o arquivo seja removido). Como follow-up futuro, migrar a fonte canônica de IDs Lattes para dentro do próprio `Muninn/` (ou manter uma geração dinâmica sem dependência de `Etls/`).
+
 ### Consideracoes de Performance
 - Execução local em < 100 ms.
 

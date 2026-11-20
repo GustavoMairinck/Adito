@@ -239,7 +239,7 @@ class TestRodarDesktopSh:
         assert dumped.get("GDK_BACKEND") == "x11"
         assert dumped.get("WEBKIT_DISABLE_DMABUF_RENDERER") == "1"
 
-    def test_preserva_ld_library_path_nao_snap_e_override_manual(self, tmp_path: Path) -> None:
+    def test_preserva_ld_library_path_nao_snap_e_filtra_valor_misto(self, tmp_path: Path) -> None:
         script, fake_bin, env_dump = _setup_fake_desktop_workspace(tmp_path)
         _make_executable(fake_bin / "cargo", f"#!/usr/bin/env bash\nenv > '{env_dump}'\nexit 0\n")
 
@@ -247,7 +247,8 @@ class TestRodarDesktopSh:
             "HOME": str(tmp_path),
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "XDG_SESSION_TYPE": "wayland",
-            "LD_LIBRARY_PATH": "/opt/custom/lib",
+            "LD_LIBRARY_PATH": "/opt/custom/lib:/snap/core20/current/lib:/usr/local/lib",
+            "GTK_PATH": "/snap/code/current/gtk:/usr/lib/gtk-3.0",
             "GDK_BACKEND": "wayland",
             "WEBKIT_DISABLE_DMABUF_RENDERER": "0",
         }
@@ -257,9 +258,37 @@ class TestRodarDesktopSh:
         dumped = dict(
             line.split("=", 1) for line in env_dump.read_text(encoding="utf-8").splitlines() if "=" in line
         )
-        assert dumped.get("LD_LIBRARY_PATH") == "/opt/custom/lib"
+        assert dumped.get("LD_LIBRARY_PATH") == "/opt/custom/lib:/usr/local/lib"
+        assert dumped.get("GTK_PATH") == "/usr/lib/gtk-3.0"
         assert dumped.get("GDK_BACKEND") == "wayland"
         assert dumped.get("WEBKIT_DISABLE_DMABUF_RENDERER") == "0"
+
+    def test_wayland_nativo_nao_forca_x11_mas_flag_forca(self, tmp_path: Path) -> None:
+        script, fake_bin, env_dump = _setup_fake_desktop_workspace(tmp_path)
+        _make_executable(fake_bin / "cargo", f"#!/usr/bin/env bash\nenv > '{env_dump}'\nexit 0\n")
+
+        # Wayland nativo (sem /snap/ e sem MUNINN_FORCE_X11): preserva Wayland nativo
+        env_native = {
+            "HOME": str(tmp_path),
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "XDG_SESSION_TYPE": "wayland",
+        }
+        proc = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env_native)
+        assert proc.returncode == 0, proc.stderr
+        dumped = dict(
+            line.split("=", 1) for line in env_dump.read_text(encoding="utf-8").splitlines() if "=" in line
+        )
+        assert "GDK_BACKEND" not in dumped
+        assert dumped.get("WEBKIT_DISABLE_DMABUF_RENDERER") == "1"
+
+        # Com MUNINN_FORCE_X11=1 sob Wayland: ativa GDK_BACKEND=x11
+        env_forced = {**env_native, "MUNINN_FORCE_X11": "1"}
+        proc2 = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env_forced)
+        assert proc2.returncode == 0, proc2.stderr
+        dumped2 = dict(
+            line.split("=", 1) for line in env_dump.read_text(encoding="utf-8").splitlines() if "=" in line
+        )
+        assert dumped2.get("GDK_BACKEND") == "x11"
 
     def test_nao_forca_gdk_backend_em_x11(self, tmp_path: Path) -> None:
         script, fake_bin, env_dump = _setup_fake_desktop_workspace(tmp_path)
@@ -283,14 +312,82 @@ class TestRodarDesktopSh:
 
 
 class TestValidarEtlEnv:
-    def test_falha_quando_env_ausente(self, tmp_path: Path) -> None:
+    @staticmethod
+    def _clean_env(**extra: str) -> dict[str, str]:
+        base = {k: v for k, v in os.environ.items() if not k.startswith(("MUNINN_CRED", "INFISICAL_", "SRC_", "SIGPESQ_"))}
+        base.update(extra)
+        return base
+
+    def test_falha_quando_env_ausente_e_ambiente_vazio(self, tmp_path: Path) -> None:
         proc = subprocess.run(
             [sys.executable, str(VALIDAR_ENV), "--env-file", str(tmp_path / ".env")],
             capture_output=True,
             text=True,
+            env=self._clean_env(),
         )
         assert proc.returncode == 1
         assert "make setup-etl" in proc.stderr
+
+    def test_aceita_credenciais_via_os_environ_sem_arquivo_env_e_alias_sigpesq_username(self, tmp_path: Path) -> None:
+        missing_env = tmp_path / "nao_existe.env"
+        # Modo env via os.environ com alias SIGPESQ_USERNAME (CI / container)
+        proc_env = subprocess.run(
+            [sys.executable, str(VALIDAR_ENV), "--env-file", str(missing_env), "--escopo", "all"],
+            capture_output=True,
+            text=True,
+            env=self._clean_env(
+                MUNINN_CREDENCIAIS="env",
+                SRC_USER="u_src",
+                SRC_PASSWORD="p_src",
+                SIGPESQ_USERNAME="u_sig_alias",
+                SIGPESQ_PASSWORD="p_sig",
+            ),
+        )
+        assert proc_env.returncode == 0, proc_env.stderr
+
+        # Modo infisical via os.environ sem arquivo .env
+        proc_inf = subprocess.run(
+            [sys.executable, str(VALIDAR_ENV), "--env-file", str(missing_env)],
+            capture_output=True,
+            text=True,
+            env=self._clean_env(
+                MUNINN_CREDENCIAIS="infisical",
+                INFISICAL_CLIENT_ID="cid",
+                INFISICAL_CLIENT_SECRET="csec",
+                INFISICAL_PROJECT_ID="pid",
+            ),
+        )
+        assert proc_inf.returncode == 0, proc_inf.stderr
+
+    def test_precedencia_arquivo_env_sobre_os_environ(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        # .env define infisical (sem credenciais infisical); os.environ define env completo.
+        # Mesma precedência do ETL (comum.py::config): .env ganha -> deve cobrar vars Infisical.
+        env_file.write_text("MUNINN_CREDENCIAIS=infisical\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file)],
+            capture_output=True,
+            text=True,
+            env=self._clean_env(
+                MUNINN_CREDENCIAIS="env",
+                SRC_USER="u",
+                SRC_PASSWORD="p",
+                SIGPESQ_USER="u2",
+                SIGPESQ_PASSWORD="p2",
+            ),
+        )
+        assert proc.returncode == 1
+        assert "INFISICAL_CLIENT_ID" in proc.stderr
+
+        # Se chave no .env está vazia, faz fallback para os.environ (como comum.py::config)
+        env_file.write_text("MUNINN_CREDENCIAIS=env\nSIGPESQ_USER=\n", encoding="utf-8")
+        proc_fb = subprocess.run(
+            [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file), "--escopo", "sigpesq"],
+            capture_output=True,
+            text=True,
+            env=self._clean_env(SIGPESQ_USERNAME="u_env", SIGPESQ_PASSWORD="p_env"),
+        )
+        assert proc_fb.returncode == 0, proc_fb.stderr
 
     def test_falha_quando_modo_invalido_ou_vazio(self, tmp_path: Path) -> None:
         env_file = tmp_path / ".env"
@@ -299,6 +396,7 @@ class TestValidarEtlEnv:
             [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file)],
             capture_output=True,
             text=True,
+            env=self._clean_env(),
         )
         assert proc.returncode == 1
         assert "infisical" in proc.stderr and "env" in proc.stderr
@@ -310,6 +408,7 @@ class TestValidarEtlEnv:
             [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file)],
             capture_output=True,
             text=True,
+            env=self._clean_env(),
         )
         assert proc.returncode == 1
         assert "INFISICAL_CLIENT_SECRET" in proc.stderr
@@ -327,6 +426,7 @@ class TestValidarEtlEnv:
             [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file)],
             capture_output=True,
             text=True,
+            env=self._clean_env(),
         )
         assert proc_ok.returncode == 0
 
@@ -347,6 +447,7 @@ class TestValidarEtlEnv:
             [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file), "--escopo", "src"],
             capture_output=True,
             text=True,
+            env=self._clean_env(),
         )
         assert proc_src.returncode == 0, proc_src.stderr
         assert "SUPER_SECRET_PASSWORD_999" not in proc_src.stdout + proc_src.stderr
@@ -357,6 +458,7 @@ class TestValidarEtlEnv:
                 [sys.executable, str(VALIDAR_ENV), "--env-file", str(env_file), "--escopo", escopo],
                 capture_output=True,
                 text=True,
+                env=self._clean_env(),
             )
             assert proc_fail.returncode == 1
             assert "SIGPESQ_USER" in proc_fail.stderr
@@ -381,24 +483,61 @@ class TestMakefileGuards:
         assert p1.returncode != 0
         assert "make etl" in p1.stdout + p1.stderr
 
-        # Pasta vazia
+        # Pasta vazia e pasta contendo apenas .gitkeep não contam como populadas
         (etl_dir / "brutos").mkdir()
+        (etl_dir / "brutos" / ".gitkeep").write_text("", encoding="utf-8")
         p2 = subprocess.run(
-            ["make", "-f", str(MAKEFILE), f"ETL_DIR={etl_dir}", "check-brutos"],
+            [MAKE_BIN, "-f", str(MAKEFILE), f"ETL_DIR={etl_dir}", "check-brutos"],
             capture_output=True,
             text=True,
         )
         assert p2.returncode != 0
 
-        # Populada
+        # Populada com arquivo real
         (etl_dir / "brutos" / "src").mkdir(parents=True)
         (etl_dir / "brutos" / "src" / "acoes.json").write_text("[]", encoding="utf-8")
         p3 = subprocess.run(
-            ["make", "-f", str(MAKEFILE), f"ETL_DIR={etl_dir}", "check-brutos"],
+            [MAKE_BIN, "-f", str(MAKEFILE), f"ETL_DIR={etl_dir}", "check-brutos"],
             capture_output=True,
             text=True,
         )
         assert p3.returncode == 0, p3.stderr
+
+    def test_dev_tauri_e_test_tauri_carregam_cargo_env_quando_fora_do_path(self, tmp_path: Path) -> None:
+        fake_home = tmp_path / "home"
+        cargo_bin = fake_home / ".cargo" / "bin"
+        cargo_log = tmp_path / "cargo.log"
+        _make_executable(cargo_bin / "cargo", f"#!/usr/bin/env bash\necho \"$*\" >> '{cargo_log}'\n")
+        _make_executable(fake_home / ".cargo" / "env", f'export PATH="{cargo_bin}:$PATH"\n')
+
+        tauri_dir = tmp_path / "src-tauri"
+        tauri_dir.mkdir()
+        safe_bin = tmp_path / "safe_bin"
+        safe_bin.mkdir()
+        for cmd in ("bash", "sh"):
+            for d in ("/usr/bin", "/bin"):
+                cand = Path(d) / cmd
+                if cand.is_file():
+                    (safe_bin / cmd).symlink_to(cand)
+                    break
+
+        env = {"HOME": str(fake_home), "PATH": str(safe_bin)}
+        p_dev = subprocess.run(
+            [MAKE_BIN, "-f", str(MAKEFILE), f"TAURI_DIR={tauri_dir}", "dev-tauri"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert p_dev.returncode == 0, f"stdout={p_dev.stdout}\nstderr={p_dev.stderr}"
+
+        p_test = subprocess.run(
+            [MAKE_BIN, "-f", str(MAKEFILE), f"TAURI_DIR={tauri_dir}", "test-tauri"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert p_test.returncode == 0, f"stdout={p_test.stdout}\nstderr={p_test.stderr}"
+        assert cargo_log.read_text(encoding="utf-8").splitlines() == ["run", "test"]
 
     def test_check_desktop_falha_sem_cargo_e_passa_com_cargo(self, tmp_path: Path) -> None:
         fake_home = tmp_path / "home"
@@ -487,7 +626,9 @@ class TestMakefileGuards:
             "all",
         ]
 
-        # 1. Sem brutos/ -> deve chamar etl e depois desktop
+        # 1. Com brutos/ ausente ou contendo apenas .gitkeep -> deve chamar etl e depois desktop
+        (etl_dir / "brutos").mkdir(parents=True)
+        (etl_dir / "brutos" / ".gitkeep").write_text("", encoding="utf-8")
         p1 = subprocess.run(base_args, capture_output=True, text=True, env=env)
         assert p1.returncode == 0, f"stdout={p1.stdout}\nstderr={p1.stderr}"
         calls1 = calls_log.read_text(encoding="utf-8").splitlines()
