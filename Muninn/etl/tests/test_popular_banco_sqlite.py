@@ -11,6 +11,9 @@ def test_popular_banco_sqlite_execution(tmp_path):
     script_path = repo_root / "scripts" / "popular_banco.py"
     etl_dir = repo_root / "etl"
     temp_db = tmp_path / "teste_dados.db"
+    if not (etl_dir / "brutos").is_dir():
+        # brutos/ tem dados pessoais e não é versionado: no CI (e em clones limpos) não há o que carregar.
+        pytest.skip("sem Muninn/etl/brutos/ (dados brutos não versionados)")
 
     cmd = [
         sys.executable,
