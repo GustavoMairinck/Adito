@@ -13,8 +13,8 @@ Unificação da camada relacional (42 tabelas 3FN do Modelo ASTA) e da camada an
 - **Stories**: US-SQLITE-01 a US-SQLITE-04.
 
 ### EPIC-09: Produtividade de Desenvolvimento & Automação Local (DevEx)
-Criação de ponto de entrada único via Makefile na raiz do monorepo para unificar setup de ambientes virtuais e dependências, reconstrução do banco relacional com fatos em < 5s, inicialização do app desktop e execução consolidada das suítes de testes automatizados. Origem: `docs/discovery/automacao-makefiles-devex.md` e `docs/requirements/automacao-makefiles-devex.md`.
-- **Stories**: US-DEVEX-01.
+Criação de ponto de entrada único via Makefile na raiz do monorepo para unificar setup de ambientes virtuais e dependências, reconstrução do banco relacional com fatos em < 5s, inicialização do app desktop, execução consolidada das suítes de testes automatizados e resiliência de onboarding em ambientes limpos (Issues #83, #84, #87 e #88). Origem: `docs/discovery/automacao-makefiles-devex.md`, `docs/requirements/automacao-makefiles-devex.md`, `Muninn/docs/discovery/correcao-onboarding-makefile-desktop.md` e `Muninn/docs/requirements/correcao-onboarding-makefile-desktop.md`.
+- **Stories**: US-DEVEX-01 a US-DEVEX-05.
 
 ### EPIC-10: Garantia de Qualidade — Testes Automatizados, Performance e Avaliação da IA (Issue #71)
 Estruturação da suíte completa de qualidade do Muninn: testes unitários no frontend Vue (Vitest + Vue Test Utils), testes E2E híbridos com Playwright (mock de `__TAURI_INTERNALS__` + bridge live com `desktop_server.py`), benchmark de performance/latência do núcleo local sobre o `dados.db` real com SLOs e avaliação híbrida de acurácia da IA (SQL gabarito executada + LLM-as-a-Judge) com dataset independente. Origem: `Muninn/docs/discovery/testes-automatizados-qualidade.md` e `Muninn/docs/requirements/testes-automatizados-qualidade.md`.
@@ -53,14 +53,20 @@ Estruturação da suíte completa de qualidade do Muninn: testes unitários no f
 
 ---
 
-### 🗂️ EPIC-09 — Produtividade de Desenvolvimento & Automação Local (DevEx) (aprovado em 18/11/2026)
+### 🗂️ EPIC-09 — Produtividade de Desenvolvimento & Automação Local (DevEx) (atualizado em 20/11/2026)
 
 | ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
 |----|--------|------|------------------|------------|------------|------------|--------|
 | [US-DEVEX-01](stories/US-DEVEX-01_automacao-comandos-makefile-unico.md) | Automação de Comandos do Desenvolvedor via Makefile Único | EPIC-09 | 3 | 🔴 Alta | — | FR01–FR09, BR01–BR04, NFR01–NFR03 | ✅ Concluída |
+| [US-DEVEX-02](stories/US-DEVEX-02_geracao-automatica-lattes-csv.md) | Geração automática e segura de `entradas/lattes.csv` no `make etl-lattes` (Issue #83) | EPIC-09 | 2 | 🔴 Alta (slice 2) | — | FR01, FR02, FR09, BR01–BR03, NFR01, NFR04–NFR05, A01 | ✅ Concluída |
+| [US-DEVEX-03](stories/US-DEVEX-03_guarda-cargo-e-checagens-modulares.md) | Guarda de Rust (`cargo`) e validações modulares de pré-requisitos (Issue #84) | EPIC-09 | 2 | 🔴 Alta (slice 2) | — | FR03, FR04, FR09, BR04, NFR01–NFR02, NFR04–NFR05 | ✅ Concluída |
+| [US-DEVEX-04](stories/US-DEVEX-04_compatibilidade-snap-e-wayland-desktop.md) | Compatibilidade de `rodar_desktop.sh` com VS Code Snap e GNOME Wayland (Issue #87) | EPIC-09 | 2 | 🔴 Alta (slice 2) | US-DEVEX-03 | FR05, FR09, BR05, NFR01–NFR02, NFR05, A04 | ✅ Concluída |
+| [US-DEVEX-05](stories/US-DEVEX-05_fluxo-all-guarda-brutos-e-check-etl-env.md) | Fluxo condicional em `make all`, guarda de `brutos/`, aviso de `.env` e `check-etl-env` granular (Issue #88) | EPIC-09 | 3 | 🟠 Alta (slice 3) | US-DEVEX-02, US-DEVEX-03 | FR06–FR09, BR01–BR03, BR06, NFR01–NFR05, A02–A03 | ✅ Concluída |
 
-> Total EPIC-09: 3 pts (100% Concluído em 18/11/2026).  
-> - **Vertical Slice 1 (3 pts):** `US-DEVEX-01` (Implementação do Makefile raiz, testes operacionais dos alvos e documentação no README). Concluído.
+> Total EPIC-09: 12 pts (100% Concluído em 20/11/2026 — Issues #83, #84, #87 e #88).  
+> - **Vertical Slice 1 (3 pts):** `US-DEVEX-01` (Makefile raiz, testes operacionais e README). Concluído.  
+> - **Vertical Slice 2 (6 pts):** `US-DEVEX-02` + `US-DEVEX-03` + `US-DEVEX-04` (desbloqueio de `etl-lattes` e inicialização do desktop `rodar_desktop.sh`). Concluído.  
+> - **Vertical Slice 3 (3 pts):** `US-DEVEX-05` (fluxo condicional `make all`, guarda de `brutos/`, aviso no `setup-etl` e `check-etl-env` granular). Concluído.
 
 ---
 
