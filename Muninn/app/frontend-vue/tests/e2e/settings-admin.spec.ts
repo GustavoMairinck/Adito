@@ -17,7 +17,7 @@ test.describe('Configurações e Administração', () => {
     await expect(page.getByText('Configurada', { exact: true })).toBeVisible()
   })
 
-  test('exibe abas principais na tela de Administração', async ({ page }) => {
+  test('exibe abas principais e lista contextos carregados na tela de Administração', async ({ page }) => {
     await installTauriMock(page)
     await page.goto('/#/admin')
 
@@ -25,5 +25,9 @@ test.describe('Configurações e Administração', () => {
     await expect(page.getByText('Auditoria SQL')).toBeVisible()
     await expect(page.getByText('Contextos de dados')).toBeVisible()
     await expect(page.getByText('Sistema')).toBeVisible()
+
+    await page.getByRole('button', { name: /Contextos de dados/i }).click()
+    await expect(page.getByText('Contextos carregados')).toBeVisible()
+    await expect(page.getByText('pesquisa-extensao-ifes')).toBeVisible()
   })
 })

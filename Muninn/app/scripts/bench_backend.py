@@ -40,7 +40,7 @@ DEFAULT_SLOS_MS: dict[str, float] = {
     "cold_start_ms": 1500.0,
     "rpc_health_p95_ms": 10.0,
     "rpc_dashboard_p95_ms": 50.0,
-    "rpc_explorer_p95_ms": 50.0,
+    "rpc_admin_p95_ms": 50.0,
     "view_query_p95_ms": 50.0,
 }
 
@@ -231,22 +231,14 @@ def benchmark_views(
     return results
 
 
-def benchmark_concurrency(client: NucleoClient, contexto_id: str, concurrency: int) -> dict[str, Any]:
+def benchmark_concurrency(client: NucleoClient, concurrency: int) -> dict[str, Any]:
     """Dispara rajada de requisições concorrentes no protocolo STDIO/RPC."""
     workload: list[tuple[str, dict[str, Any]]] = [
         ("health", {}),
         ("contextos.list", {}),
         ("dashboard.kpis", {}),
         ("dashboard.top_projects", {}),
-        (
-            "explorer.rows",
-            {
-                "contexto_id": contexto_id,
-                "table": "vfact_orientacao_bolsa_resolved",
-                "page": 1,
-                "page_size": 25,
-            },
-        ),
+        ("admin.contextos", {}),
     ]
 
     t0 = time.perf_counter()
@@ -345,7 +337,7 @@ def main() -> int:
     parser.add_argument("--slo-cold-start", type=float, default=DEFAULT_SLOS_MS["cold_start_ms"], help="SLO de cold-start em ms")
     parser.add_argument("--slo-health", type=float, default=DEFAULT_SLOS_MS["rpc_health_p95_ms"], help="SLO p95 de health/me em ms")
     parser.add_argument("--slo-dashboard", type=float, default=DEFAULT_SLOS_MS["rpc_dashboard_p95_ms"], help="SLO p95 do dashboard em ms")
-    parser.add_argument("--slo-explorer", type=float, default=DEFAULT_SLOS_MS["rpc_explorer_p95_ms"], help="SLO p95 do explorer em ms")
+    parser.add_argument("--slo-admin", type=float, default=DEFAULT_SLOS_MS["rpc_admin_p95_ms"], help="SLO p95 das RPCs admin em ms")
     parser.add_argument("--slo-view", type=float, default=DEFAULT_SLOS_MS["view_query_p95_ms"], help="SLO p95 das views fato em ms")
     args = parser.parse_args()
 
@@ -353,7 +345,7 @@ def main() -> int:
         "cold_start_ms": args.slo_cold_start,
         "rpc_health_p95_ms": args.slo_health,
         "rpc_dashboard_p95_ms": args.slo_dashboard,
-        "rpc_explorer_p95_ms": args.slo_explorer,
+        "rpc_admin_p95_ms": args.slo_admin,
         "view_query_p95_ms": args.slo_view,
     }
 
@@ -389,40 +381,11 @@ def main() -> int:
             ("me", "me", {}, slos_ms["rpc_health_p95_ms"]),
             ("contextos.list", "contextos.list", {}, slos_ms["rpc_dashboard_p95_ms"]),
             ("dashboard.kpis", "dashboard.kpis", {}, slos_ms["rpc_dashboard_p95_ms"]),
+            ("dashboard.kpis (filtrado ano=2024)", "dashboard.kpis", {"ano": "2024"}, slos_ms["rpc_dashboard_p95_ms"]),
             ("dashboard.charts", "dashboard.charts", {}, slos_ms["rpc_dashboard_p95_ms"]),
             ("dashboard.top_projects", "dashboard.top_projects", {}, slos_ms["rpc_dashboard_p95_ms"]),
-            ("explorer.tables", "explorer.tables", {"contexto_id": contexto_id}, slos_ms["rpc_explorer_p95_ms"]),
-            (
-                "explorer.rows (padrão)",
-                "explorer.rows",
-                {"contexto_id": contexto_id, "table": "vfact_orientacao_bolsa_resolved", "page": 1, "page_size": 25},
-                slos_ms["rpc_explorer_p95_ms"],
-            ),
-            (
-                "explorer.rows (busca sem acento)",
-                "explorer.rows",
-                {
-                    "contexto_id": contexto_id,
-                    "table": "vfact_extensao_acao_resolved",
-                    "search": "extensao",
-                    "page": 1,
-                    "page_size": 25,
-                },
-                slos_ms["rpc_explorer_p95_ms"],
-            ),
-            (
-                "explorer.rows (ordenado)",
-                "explorer.rows",
-                {
-                    "contexto_id": contexto_id,
-                    "table": "vfact_orientacao_bolsa_resolved",
-                    "sort": "ano",
-                    "direction": "desc",
-                    "page": 1,
-                    "page_size": 25,
-                },
-                slos_ms["rpc_explorer_p95_ms"],
-            ),
+            ("admin.contextos", "admin.contextos", {}, slos_ms["rpc_admin_p95_ms"]),
+            ("admin.system_status", "admin.system_status", {}, slos_ms["rpc_admin_p95_ms"]),
         ]
 
         rpc_stats: list[LatencyStats] = []
@@ -442,7 +405,7 @@ def main() -> int:
         print(f"  [2/4] RPCs medidas: {len(rpc_stats)} endpoints (p95 máx: {max(r.p95_ms for r in rpc_stats)} ms)")
 
         # 3. Concorrência STDIO
-        concurrency_result = benchmark_concurrency(client, contexto_id, args.concurrency)
+        concurrency_result = benchmark_concurrency(client, args.concurrency)
         print(
             f"  [3/4] Concorrência ({args.concurrency} reqs): {concurrency_result['total_ms']} ms "
             f"({concurrency_result['throughput_rps']} req/s, erros={concurrency_result['errors']})"
