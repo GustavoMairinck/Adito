@@ -549,7 +549,7 @@ const chartSeries = computed(() => {
 
       <div
         :class="[
-          'relative group rounded-2xl p-5 transition-all',
+          'relative group rounded-2xl p-4 transition-all',
           message.type === 'user'
             ? 'rounded-tr-sm bg-[var(--brand-dark)] text-white border border-transparent shadow-xs dark:bg-[#1E5E3A] dark:border-[rgba(54,146,81,0.35)]'
             : message.isFallback
@@ -790,7 +790,7 @@ const chartSeries = computed(() => {
 
         <div v-if="message.sql" class="mt-4 flex flex-wrap gap-2">
           <button
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3.5 py-2.5 text-sm font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
+            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
             @click="emit('toggle-sql', message.id)"
           >
             <Code class="w-4 h-4" />
@@ -799,7 +799,7 @@ const chartSeries = computed(() => {
 
           <button
             v-if="hasRenderableTable"
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3.5 py-2.5 text-sm font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
+            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
             @click="emit('pin', message)"
           >
             <Pin class="w-4 h-4" />
@@ -907,8 +907,9 @@ const chartSeries = computed(() => {
 }
 
 .chat-markdown :deep(p) {
-  margin: 0 0 0.75rem;
-  line-height: 1.75;
+  margin: 0 0 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
 }
 
 .chat-markdown :deep(p:last-child) {
@@ -926,7 +927,8 @@ const chartSeries = computed(() => {
 }
 
 .chat-markdown :deep(li) {
-  margin: 0.25rem 0;
+  margin: 0.3rem 0;
+  font-size: 0.9375rem;
   line-height: 1.65;
 }
 
@@ -962,15 +964,15 @@ const chartSeries = computed(() => {
 }
 
 .chat-markdown :deep(h1) {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
 }
 
 .chat-markdown :deep(h2) {
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .chat-markdown :deep(h3) {
-  font-size: 1rem;
+  font-size: 0.9375rem;
 }
 
 /* Loading state */
