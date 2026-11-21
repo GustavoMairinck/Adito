@@ -26,7 +26,7 @@ from core.datastore import (
 from core.records import Contexto, Tenant, get_local_user
 from core.schema import ensure_schema
 from rpc import session
-from rpc.errors import ApiError
+from rpc.errors import ApiError, llm_error_message
 from rpc.registry import dispatch, load_handlers
 
 RAIZ_REPO = Path(__file__).resolve().parents[5]
@@ -433,6 +433,45 @@ class ChaveGeminiTests(AppDbTestCase):
             response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
         self.assertFalse(response.data['ok'])
         self.assertIn('GEMINI_MODEL', response.data['reason'])
+
+    def test_gemini_key_with_accent_or_space_is_rejected_before_any_request(self):
+        for chave in ('chavé-com-acento', 'chave com espaco', 'chave\ncom-quebra'):
+            with self.subTest(chave=chave), patch('rpc.core_methods.httpx.get') as get:
+                response = Resposta(*call('config.test_llm_key', {'key': chave}))
+            self.assertFalse(response.data['ok'])
+            self.assertIn('Copie de novo', response.data['reason'])
+            get.assert_not_called()
+
+    def test_gemini_key_unicode_error_from_http_client_becomes_a_clear_reason(self):
+        with patch('rpc.core_methods.httpx.get', side_effect=UnicodeEncodeError('ascii', 'é', 0, 1, 'x')):
+            response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
+        self.assertFalse(response.data['ok'])
+        self.assertNotIn('codec', response.data['reason'])
+
+
+class MensagemErroGeminiTests(unittest.TestCase):
+    """llm_error_message traduz só falhas do Gemini; erro local (SQLite, SQL) segue com a mensagem genérica."""
+
+    def test_cota_esgotada(self):
+        self.assertIn('cota', llm_error_message(Exception('429 RESOURCE_EXHAUSTED. quota exceeded')))
+
+    def test_status_declarado_pela_excecao(self):
+        erro = Exception('falhou')
+        erro.code = 429
+        self.assertIn('cota', llm_error_message(erro))
+
+    def test_chave_invalida_e_sobrecarga(self):
+        self.assertIn('chave', llm_error_message(Exception('API key not valid. Please pass a valid API key.')))
+        self.assertIn('sobrecarregado', llm_error_message(Exception('503 Service Unavailable')))
+
+    def test_falha_de_rede_do_httpx(self):
+        import httpx
+        self.assertIn('internet', llm_error_message(httpx.ConnectError('falhou')))
+
+    def test_erro_local_nao_vira_erro_do_gemini(self):
+        self.assertIsNone(llm_error_message(sqlite3.ProgrammingError('Cannot operate on a closed database connection')))
+        self.assertIsNone(llm_error_message(Exception('A consulta devolveu 500 linhas')))
+        self.assertIsNone(llm_error_message(ValueError('no such column: x')))
 
 
 class SQLiteConcorrenciaESegurancaTests(unittest.TestCase):

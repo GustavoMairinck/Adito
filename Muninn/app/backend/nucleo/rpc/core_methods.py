@@ -10,6 +10,10 @@ from .registry import rpc
 from .session import current
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+KEY_INVALID_CHARS = (
+    "A chave tem acento, espaço ou outro caractere que não pode existir numa chave do Gemini. "
+    "Copie de novo direto do Google AI Studio, sem alterar."
+)
 LLM_KEY_MISSING = "Configure a chave do Gemini em Configurações para usar o chat."
 
 
@@ -45,11 +49,15 @@ def test_llm_key(params):
     key = str(params.get("key") or "").strip()
     if not key:
         raise ApiError(400, {"ok": False, "reason": "Informe a chave."})
+    # Cabeçalho HTTP só aceita ASCII visível: acento, espaço ou quebra de linha na chave (colada errada)
+    # estouravam UnicodeEncodeError no httpx e chegavam como um erro "'ascii' codec can't encode...".
+    if not key.isascii() or not key.isprintable() or any(c.isspace() for c in key):
+        return {"ok": False, "reason": KEY_INVALID_CHARS}
     try:
         from agents.config import GEMINI_MODEL
 
         resp = httpx.get(f"{GEMINI_MODELS_URL}/{GEMINI_MODEL}", headers={"x-goog-api-key": key}, timeout=15)
-    except httpx.HTTPError:
+    except (httpx.HTTPError, UnicodeError):
         return {"ok": False, "reason": "Sem conexão com o Gemini. Verifique a internet e tente de novo."}
     if resp.status_code == 200:
         return {"ok": True}

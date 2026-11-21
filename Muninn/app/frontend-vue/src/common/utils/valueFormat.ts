@@ -3,7 +3,7 @@
 
 export type ValueKind = 'money' | 'percent' | 'number'
 
-const semAcento = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const semAcento = (texto: string) => texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const MONEY_KEY = /(valor|investiment|investid|custo|gasto|pago|pagament|orcament|receita|reais|bolsa[ _]mensal)/
 const PERCENT_KEY = /(percent|taxa|pct|proporcao)/
@@ -33,7 +33,8 @@ const compacto = (valor: number) => {
 
 /** Eixo: forma curta ("R$ 1,4 mi", "9,3 mil"). Tooltip (`exato`): valor inteiro ("R$ 1.363.864,00"). */
 export function formatValue(valor: unknown, tipo: ValueKind, exato = false): string {
-  const num = typeof valor === 'number' ? valor : Number.parseFloat(String(valor ?? ''))
+  // Só formata valor realmente numérico: "2024 - Sem custo" não pode virar "R$ 2.024,00".
+  const num = typeof valor === 'number' ? valor : typeof valor === 'string' && valor.trim() !== '' ? Number(valor) : Number.NaN
   if (!Number.isFinite(num)) return String(valor ?? '')
   if (tipo === 'percent') return `${fmt(num, 1)}%`
   if (tipo === 'money') {

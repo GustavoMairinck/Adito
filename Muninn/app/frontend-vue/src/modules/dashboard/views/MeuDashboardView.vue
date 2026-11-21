@@ -898,7 +898,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
           const label = w.globals.labels[seriesIndex]
           const val = series[seriesIndex]
           const sliceColor = w.globals.colors[seriesIndex]
-          return buildChartTooltip(model.dimensionLabel, label, [{ name: 'Valor', value: val, color: sliceColor }])
+          return buildChartTooltip(model.dimensionLabel, label, [{ name: model.series[0]?.name || 'Total', value: val, color: sliceColor }])
         }
       },
       stroke: { width: 2 },
