@@ -1279,6 +1279,23 @@ class SemanticValueResolverTests(AppDbTestCase):
 
         self.assertEqual(len(out["rewrite_candidates"]), 1)
 
+    def test_trata_erro_sqlite_em_has_indexed_values_sem_derrubar_no(self) -> None:
+        import importlib
+        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
+
+        ctx = self._criar_contexto_indexado(com_valores=True)
+        with patch.object(svr, "get_contexto", return_value=ctx), \
+                patch.object(svr.db, "execute", side_effect=sqlite3.OperationalError("database is locked")), \
+                patch.object(svr, "create_react_agent") as mocked_agent:
+            out = svr.semantic_value_resolver(
+                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
+                llm_model=object(),
+                embedder=object(),
+            )
+
+        mocked_agent.assert_not_called()
+        self.assertEqual(out["rewrite_candidates"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

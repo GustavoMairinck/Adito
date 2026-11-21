@@ -46,11 +46,6 @@ class QuestionRewriteResponse(BaseModel):
     reasoning: str = Field(description="The internal reasoning for keeping or rewriting the question.")
 
 
-class ValueResolverResponse(BaseModel):
-    searched_terms: list[str] = Field(description="Entity terms searched with the semantic value tool.")
-    reasoning: str = Field(description="The internal reasoning for deciding which terms to search.")
-
-
 BI_REWRITE_SYSTEM_PROMPT = """
 You rewrite BI questions before SQL generation.
 
