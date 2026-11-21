@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// No imports needed
+import { formatValue, valueKind } from '@/common/utils/valueFormat'
 
 interface Props {
   data: any[]
@@ -7,6 +7,12 @@ interface Props {
 
 const props = defineProps<Props>()
 const keys = props.data && props.data.length > 0 ? Object.keys(props.data[0]) : []
+
+// Só dinheiro e percentual ganham formato; o resto aparece como veio.
+const cell = (key: string, value: unknown) => {
+  const kind = valueKind(key)
+  return kind === 'number' ? value : formatValue(value, kind, true)
+}
 </script>
 
 <template>
@@ -26,7 +32,7 @@ const keys = props.data && props.data.length > 0 ? Object.keys(props.data[0]) : 
       <tbody>
         <tr v-for="(row, i) in data.slice(0, 10)" :key="i" class="border-b border-border-subtle/60 transition-colors hover:bg-surface-elevated/40">
           <td v-for="key in keys" :key="key" class="py-2 px-3 text-text-secondary font-medium">
-            {{ row[key] }}
+            {{ cell(key, row[key]) }}
           </td>
         </tr>
       </tbody>
