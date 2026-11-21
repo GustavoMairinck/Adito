@@ -36,6 +36,8 @@ Rules:
    - Plural questions ("quais", "liste", "mostre", "os N mais", "top N"): ORDER BY metric DESC LIMIT 10 unless the user gives N.
    - Singular questions ("qual o", "o/a com maior/menor", "o principal"): LIMIT 1.
    - Filter questions without ranking: no arbitrary LIMIT; filter with WHERE.
+10. Do NOT add extra WHERE filters (such as IS NOT NULL, year, or status) that the user did not request, except when needed for JOIN keys or excluding NULL years in time-series grouping.
+11. When the user specifies an explicit tie-breaker (e.g. "desempate pelo nome do campus"), strictly follow that exact column order in ORDER BY.
 """
 
 

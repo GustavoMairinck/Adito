@@ -67,10 +67,17 @@ def query_extractor(state: BiAgentState, embedder: Embeddings) -> dict[str, str]
 
     query_embedding = embedder.embed_query(state["user_input"])
 
-    items_by_type = {
-        item_type: list(_search_knowledge(tenant_id, contexto_id, query_embedding, item_type))
-        for item_type in KNOWLEDGE_LIMITS
-    }
+    system_prompt = state.get("system_prompt") or ""
+    items_by_type = {}
+    for item_type in KNOWLEDGE_LIMITS:
+        retrieved = list(_search_knowledge(tenant_id, contexto_id, query_embedding, item_type))
+        if item_type in ("ddl", "doc") and system_prompt:
+            # Evita duplicar no prompt blocos de esquema/regras que já constam integralmente no system_prompt.
+            retrieved = [
+                item for item in retrieved
+                if not (item.content and item.content.strip() in system_prompt)
+            ]
+        items_by_type[item_type] = retrieved
     context = "\n\n".join(
         f"### {KNOWLEDGE_LABELS[item_type]}\n"
         + "\n\n".join(item.content for item in items)
