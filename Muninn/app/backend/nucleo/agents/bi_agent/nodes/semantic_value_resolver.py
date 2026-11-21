@@ -6,7 +6,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
 from analytics_index.services import configured_tables
+from core import db
 from core.contexts import get_contexto
+from core.db import to_db_id
 from core.rich_logging import (
     log_error,
     log_info,
@@ -88,6 +90,10 @@ def semantic_value_resolver(
     if contexto is None or not configured_tables(contexto):
         log_warning("rewrite", "Contexto sem views indexadas (embed_columns); pulando resolução de valores.")
         log_node_end("semantic_value_resolver", "sem candidatos")
+        return _empty_resolution()
+    if not _has_indexed_values(contexto):
+        log_info("rewrite", "Nenhum valor indexado em analytics_text_embedding; pulando resolução de valores.")
+        log_node_end("semantic_value_resolver", "sem valores indexados")
         return _empty_resolution()
 
     prompt = BI_VALUE_RESOLVER_SYSTEM_PROMPT + _indexed_tables_hint(contexto)
