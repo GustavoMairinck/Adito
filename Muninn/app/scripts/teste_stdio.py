@@ -37,13 +37,13 @@ def check(nome, cond, detalhe=""):
 class Nucleo:
     def __init__(self, data_dir: Path):
         env = {**os.environ, "MUNINN_DATA_DIR": str(data_dir), "PYTHONUNBUFFERED": "1"}
-        env.pop("GEMINI_API_KEY", None)
-        env.pop("GOOGLE_API_KEY", None)
+        env["GEMINI_API_KEY"] = ""
+        env["GOOGLE_API_KEY"] = ""
         self.t0 = time.monotonic()
         self.proc = subprocess.Popen(
             [sys.executable, str(APP_DIR / "backend" / "nucleo" / "desktop_server.py")],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=open(data_dir / "nucleo.log", "w"),
-            env=env, text=True, encoding="utf-8",
+            env=env, cwd=str(data_dir), text=True, encoding="utf-8",
         )
         self.next_id = 0
 
@@ -91,24 +91,23 @@ def main() -> int:
         ctxs = n.call("contextos.list")["result"]
         cid = ctxs[0]["id"]
         check("contextos", [c["slug"] for c in ctxs] == ["ctx-contrato"], ctxs)
-        erro = n.call("explorer.rows", {"contexto_id": cid, "table": "nao_existe"})
+        erro = n.call("widgets.refresh", {"id": "00000000-0000-0000-0000-000000000000"})
         check("erro com status 404", erro == {"id": erro["id"], "ok": False,
-              "error": {"status": 404, "data": {"detail": "Tabela indisponível neste contexto."}}}, erro)
+              "error": {"status": 404, "data": {"detail": "No Widget matches the given query."}}}, erro)
         desconhecido = n.call("nao.existe")
         check("método desconhecido", desconhecido["error"]["status"] == 404, desconhecido)
         stream = n.call("chat.stream", {"question": "x", "contexto_id": cid})
         check("chat sem chave → 503", stream["error"]["status"] == 503, stream)
 
         print("[3] Concorrência")
-        ids = [n.request("explorer.rows", {"contexto_id": cid, "table": "vfact_orientacao_bolsa_resolved", "page": p})
-               for p in (1, 2)]
+        ids = [n.request("dashboard.kpis"), n.request("dashboard.charts")]
         respostas = {}
         while len(respostas) < 2:
             msg = n.read()
             respostas[msg["id"]] = msg
         check("duas respostas, cada uma no seu id", sorted(respostas) == sorted(ids)
               and all(r["ok"] for r in respostas.values()))
-        check("páginas certas", [respostas[i]["result"]["page"] for i in ids] == [1, 2])
+        check("respostas certas", "total_investido" in respostas[ids[0]]["result"] and "por_ano" in respostas[ids[1]]["result"])
 
         print("[4] Linha inválida e cancelamento")
         n.proc.stdin.write("isto não é json\n")
@@ -123,9 +122,9 @@ def main() -> int:
         lat = []
         for _ in range(30):
             t0 = time.monotonic()
-            n.call("explorer.rows", {"contexto_id": cid, "table": "vfact_orientacao_bolsa_resolved", "search": "Projeto"})
+            n.call("dashboard.kpis")
             lat.append((time.monotonic() - t0) * 1000)
-        print(f"       explorer.rows mediana {statistics.median(lat):.1f} ms")
+        print(f"       dashboard.kpis mediana {statistics.median(lat):.1f} ms")
         lat = []
         for _ in range(30):
             t0 = time.monotonic()

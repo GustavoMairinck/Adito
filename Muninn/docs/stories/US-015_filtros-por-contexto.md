@@ -1,6 +1,6 @@
 > **Nota:** documento histórico. O projeto se chamava Adito (e, antes, Oraculo-ESX) na época; o nome atual é Muninn (ver `Docs/ADR/ADR-0005-nome-muninn.md`). O texto abaixo não foi reescrito.
 
-# User Story: [US-015] Filtros do dashboard e Explorar Dados por contexto
+# User Story: [US-015] Filtros do dashboard por contexto
 
 **Epic:** Porte do Oráculo-ESX para desktop
 **Prioridade:** Baixa
@@ -13,11 +13,13 @@
 ## 📖 História
 
 **Como** gestor que usa o dashboard
-**Eu quero** filtros e uma tela de exploração que sigam o contexto dos meus dados
-**Para que** não ficar preso à view de vendas da demo
+**Eu quero** filtros que sigam o contexto dos meus dados
+**Para que** não ficar preso a uma view fixa
 
 ### Contexto Adicional
-Os endpoints fixos do painel (`kpis`, `charts`, `projects`) e a tela Explorar Dados continuam presos à view de vendas. A proposta é um `filters.json` por contexto.
+Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.top_projects`) consultam uma view fixa, hoje `vfact_orientacao_bolsa_resolved` (antes era a view da demonstração de vendas, removida). A proposta é um `filters.json` por contexto.
+
+> **2026-11-19:** a tela Explorar dados saiu do produto, a pedido do usuário. Esta história passa a tratar só dos filtros do dashboard.
 
 ---
 
@@ -25,7 +27,7 @@ Os endpoints fixos do painel (`kpis`, `charts`, `projects`) e a tela Explorar Da
 
 - [ ] **Critério 1:** Cada contexto pode declarar filtros num `filters.json` validado na carga.
 - [ ] **Critério 2:** Filtros globais do dashboard valem só para widgets cujo contexto declara o filtro.
-- [ ] **Critério 3:** Explorar Dados volta ao menu, lendo as views e filtros do contexto escolhido.
+- ~~**Critério 3:** Explorar Dados volta ao menu, lendo as views e filtros do contexto escolhido.~~ Fora do escopo desde 2026-11-19 (tela removida).
 
 ---
 
@@ -71,7 +73,7 @@ N/A
 - [ ] **[TASK-002]** Endpoints por contexto
   - Estimativa: -
   - Assignee: -
-- [ ] **[TASK-003]** Refazer Explorar Dados
+- ~~**[TASK-003]** Refazer Explorar Dados~~ (tela removida em 2026-11-19)
   - Estimativa: -
   - Assignee: -
 
@@ -92,7 +94,7 @@ N/A
 
 ## 📝 Notas e Comentários
 
-- Ligada à US-010 (Explorar Dados saiu do menu até isto existir).
+- Ligada à US-010. Em 2026-11-19 a tela Explorar dados foi removida de vez.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

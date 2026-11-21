@@ -6,7 +6,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
 from analytics_index.services import configured_tables
+from core import db
 from core.contexts import get_contexto
+from core.db import to_db_id
 from core.rich_logging import (
     log_error,
     log_info,
@@ -17,7 +19,7 @@ from core.rich_logging import (
     log_warning,
 )
 
-from ..config import BI_VALUE_RESOLVER_SYSTEM_PROMPT, ValueResolverResponse
+from ..config import BI_VALUE_RESOLVER_SYSTEM_PROMPT
 from ..state import BiAgentState
 from ..tools.vector_search import (
     configure_vector_search,
@@ -25,6 +27,19 @@ from ..tools.vector_search import (
     search_analytics_values,
     vector_search_results,
 )
+
+
+def _indexed_tables_hint(contexto) -> str:
+    """Lista views e colunas indexadas para o resolvedor escolher a `source_table` correta."""
+    lines = []
+    for view in getattr(contexto, "views", None) or []:
+        name = view.get("name")
+        cols = view.get("embed_columns") or []
+        if name and cols:
+            lines.append(f"- {name}: {', '.join(cols)}")
+    if not lines:
+        return ""
+    return "\n\nAvailable indexed views (source_table -> embed_columns):\n" + "\n".join(lines)
 
 
 def _dedupe_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -50,6 +65,18 @@ def _empty_resolution() -> dict[str, list]:
     return {"rewrite_candidates": [], "value_search_queries": [], "value_search_calls": []}
 
 
+def _has_indexed_values(contexto) -> bool:
+    try:
+        row = db.execute(
+            "SELECT 1 FROM analytics_text_embedding WHERE contexto_id = ? AND embedding IS NOT NULL LIMIT 1",
+            [to_db_id(contexto.id)],
+        ).fetchone()
+        return row is not None
+    except Exception as exc:
+        log_warning("rewrite", f"Falha ao verificar analytics_text_embedding ({exc}); pulando resolução de valores.")
+        return False
+
+
 def semantic_value_resolver(
     state: BiAgentState,
     llm_model: BaseChatModel,
@@ -64,37 +91,41 @@ def semantic_value_resolver(
         log_warning("rewrite", "Contexto sem views indexadas (embed_columns); pulando resolução de valores.")
         log_node_end("semantic_value_resolver", "sem candidatos")
         return _empty_resolution()
+    if not _has_indexed_values(contexto):
+        log_info("rewrite", "Nenhum valor indexado em analytics_text_embedding; pulando resolução de valores.")
+        log_node_end("semantic_value_resolver", "sem valores indexados")
+        return _empty_resolution()
 
+    prompt = BI_VALUE_RESOLVER_SYSTEM_PROMPT + _indexed_tables_hint(contexto)
+    result: dict[str, Any] = {}
     token = configure_vector_search(contexto=contexto, embedder=embedder, top_k=top_k)
     try:
         try:
+            # Sem response_format: o nó extra generate_structured_response do LangGraph envia
+            # histórico terminando em AIMessage, rejeitado pelo Gemini ("does not support model prefilling").
+            # Os candidatos e termos pesquisados já são coletados diretamente via vector_search_results().
             agent = create_react_agent(
                 model=llm_model,
                 tools=[search_analytics_values],
-                prompt=BI_VALUE_RESOLVER_SYSTEM_PROMPT,
-                response_format=ValueResolverResponse,
+                prompt=prompt,
             )
             result = agent.invoke({"messages": [{"role": "user", "content": user_input}]})
         except Exception as exc:
             log_error("rewrite", f"Falha no agente resolvedor de valores: {exc}")
-            log_node_end("semantic_value_resolver", "falha; sem candidatos")
-            return _empty_resolution()
         collected_candidates, searched_terms, search_calls = vector_search_results()
     finally:
         reset_vector_search(token)
-    structured = result.get("structured_response")
-    if structured:
-        searched_terms = searched_terms or list(structured.searched_terms)
+
+    if search_calls:
         log_kv(
             "rewrite",
             "Resolvedor de valores",
             {
                 "searched_terms": searched_terms,
                 "tool_calls": search_calls,
-                "reasoning": structured.reasoning,
             },
         )
-    else:
+    elif result:
         log_info(
             "rewrite",
             f"Resolvedor de valores respondeu: {_last_message_content(result)[:240]!r}",

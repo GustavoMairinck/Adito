@@ -153,6 +153,25 @@ def _insert_ignore(rows: list[AnalyticsTextEmbedding]) -> None:
         )
 
 
+def _remove_stale(contexto, source_table: str, current_hashes: set[str]) -> int:
+    """Apaga os valores indexados que sumiram do dados.db (ou mudaram de texto)."""
+    cid = to_db_id(contexto.id)
+    stored = [row[0] for row in db.execute(
+        "SELECT value_hash FROM analytics_text_embedding WHERE contexto_id = ? AND source_table = ?",
+        [cid, source_table],
+    )]
+    stale = [value_hash for value_hash in stored if value_hash not in current_hashes]
+    with db.transaction():
+        for start in range(0, len(stale), 500):  # limite de parâmetros do SQLite
+            chunk = stale[start:start + 500]
+            db.execute(
+                "DELETE FROM analytics_text_embedding WHERE contexto_id = ? AND source_table = ? "
+                f"AND value_hash IN ({', '.join('?' * len(chunk))})",
+                [cid, source_table, *chunk],
+            )
+    return len(stale)
+
+
 def sync_text_embeddings(
     contexto,
     embedder,
@@ -160,14 +179,17 @@ def sync_text_embeddings(
     batch_size: int = TEXT_EMBEDDING_BATCH_SIZE,
     dry_run: bool = False,
     limit: int | None = None,
+    prune: bool = False,
 ) -> dict:
-    summary = {"tables": {}, "created": 0, "skipped": 0, "dry_run": dry_run}
+    summary = {"tables": {}, "created": 0, "skipped": 0, "removed": 0, "dry_run": dry_run}
 
     for source_table in configured_tables(contexto, table):
         candidates = fetch_distinct_candidates(contexto, source_table)
         if limit is not None:
             candidates = candidates[:limit]
         hashes = [candidate.value_hash for candidate in candidates]
+        if prune and not dry_run:
+            summary["removed"] += _remove_stale(contexto, source_table, set(hashes))
         existing_hashes = _existing_hashes(contexto, source_table, hashes)
         missing = [candidate for candidate in candidates if candidate.value_hash not in existing_hashes]
 
@@ -203,6 +225,25 @@ def sync_text_embeddings(
             summary["created"] += len(rows)
 
     return summary
+
+
+def update_text_embeddings(contexto, embedder, batch_size: int = TEXT_EMBEDDING_BATCH_SIZE) -> dict:
+    """Atualiza o índice sem recomeçar do zero: envia só os valores que faltam e apaga os que sumiram.
+
+    Cada lote é gravado assim que volta do Gemini, então uma carga interrompida (cota, rede)
+    continua de onde parou na próxima vez.
+    """
+    tables = configured_tables(contexto)
+    cid = to_db_id(contexto.id)
+    with db.transaction():
+        if tables:
+            db.execute(
+                f"DELETE FROM analytics_text_embedding WHERE contexto_id = ? AND source_table NOT IN ({', '.join('?' * len(tables))})",
+                [cid, *tables],
+            )
+        else:
+            db.execute("DELETE FROM analytics_text_embedding WHERE contexto_id = ?", [cid])
+    return sync_text_embeddings(contexto, embedder, batch_size=batch_size, prune=True)
 
 
 def rebuild_text_embeddings(

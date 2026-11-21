@@ -8,11 +8,6 @@ import {
   BookOpen,
   Award,
   GraduationCap,
-  TrendingUp,
-  Package,
-  BarChart2,
-  UserCheck,
-  Percent,
   ArrowRight
 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
@@ -48,12 +43,6 @@ const categoryIcons: Record<string, unknown> = {
   producao: BookOpen,
   editais: Award,
   pesquisadores: GraduationCap,
-  receita: TrendingUp,
-  produtos: Package,
-  clientes: Users,
-  canais: BarChart2,
-  vendedores: UserCheck,
-  margens: Percent,
 }
 
 const selected = ref<string | null>(null)

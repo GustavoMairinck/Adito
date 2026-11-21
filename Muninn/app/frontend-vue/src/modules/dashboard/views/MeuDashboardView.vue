@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   AlertCircle,
   AlertTriangle,
@@ -22,7 +23,8 @@ import {
   Trash2,
   TrendingUp,
   X,
-  Minimize2
+  Minimize2,
+  MessageSquare
 } from 'lucide-vue-next'
 import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
@@ -30,6 +32,7 @@ import type { ApexOptions } from 'apexcharts'
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import { usePersonalDashboard, type Widget } from '@/modules/dashboard/composables/usePersonalDashboard'
 import WidgetTable from '@/modules/dashboard/components/WidgetTable.vue'
+import { chartKeys } from '@/common/utils/chartKeys'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { axisKind, formatValue, valueKind } from '@/common/utils/valueFormat'
 
@@ -640,30 +643,17 @@ const normalizeSeriesLabel = (value: string) => {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (char: string) => char.toUpperCase())
 }
 
+// Mesma regra do chat (common/utils/chartKeys.ts): ano, mês e colunas de texto viram o eixo.
 const getChartDimensionKey = (data: Array<Record<string, any>>) => {
   if (!Array.isArray(data) || data.length === 0) return null
-
   const keys = Object.keys(data[0] || {})
-  const nonNumericKey = keys.find((key: string) =>
-    data.some((row: Record<string, any>) => {
-      const value = row[key]
-      if (value === null || value === undefined || value === '') return false
-      return parseNumericValue(value) === null
-    })
-  )
-
-  return nonNumericKey || keys[0] || null
+  return chartKeys(data).dimensionKeys[0] || keys[0] || null
 }
 
 const getChartMetricKeys = (data: Array<Record<string, any>>) => {
   if (!Array.isArray(data) || data.length === 0) return []
-  const keys = Object.keys(data[0] || {})
   const dimensionKey = getChartDimensionKey(data)
-
-  return keys.filter((key: string) => {
-    if (key === dimensionKey) return false
-    return data.some((row: Record<string, any>) => parseNumericValue(row[key]) !== null)
-  })
+  return chartKeys(data).metricKeys.filter((key: string) => key !== dimensionKey)
 }
 
 const getBaseChartPoints = (widget: Widget): DashboardChartPoint[] => {
@@ -783,6 +773,23 @@ const getChartDensitySettings = (widget: Widget, categoryCount: number) => {
     labelLimit,
     maxHeight
   }
+}
+
+/**
+ * Motivo da falha quando o SQL do widget não roda mais (o núcleo devolve status BROKEN e uma
+ * linha {error}). Sem isso o gráfico desenhava a mensagem de erro como se fosse uma categoria.
+ */
+const widgetError = (widget: Widget): string | null => {
+  const data = widgetData.value[widget.id]
+  const first = Array.isArray(data) && data.length === 1 ? data[0] : null
+  if (first && typeof first.error === 'string') return first.error
+  if (widget.status === 'BROKEN') return 'A consulta deste painel falhou.'
+  return null
+}
+
+const router = useRouter()
+const askAgainInChat = (widget: Widget) => {
+  router.push({ path: '/chat', state: { initialQuery: widget.question_original } })
 }
 
 const isChartable = (widgetId: string) => {
@@ -1256,6 +1263,41 @@ const getChartPixelHeight = (item: any): number => {
         <div class="relative flex min-h-0 flex-1 flex-col justify-center overflow-hidden bg-surface px-2 py-4 dark:bg-slate-950/20">
           <div v-if="!widgetData[item.widget.id]" class="flex items-center justify-center h-full w-full min-h-[150px]">
             <Loader2 class="w-5 h-5 animate-spin text-gray-400" />
+          </div>
+
+          <div
+            v-else-if="widgetError(item.widget)"
+            class="flex h-full w-full min-h-[150px] flex-col items-center justify-center gap-3 px-6 text-center"
+            role="alert"
+          >
+            <AlertTriangle class="h-6 w-6 text-red-500" aria-hidden="true" />
+            <div class="flex max-w-md flex-col gap-1">
+              <p class="text-sm font-semibold text-text-primary">A consulta deste painel não roda mais</p>
+              <p class="text-xs text-text-muted">
+                Os dados ou o contexto mudaram desde que ele foi salvo. Refaça a pergunta no chat e fixe a nova resposta, ou exclua este painel.
+              </p>
+              <p class="line-clamp-3 break-words font-mono text-[11px] text-text-muted/80" :title="widgetError(item.widget) || ''">
+                {{ widgetError(item.widget) }}
+              </p>
+            </div>
+            <div class="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                @click="askAgainInChat(item.widget)"
+              >
+                <MessageSquare class="h-3.5 w-3.5" aria-hidden="true" />
+                Refazer no chat
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:border-red-200 hover:text-red-500"
+                @click="requestDelete(item.widget.id)"
+              >
+                <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
+                Excluir
+              </button>
+            </div>
           </div>
 
           <div
