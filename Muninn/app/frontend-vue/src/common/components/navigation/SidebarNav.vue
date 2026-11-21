@@ -64,16 +64,6 @@ const visibleMenuItems = computed(() =>
   menuItems.filter(item => !item.adminOnly || user.value?.role === 'admin')
 )
 
-const initials = computed(() => {
-  if (!user.value?.username) return 'UN'
-  return user.value.username
-    .split(' ')
-    .map((name: string) => name[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
-})
-
 function toggleTheme() {
   const next = isDark.value ? 'light' : 'dark'
   if (next === 'dark') {
@@ -178,19 +168,7 @@ function toggleTheme() {
     </nav>
 
     <div class="border-t border-white/10 bg-black/15 p-4">
-      <div :class="['mb-5 flex items-center gap-3', isEffectivelyCollapsed ? 'justify-center' : '']">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-[var(--brand-primary)] text-sm font-semibold text-white">
-          <span v-if="!user?.avatar">{{ initials }}</span>
-          <img v-else :src="user.avatar" alt="Avatar" class="h-full w-full object-cover">
-        </div>
-        <div v-if="!isEffectivelyCollapsed" class="animate-in fade-in min-w-0 flex-1 duration-300">
-          <p class="truncate text-sm font-medium text-white">{{ user?.name || user?.username || 'Usuário local' }}</p>
-          <p class="truncate text-[10px] font-medium tracking-[0.03em] text-white/65">{{ user?.email || 'Consulta local de dados' }}</p>
-        </div>
-      </div>
-
       <div class="space-y-2">
-
         <button
           :class="['flex w-full items-center gap-2.5 rounded-md border border-white/[0.12] bg-white/[0.06] text-[10px] font-medium uppercase tracking-[0.1em] text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white', isEffectivelyCollapsed ? 'justify-center p-3' : 'px-4 py-2.5']"
           :title="isDark ? 'Modo Claro' : 'Modo Escuro'"
