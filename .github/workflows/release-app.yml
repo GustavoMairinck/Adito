@@ -63,6 +63,21 @@ jobs:
           fi
           echo "versao=$versao" >> "$GITHUB_OUTPUT"
 
+      # Sem a chave privada nos Secrets, os instaladores saem sem os artefatos do atualizador
+      # (.sig e latest.json). Isso só importa para quem já tem o app: a primeira versão pode sair
+      # assim, mas as seguintes precisam ser assinadas para o aviso de atualização funcionar.
+      - name: Assinatura do atualizador
+        id: assinatura
+        env:
+          TEM_CHAVE: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$TEM_CHAVE" = "true" ]; then
+            echo "atualizador=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret TAURI_SIGNING_PRIVATE_KEY ausente: release sem latest.json/.sig. Quem instalar esta versão não recebe o aviso dela; configure os Secrets antes da próxima (Adito/docs/DISTRIBUICAO.md)."
+            echo "atualizador=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Conferir chave pública do atualizador
         run: |
           if grep -q 'SUBSTITUIR_PELA_CHAVE_PUBLICA' Adito/app/src-tauri/tauri.conf.json; then
@@ -128,7 +143,7 @@ jobs:
           tauriScript: tauri
           # Só no build de instalador: versão da tag, artefatos do atualizador (o build local não
           # precisa da chave privada) e o núcleo empacotado (o modo dev usa o .venv).
-          args: --config '{"version":"${{ steps.versao.outputs.versao }}","bundle":{"createUpdaterArtifacts":true,"externalBin":["binaries/adito-backend"]}}'
+          args: --config '{"version":"${{ steps.versao.outputs.versao }}","bundle":{"createUpdaterArtifacts":${{ steps.assinatura.outputs.atualizador }},"externalBin":["binaries/adito-backend"]}}'
           tagName: ${{ env.TAG }}
           releaseName: Adito ${{ env.TAG }}
           releaseBody: |
@@ -137,7 +152,7 @@ jobs:
             Quem já usa o Adito recebe o aviso "Atualização disponível" no canto da barra lateral.
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: ${{ steps.assinatura.outputs.atualizador == 'true' }}
 
       - name: Conferir que nenhum dado foi embutido
         run: |
