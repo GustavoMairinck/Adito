@@ -1,0 +1,1111 @@
+[
+ {
+  "nome": "health",
+  "status": "2xx",
+  "body": {
+   "status": "ok"
+  }
+ },
+ {
+  "nome": "me",
+  "status": "2xx",
+  "body": {
+   "id": "<id1>",
+   "username": "local",
+   "email": "",
+   "name": "Usuário local",
+   "role": "admin",
+   "avatar": "",
+   "tenant": "padrao",
+   "llm_configured": true
+  }
+ },
+ {
+  "nome": "contextos",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id2>",
+    "slug": "ctx-contrato",
+    "name": "Contrato",
+    "description": "Contexto sintético do teste de contrato.",
+    "views": [
+     {
+      "name": "vfact_orientacao_bolsa_resolved",
+      "description": "Uma linha por orientação."
+     },
+     {
+      "name": "dim_area",
+      "description": "Áreas."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "nome": "kpis",
+  "status": "2xx",
+  "body": {
+   "total_investido": 21860.0,
+   "projetos_ativos": 12,
+   "pagamentos_ano_vigente": 7226.5,
+   "equipe_alocada": 7
+  }
+ },
+ {
+  "nome": "kpis filtrado",
+  "status": "2xx",
+  "body": {
+   "total_investido": 7426.0,
+   "projetos_ativos": 4,
+   "pagamentos_ano_vigente": 0,
+   "equipe_alocada": 7
+  }
+ },
+ {
+  "nome": "top_projects",
+  "status": "2xx",
+  "body": [
+   {
+    "nome": "Projeto 01",
+    "valor": 2714.0,
+    "status": "PIBITI",
+    "valor_formatado": "R$ 2.714,00"
+   },
+   {
+    "nome": "Projeto 02",
+    "valor": 2362.0,
+    "status": "Voluntário",
+    "valor_formatado": "R$ 2.362,00"
+   },
+   {
+    "nome": "Projeto 06",
+    "valor": 2299.5,
+    "status": "PIBIC",
+    "valor_formatado": "R$ 2.299,50"
+   },
+   {
+    "nome": "Projeto 00",
+    "valor": 2065.5,
+    "status": "PIBIC",
+    "valor_formatado": "R$ 2.065,50"
+   },
+   {
+    "nome": "Projeto 03",
+    "valor": 2010.0,
+    "status": "PIBIC",
+    "valor_formatado": "R$ 2.010,00"
+   },
+   {
+    "nome": "Projeto 05",
+    "valor": 1888.5,
+    "status": "Voluntário",
+    "valor_formatado": "R$ 1.888,50"
+   },
+   {
+    "nome": "Projeto 07",
+    "valor": 1810.5,
+    "status": "PIBITI",
+    "valor_formatado": "R$ 1.810,50"
+   },
+   {
+    "nome": "Projeto 04",
+    "valor": 1658.0,
+    "status": "PIBITI",
+    "valor_formatado": "R$ 1.658,00"
+   },
+   {
+    "nome": "Projeto 11",
+    "valor": 1654.5,
+    "status": "Voluntário",
+    "valor_formatado": "R$ 1.654,50"
+   },
+   {
+    "nome": "Projeto 08",
+    "valor": 1321.5,
+    "status": "Voluntário",
+    "valor_formatado": "R$ 1.321,50"
+   }
+  ]
+ },
+ {
+  "nome": "charts",
+  "status": "2xx",
+  "body": {
+   "por_ano": [
+    {
+     "year": 2024,
+     "value": 7207.5
+    },
+    {
+     "year": 2025,
+     "value": 7426.0
+    }
+   ],
+   "mensal": [
+    {
+     "month_num": 1,
+     "month": "1",
+     "value": 2065.5
+    },
+    {
+     "month_num": 2,
+     "month": "2",
+     "value": 2714.0
+    },
+    {
+     "month_num": 4,
+     "month": "4",
+     "value": 2010.0
+    },
+    {
+     "month_num": 5,
+     "month": "5",
+     "value": 1658.0
+    },
+    {
+     "month_num": 7,
+     "month": "7",
+     "value": 2299.5
+    },
+    {
+     "month_num": 8,
+     "month": "8",
+     "value": 1810.5
+    },
+    {
+     "month_num": 10,
+     "month": "10",
+     "value": 832.5
+    },
+    {
+     "month_num": 11,
+     "month": "11",
+     "value": 1243.5
+    }
+   ],
+   "anos_disponiveis": [
+    2024,
+    2025,
+    2026
+   ],
+   "areas_disponiveis": [
+    "Exatas",
+    "Humanas",
+    "Saúde"
+   ],
+   "modalidades_disponiveis": [
+    "PIBIC",
+    "PIBITI",
+    "Voluntário"
+   ],
+   "statuses_disponiveis": [
+    "Modalidade 0",
+    "Modalidade 1"
+   ],
+   "ano_vigente": 2026
+  }
+ },
+ {
+  "nome": "widgets.create",
+  "status": "2xx",
+  "body": {
+   "id": "<id3>",
+   "title": "Total por ano",
+   "question_original": "Total por ano?",
+   "sql_validated": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+   "chart_type": "bar",
+   "mode": "static",
+   "cache_ttl_hours": 4,
+   "size": "medium",
+   "grid_x": 0,
+   "grid_y": 0,
+   "grid_w": 6,
+   "grid_h": 4,
+   "limit_rows": 0,
+   "sort_order": "none",
+   "status": "OK",
+   "last_executed_at": null,
+   "created_at": "<data>",
+   "updated_at": "<data>",
+   "dashboard": "<id4>",
+   "contexto": "<id2>"
+  }
+ },
+ {
+  "nome": "widgets.create inválido",
+  "status": 400,
+  "body": {
+   "question_original": [
+    "This field is required."
+   ],
+   "chart_type": [
+    "\"radar\" is not a valid choice."
+   ]
+  }
+ },
+ {
+  "nome": "widgets.list",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id3>",
+    "title": "Total por ano",
+    "question_original": "Total por ano?",
+    "sql_validated": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+    "chart_type": "bar",
+    "mode": "static",
+    "cache_ttl_hours": 4,
+    "size": "medium",
+    "grid_x": 0,
+    "grid_y": 0,
+    "grid_w": 6,
+    "grid_h": 4,
+    "limit_rows": 0,
+    "sort_order": "none",
+    "status": "OK",
+    "last_executed_at": null,
+    "created_at": "<data>",
+    "updated_at": "<data>",
+    "dashboard": "<id4>",
+    "contexto": "<id2>"
+   }
+  ]
+ },
+ {
+  "nome": "widgets.update",
+  "status": "2xx",
+  "body": {
+   "id": "<id3>",
+   "title": "Total por ano",
+   "question_original": "Total por ano?",
+   "sql_validated": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+   "chart_type": "bar",
+   "mode": "static",
+   "cache_ttl_hours": 4,
+   "size": "small",
+   "grid_x": 2,
+   "grid_y": 1,
+   "grid_w": 4,
+   "grid_h": 4,
+   "limit_rows": 0,
+   "sort_order": "none",
+   "status": "OK",
+   "last_executed_at": null,
+   "created_at": "<data>",
+   "updated_at": "<data>",
+   "dashboard": "<id4>",
+   "contexto": "<id2>"
+  }
+ },
+ {
+  "nome": "widgets.refresh",
+  "status": "2xx",
+  "body": {
+   "data": [
+    {
+     "ano": 2024,
+     "total": 7207.5
+    },
+    {
+     "ano": 2025,
+     "total": 7426.0
+    },
+    {
+     "ano": 2026,
+     "total": 7226.5
+    }
+   ],
+   "widget_status": "OK"
+  }
+ },
+ {
+  "nome": "widgets.create quebrado",
+  "status": "2xx",
+  "body": {
+   "id": "<id5>",
+   "title": "Quebrado",
+   "question_original": "?",
+   "sql_validated": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+   "chart_type": "table",
+   "mode": "static",
+   "cache_ttl_hours": 4,
+   "size": "medium",
+   "grid_x": 0,
+   "grid_y": 0,
+   "grid_w": 4,
+   "grid_h": 4,
+   "limit_rows": 0,
+   "sort_order": "none",
+   "status": "OK",
+   "last_executed_at": null,
+   "created_at": "<data>",
+   "updated_at": "<data>",
+   "dashboard": "<id4>",
+   "contexto": "<id2>"
+  }
+ },
+ {
+  "nome": "widgets.refresh quebrado",
+  "status": "2xx",
+  "body": {
+   "data": [
+    {
+     "error": "no such column: coluna_inexistente"
+    }
+   ],
+   "widget_status": "BROKEN"
+  }
+ },
+ {
+  "nome": "widgets.delete",
+  "status": "2xx",
+  "body": null
+ },
+ {
+  "nome": "widgets.refresh inexistente",
+  "status": 404,
+  "body": {
+   "detail": "No Widget matches the given query."
+  }
+ },
+ {
+  "nome": "widgets.list depois",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id5>",
+    "title": "Quebrado",
+    "question_original": "?",
+    "sql_validated": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+    "chart_type": "table",
+    "mode": "static",
+    "cache_ttl_hours": 4,
+    "size": "medium",
+    "grid_x": 0,
+    "grid_y": 0,
+    "grid_w": 4,
+    "grid_h": 4,
+    "limit_rows": 0,
+    "sort_order": "none",
+    "status": "BROKEN",
+    "last_executed_at": "<data>",
+    "created_at": "<data>",
+    "updated_at": "<data>",
+    "dashboard": "<id4>",
+    "contexto": "<id2>"
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream nova",
+  "status": "2xx",
+  "events": [
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta...",
+     "conversation_id": "<id6>",
+     "user_message_id": "<id7>"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta..."
+    }
+   },
+   {
+    "event": "token",
+    "data": {
+     "text": "Olá"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "mcp_tool_node",
+     "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "result",
+    "data": {
+     "conversation_id": "<id6>",
+     "user_message_id": "<id7>",
+     "message_id": "<id8>",
+     "type": "analysis",
+     "text": "Total calculado.",
+     "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+     "data": [
+      {
+       "ano": 2024,
+       "total": 10.5,
+       "inicio": "2024-01-01"
+      }
+     ],
+     "score": 1.0,
+     "message": null,
+     "explanation": "Soma por ano.",
+     "suggestions": [
+      "Por área?"
+     ],
+     "related_attributes": [],
+     "rewrite": {},
+     "field_formats": {
+      "total": "currency"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream continua",
+  "status": "2xx",
+  "events": [
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta...",
+     "conversation_id": "<id6>",
+     "user_message_id": "<id9>"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta..."
+    }
+   },
+   {
+    "event": "token",
+    "data": {
+     "text": "Olá"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "mcp_tool_node",
+     "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "result",
+    "data": {
+     "conversation_id": "<id6>",
+     "user_message_id": "<id9>",
+     "message_id": "<id10>",
+     "type": "analysis",
+     "text": "Total calculado.",
+     "sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+     "data": [],
+     "score": 1.0,
+     "message": null,
+     "explanation": "Soma por ano.",
+     "suggestions": [
+      "Por área?"
+     ],
+     "related_attributes": [],
+     "rewrite": {},
+     "field_formats": {
+      "total": "currency"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream local",
+  "status": "2xx",
+  "events": [
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta...",
+     "conversation_id": "<id11>",
+     "user_message_id": "<id12>"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "orchestrator",
+     "message": "Roteando pergunta..."
+    }
+   },
+   {
+    "event": "token",
+    "data": {
+     "text": "Olá"
+    }
+   },
+   {
+    "event": "status",
+    "data": {
+     "status": "processing",
+     "step": "mcp_tool_node",
+     "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "result",
+    "data": {
+     "conversation_id": "<id11>",
+     "user_message_id": "<id12>",
+     "message_id": "<id13>",
+     "type": "analysis",
+     "text": "Total calculado.",
+     "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+     "data": [
+      {
+       "ano": 2024,
+       "total": 10.5,
+       "inicio": "2024-01-01"
+      }
+     ],
+     "score": 1.0,
+     "message": null,
+     "explanation": "Soma por ano.",
+     "suggestions": [
+      "Por área?"
+     ],
+     "related_attributes": [],
+     "rewrite": {},
+     "field_formats": {
+      "total": "currency"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream sem pergunta",
+  "status": 400,
+  "events": [
+   {
+    "event": "http",
+    "data": {
+     "error": "Pergunta obrigatória"
+    }
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream contexto inválido",
+  "status": 400,
+  "events": [
+   {
+    "event": "http",
+    "data": {
+     "error": "Escolha um contexto de dados para iniciar a conversa."
+    }
+   }
+  ]
+ },
+ {
+  "nome": "chat.stream sem chave",
+  "status": 503,
+  "events": [
+   {
+    "event": "http",
+    "data": {
+     "error": "Configure a chave do Gemini em Configurações para usar o chat."
+    }
+   }
+  ]
+ },
+ {
+  "nome": "me sem chave",
+  "status": "2xx",
+  "body": {
+   "id": "<id1>",
+   "username": "local",
+   "email": "",
+   "name": "Usuário local",
+   "role": "admin",
+   "avatar": "",
+   "tenant": "padrao",
+   "llm_configured": false
+  }
+ },
+ {
+  "nome": "conversations.list",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id11>",
+    "title": "Oi",
+    "contexto": "<id2>",
+    "created_at": "<data>",
+    "updated_at": "<data>",
+    "createdAt": "<data>",
+    "updatedAt": "<data>",
+    "messages": [
+     {
+      "id": "<id12>",
+      "role": "user",
+      "content": "Oi",
+      "metadata": {},
+      "created_at": "<data>"
+     },
+     {
+      "id": "<id13>",
+      "role": "assistant",
+      "content": "Total calculado.",
+      "metadata": {
+       "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+       "type": "analysis",
+       "score": 1.0,
+       "message": null,
+       "suggestions": [
+        "Por área?"
+       ],
+       "related_attributes": [],
+       "explanation": "Soma por ano.",
+       "error": null,
+       "rewrite": {},
+       "field_formats": {
+        "total": "currency"
+       }
+      },
+      "created_at": "<data>"
+     }
+    ]
+   },
+   {
+    "id": "<id6>",
+    "title": "Total por ano?",
+    "contexto": "<id2>",
+    "created_at": "<data>",
+    "updated_at": "<data>",
+    "createdAt": "<data>",
+    "updatedAt": "<data>",
+    "messages": [
+     {
+      "id": "<id7>",
+      "role": "user",
+      "content": "Total por ano?",
+      "metadata": {},
+      "created_at": "<data>"
+     },
+     {
+      "id": "<id8>",
+      "role": "assistant",
+      "content": "Total calculado.",
+      "metadata": {
+       "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+       "type": "analysis",
+       "score": 1.0,
+       "message": null,
+       "suggestions": [
+        "Por área?"
+       ],
+       "related_attributes": [],
+       "explanation": "Soma por ano.",
+       "error": null,
+       "rewrite": {},
+       "field_formats": {
+        "total": "currency"
+       }
+      },
+      "created_at": "<data>"
+     },
+     {
+      "id": "<id9>",
+      "role": "user",
+      "content": "E por área?",
+      "metadata": {},
+      "created_at": "<data>"
+     },
+     {
+      "id": "<id10>",
+      "role": "assistant",
+      "content": "Total calculado.",
+      "metadata": {
+       "sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+       "type": "analysis",
+       "score": 1.0,
+       "message": null,
+       "suggestions": [
+        "Por área?"
+       ],
+       "related_attributes": [],
+       "explanation": "Soma por ano.",
+       "error": null,
+       "rewrite": {},
+       "field_formats": {
+        "total": "currency"
+       }
+      },
+      "created_at": "<data>"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "nome": "message_rows 0",
+  "status": "2xx",
+  "body": {
+   "data": [
+    {
+     "ano": 2024,
+     "total": 7207.5
+    },
+    {
+     "ano": 2025,
+     "total": 7426.0
+    },
+    {
+     "ano": 2026,
+     "total": 7226.5
+    }
+   ]
+  }
+ },
+ {
+  "nome": "message_rows 1",
+  "status": "2xx",
+  "body": {
+   "data": [
+    {
+     "ano": 2024,
+     "total": 7207.5
+    },
+    {
+     "ano": 2025,
+     "total": 7426.0
+    },
+    {
+     "ano": 2026,
+     "total": 7226.5
+    }
+   ]
+  }
+ },
+ {
+  "nome": "message_rows 2",
+  "status": 409,
+  "body": {
+   "message": "os dados mudaram desde esta pergunta; refaça a pergunta",
+   "error": "no such column: coluna_inexistente"
+  }
+ },
+ {
+  "nome": "message_rows de pergunta",
+  "status": 404,
+  "body": {
+   "detail": "No Message matches the given query."
+  }
+ },
+ {
+  "nome": "query_executions",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id14>",
+    "user": "local",
+    "question_original": "Oi",
+    "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": "<id13>"
+   },
+   {
+    "id": "<id16>",
+    "user": "local",
+    "question_original": "E por área?",
+    "generated_sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": "<id10>"
+   },
+   {
+    "id": "<id17>",
+    "user": "local",
+    "question_original": "Total por ano?",
+    "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": "<id8>"
+   }
+  ]
+ },
+ {
+  "nome": "query_executions inválidas",
+  "status": "2xx",
+  "body": []
+ },
+ {
+  "nome": "conversations.delete",
+  "status": "2xx",
+  "body": null
+ },
+ {
+  "nome": "conversations.list depois",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id11>",
+    "title": "Oi",
+    "contexto": "<id2>",
+    "created_at": "<data>",
+    "updated_at": "<data>",
+    "createdAt": "<data>",
+    "updatedAt": "<data>",
+    "messages": [
+     {
+      "id": "<id12>",
+      "role": "user",
+      "content": "Oi",
+      "metadata": {},
+      "created_at": "<data>"
+     },
+     {
+      "id": "<id13>",
+      "role": "assistant",
+      "content": "Total calculado.",
+      "metadata": {
+       "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+       "type": "analysis",
+       "score": 1.0,
+       "message": null,
+       "suggestions": [
+        "Por área?"
+       ],
+       "related_attributes": [],
+       "explanation": "Soma por ano.",
+       "error": null,
+       "rewrite": {},
+       "field_formats": {
+        "total": "currency"
+       }
+      },
+      "created_at": "<data>"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "nome": "query_executions depois",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id14>",
+    "user": "local",
+    "question_original": "Oi",
+    "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": "<id13>"
+   },
+   {
+    "id": "<id16>",
+    "user": "local",
+    "question_original": "E por área?",
+    "generated_sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": null
+   },
+   {
+    "id": "<id17>",
+    "user": "local",
+    "question_original": "Total por ano?",
+    "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+    "is_valid": true,
+    "error_message": null,
+    "execution_time_ms": null,
+    "created_at": "<data>",
+    "tenant": "<id15>",
+    "contexto": "<id2>",
+    "message": null
+   }
+  ]
+ },
+ {
+  "nome": "test_llm_key vazia",
+  "status": 400,
+  "body": {
+   "ok": false,
+   "reason": "Informe a chave."
+  }
+ },
+ {
+  "nome": "system_status",
+  "status": "2xx",
+  "body": {
+   "services": [
+    {
+     "name": "app.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    },
+    {
+     "name": "dados.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    }
+   ],
+   "systemStats": {
+    "version": "0.1.0",
+    "uptime": "<volátil>",
+    "vectorRows": 0,
+    "trainedDdl": 0,
+    "trainedDoc": 0,
+    "trainedExamples": 0,
+    "lastTraining": null
+   }
+  }
+ },
+ {
+  "nome": "trainings.create",
+  "status": "2xx",
+  "body": {
+   "id": "<id18>",
+   "type": "sql",
+   "name": "Quantas orientações?",
+   "question": "Quantas orientações?",
+   "content": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved",
+   "metadata": {
+    "name": "Quantas orientações?",
+    "source": "admin_panel",
+    "question": "Quantas orientações?",
+    "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
+   },
+   "created_at": "<data>",
+   "updated_at": "<data>"
+  }
+ },
+ {
+  "nome": "trainings.create sem pergunta",
+  "status": 400,
+  "body": {
+   "question": [
+    "Pergunta é obrigatória para training SQL."
+   ]
+  }
+ },
+ {
+  "nome": "system_status depois",
+  "status": "2xx",
+  "body": {
+   "services": [
+    {
+     "name": "app.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    },
+    {
+     "name": "dados.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    }
+   ],
+   "systemStats": {
+    "version": "0.1.0",
+    "uptime": "<volátil>",
+    "vectorRows": 1,
+    "trainedDdl": 0,
+    "trainedDoc": 0,
+    "trainedExamples": 1,
+    "lastTraining": "<data>"
+   }
+  }
+ },
+ {
+  "nome": "bootstrap sem chave",
+  "status": "2xx",
+  "body": {
+   "status": "success",
+   "chave_configurada": false,
+   "contextos": [
+    {
+     "pasta": "ctx-contrato",
+     "slug": "ctx-contrato",
+     "nome": "Contrato",
+     "ativo": true,
+     "erros": [],
+     "indexado": false
+    },
+    {
+     "pasta": "pesquisa-extensao-ifes",
+     "slug": "pesquisa-extensao-ifes",
+     "nome": "Pesquisa, Extensão e Produção Científica (Ifes)",
+     "ativo": false,
+     "erros": [
+      "View 'vfact_extensao_acao_resolved' não existe no dados.db.",
+      "View 'vfact_extensao_participacao_resolved' não existe no dados.db.",
+      "View 'vfact_projeto_pesquisa_resolved' não existe no dados.db.",
+      "View 'vfact_orientacao_bolsa_resolved': embed_columns inexistentes: titulo_plano_trabalho, campus.",
+      "View 'vfact_orientacao_bolsa_resolved': local_search_columns inexistentes: nome_orientado.",
+      "View 'vfact_producao_cientifica_resolved' não existe no dados.db.",
+      "View 'vfact_grupo_pesquisa_membro_resolved' não existe no dados.db."
+     ],
+     "indexado": false
+    }
+   ]
+  }
+ },
+ {
+  "nome": "contextos depois",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id2>",
+    "slug": "ctx-contrato",
+    "name": "Contrato",
+    "description": "Contexto sintético do teste de contrato.",
+    "views": [
+     {
+      "name": "vfact_orientacao_bolsa_resolved",
+      "description": "Uma linha por orientação."
+     },
+     {
+      "name": "dim_area",
+      "description": "Áreas."
+     }
+    ]
+   }
+  ]
+ }
+]

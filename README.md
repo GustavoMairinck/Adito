@@ -1,4 +1,4 @@
-# Adito (Oraculo local do IFES)
+# Adito (assistente de BI de pesquisa e extensão do IFES)
 <img width="700" height="76" alt="image" src="https://github.com/user-attachments/assets/bb871070-f07e-4c9a-b2fd-0a4e2146bb01" />
 
 
@@ -8,6 +8,37 @@ Painel que reúne os dados já públicos dos sistemas do IFES Campus Serra — S
 Os dados vêm dos pipelines, painéis e agentes do **[ifesserra-lab](https://github.com/ifesserra-lab)**.
 
 **[Site → ifesserra-lab.github.io](https://ifesserra-lab.github.io/)** &nbsp;·&nbsp; **[Painel de Extensão →](https://ifesserra-lab.github.io/src/)** &nbsp;·&nbsp; **[Pesquisa STEM →](https://ifesserra-lab.github.io/pesquisa-stem.html)**
+
+---
+
+## 🛠️ Comandos de Desenvolvimento (Makefile)
+
+O projeto conta com um **Makefile centralizado na raiz** para agilizar todo o ciclo de desenvolvimento, preparação de dados e testes:
+
+| Comando | O que faz |
+|---|---|
+| `make` ou `make help` | Exibe o menu com todos os comandos disponíveis e descrições |
+| `make all` ou `make dev` | **Atalho mestre:** verifica setup, reconstrói o banco/fatos e sobe o app desktop completo |
+| `make desktop` | Inicia a aplicação desktop (`./rodar_desktop.sh`) com a base SQLite existente |
+| `make db` | Reconstrói o banco relacional e as 6 Views dinâmicas das fatos no SQLite (~1.2s) |
+| `make etl` | Ciclo completo de ETL: extração externa na web, cruzamento e carga no SQLite |
+| `make etl-extract` | Executa a extração completa de dados da web (SRC, SigPesq, CNPq, Lattes) |
+| `make etl-ver` | Abre o explorador interativo de dados acadêmicos no terminal |
+| `make test` | Executa sequencialmente as suítes rápidas/offline (ETL, núcleo Python, STDIO, contrato RPC e frontend unitário Vitest) |
+| `make test-front` | Executa os testes unitários do frontend Vue (`vitest` + `@vue/test-utils`) |
+| `make test-e2e` | Executa os testes E2E de interface no Chromium via Playwright (modo determinístico com mock de IPC Tauri) |
+| `make test-e2e-live` | Executa os testes E2E integrados conectando o Playwright ao núcleo Python real sobre o `dados.db` |
+| `make test-perf` | Executa o benchmark local de cold-start, RPCs, 6 views fato e concorrência STDIO sobre `dados.db` (exporta JSON/MD) |
+| `make test-eval` | Executa a avaliação híbrida de acurácia da IA (SQL gabarito + LLM Judge, requer `GEMINI_API_KEY`; aceita `ARGS="--sample 6"`) |
+| `make setup` | Cria os ambientes virtuais Python (`.venv` do app e do ETL) e instala todas as dependências |
+| `make clean` | Remove arquivos temporários de log do Adito, caches de compilação e pytest |
+| `make clean-all` | Limpa também os diretórios de build gerados pelo frontend e Tauri (`dist/`, `target/`) |
+
+> **Primeira vez no projeto?** Execute `make setup` para configurar os ambientes virtuais e dependências e depois `make dev` para iniciar o sistema.  
+> **Pré-requisito para Playwright (`make test-e2e`):** caso não haja Chrome/Chromium instalado no sistema, instale o browser uma vez com `cd Adito/app/frontend-vue && npx playwright install chromium`.  
+> **Relatórios de Performance e Acurácia:** `make test-perf` e `make test-eval` salvam relatórios em JSON e Markdown em `Adito/app/data/reports/`. O `make test-eval` aceita `GEMINI_JUDGE_MODEL` (opcional, fallback para `GEMINI_MODEL`) e flags como `ARGS="--sample 6 --no-judge"`.  
+> **Compatibilidade de Sistema Operacional:** O `Makefile` foi projetado para ambientes **Linux**, **WSL** (Windows Subsystem for Linux) e **macOS** (com bash). No Windows nativo, recomenda-se executar os comandos via WSL.
+
 
 ---
 
