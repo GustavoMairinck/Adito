@@ -35,8 +35,12 @@ _REDE = "Não consegui falar com o Gemini. Verifique a conexão com a internet e
 # Textos que o SDK/API do Gemini usa de fato; nada de números soltos, que também aparecem em erros locais.
 _MARCAS_COTA = ("resource_exhausted", "quota", "rate limit", "ratelimit", "too many requests")
 _MARCAS_CHAVE = ("api key not valid", "api_key_invalid", "permission_denied", "unauthenticated")
-_MARCAS_SOBRECARGA = ("service unavailable", "model is overloaded", "overloaded")
-_STATUS_NO_TEXTO = re.compile(r"\b(?:status(?:[_ ]code)?|http(?:/\d(?:\.\d)?)?|code)\W{0,3}(\d{3})\b|^\s*(\d{3})\s+[A-Z_]{4,}\b")
+_MARCAS_SOBRECARGA = ("service unavailable", "internal server error", "model is overloaded", "overloaded")
+# Status só com rótulo ("HTTP 429", "Status: 503", sem diferenciar maiúsculas) ou no começo seguido de
+# um nome de erro em caixa alta ("503 UNAVAILABLE"); assim "500 linhas" não conta.
+_STATUS_NO_TEXTO = re.compile(
+    r"(?i:\b(?:status(?:[_ ]code)?|http(?:/\d(?:\.\d)?)?|code)\W{0,3}(\d{3})\b)|^\s*(\d{3})\s+[A-Z_]{4,}\b"
+)
 
 
 def _cadeia(exc: BaseException):

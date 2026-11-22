@@ -446,7 +446,15 @@ class ChaveGeminiTests(AppDbTestCase):
         with patch('rpc.core_methods.httpx.get', side_effect=UnicodeEncodeError('ascii', 'é', 0, 1, 'x')):
             response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
         self.assertFalse(response.data['ok'])
-        self.assertNotIn('codec', response.data['reason'])
+        self.assertIn('Copie de novo', response.data['reason'])
+        self.assertNotIn('internet', response.data['reason'])
+
+    def test_gemini_key_network_error_reports_no_connection(self):
+        import httpx
+        with patch('rpc.core_methods.httpx.get', side_effect=httpx.ConnectError('falhou')):
+            response = Resposta(*call('config.test_llm_key', {'key': 'test-key'}))
+        self.assertFalse(response.data['ok'])
+        self.assertIn('internet', response.data['reason'])
 
 
 class MensagemErroGeminiTests(unittest.TestCase):
@@ -463,6 +471,12 @@ class MensagemErroGeminiTests(unittest.TestCase):
     def test_chave_invalida_e_sobrecarga(self):
         self.assertIn('chave', llm_error_message(Exception('API key not valid. Please pass a valid API key.')))
         self.assertIn('sobrecarregado', llm_error_message(Exception('503 Service Unavailable')))
+
+    def test_status_com_rotulo_em_qualquer_caixa(self):
+        self.assertIn('cota', llm_error_message(Exception('HTTP 429')))
+        self.assertIn('cota', llm_error_message(Exception('erro http 429 do servidor')))
+        self.assertIn('sobrecarregado', llm_error_message(Exception('Status: 503')))
+        self.assertIn('sobrecarregado', llm_error_message(Exception('500 Internal Server Error')))
 
     def test_falha_de_rede_do_httpx(self):
         import httpx

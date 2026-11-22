@@ -57,7 +57,9 @@ def test_llm_key(params):
         from agents.config import GEMINI_MODEL
 
         resp = httpx.get(f"{GEMINI_MODELS_URL}/{GEMINI_MODEL}", headers={"x-goog-api-key": key}, timeout=15)
-    except (httpx.HTTPError, UnicodeError):
+    except UnicodeError:
+        return {"ok": False, "reason": KEY_INVALID_CHARS}
+    except httpx.HTTPError:
         return {"ok": False, "reason": "Sem conexão com o Gemini. Verifique a internet e tente de novo."}
     if resp.status_code == 200:
         return {"ok": True}
