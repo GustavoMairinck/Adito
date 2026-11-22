@@ -133,7 +133,7 @@ export function useChatApi() {
       return {
         id: `${Date.now() + 1}`,
         type: 'ai',
-        text: `Erro ao processar sua pergunta: ${error?.message || 'erro desconhecido'}. Verifique se o backend esta rodando.`,
+        text: error?.message || 'Erro ao processar sua pergunta. Tente novamente.',
         timestamp: new Date().toISOString(),
         error: true
       }

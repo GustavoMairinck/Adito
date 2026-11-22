@@ -169,7 +169,7 @@ function select(key: string) {
         </transition>
       </div>
 
-      <div class="mx-auto flex w-full max-w-[980px] flex-col space-y-5 md:space-y-6">
+      <div class="mx-auto flex w-full max-w-[980px] flex-col space-y-6 md:space-y-8">
         <ChatMessageBubble
           v-for="message in (messages.length === 1 && messages[0]?.id === 'welcome' && !loading ? [] : messages)"
           :key="message.id"
