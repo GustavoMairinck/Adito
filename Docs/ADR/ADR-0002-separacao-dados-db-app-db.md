@@ -1,4 +1,4 @@
-> **Nota:** ADR escrita quando o projeto se chamava Adito. Os caminhos `Adito/`, o pacote `adito_etl` e as variáveis `ORACULO_*`/`ADITO_*` citados aqui hoje são `Muninn/`, `muninn_etl` e `MUNINN_*` (ver [ADR-0005](ADR-0005-nome-muninn.md)).
+> **Nota:** ADR escrita quando o projeto se chamava Adito. O nome passou a Adito e depois voltou a Adito; hoje as variáveis `ORACULO_*` citadas aqui são `ADITO_*` (ver [ADR-0008](ADR-0008-volta-ao-nome-adito.md)).
 
 # ADR 0002: Separação Arquitetural entre Banco Analítico (dados.db) e Banco Operacional (app.db)
 

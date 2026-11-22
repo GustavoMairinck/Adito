@@ -4,7 +4,7 @@
 **Data:** 20/11/2026
 
 ## Contexto/Problema
-O banco analítico local do Muninn (`dados.db`, SQLite, ~7,6 MB) consolida dados de pesquisa e extensão do IFES Campus Serra (SigPesq, Lattes, CNPq/DGP e SRC). Embora os testes anti-PII do ETL já removam CPF, e-mail e telefone, a base contém **nomes reais** de servidores e estudantes; por cautela com a **LGPD**, o arquivo não pode ser publicado em texto claro em repositório público.
+O banco analítico local do Adito (`dados.db`, SQLite, ~7,6 MB) consolida dados de pesquisa e extensão do IFES Campus Serra (SigPesq, Lattes, CNPq/DGP e SRC). Embora os testes anti-PII do ETL já removam CPF, e-mail e telefone, a base contém **nomes reais** de servidores e estudantes; por cautela com a **LGPD**, o arquivo não pode ser publicado em texto claro em repositório público.
 
 Simultaneamente, o projeto precisa atender três restrições operacionais fortes:
 1. **Zero servidor próprio:** a equipe não mantém VM, storage autenticado ou backend dedicado no IFES/LEDS para servir o banco.
@@ -14,10 +14,10 @@ Simultaneamente, o projeto precisa atender três restrições operacionais forte
 ## Decisão Tomada
 Separar completamente a distribuição do aplicativo da distribuição dos dados e adotar **criptografia *client-side* em GitHub Releases público**:
 
-1. **Instalador limpo (sem PII):** o executável do Muninn nunca embute `dados.db`, permitindo publicação aberta e *auto-update* simples ([ADR 0006](./ADR-0006-empacotamento-e-auto-update-desktop.md)).
+1. **Instalador limpo (sem PII):** o executável do Adito nunca embute `dados.db`, permitindo publicação aberta e *auto-update* simples ([ADR 0006](./ADR-0006-empacotamento-e-auto-update-desktop.md)).
 2. **Publicação cifrada pelo ETL:** o pipeline de dados compacta e criptografa `dados.db` com **AES-256-GCM**, gerando `dados.db.enc` e um `manifest.json` (versão da carga, data e hash **SHA-256**), publicados no GitHub Releases público.
 3. **Onboarding com chave institucional única:** no primeiro acesso, o usuário informa uma **chave institucional de alta entropia (256 bits)** entregue pela equipe. O Tauri armazena essa chave no **cofre do sistema operacional** (`keyring`), baixa `dados.db.enc`, valida o SHA-256 e descriptografa `dados.db` localmente em `app_local_data_dir`.
-4. **Atualização pela interface:** ao abrir o app, o Muninn consulta o `manifest.json` e permite atualizar apenas o `dados.db` pela UI quando houver nova carga, sem reinstalar o executável.
+4. **Atualização pela interface:** ao abrir o app, o Adito consulta o `manifest.json` e permite atualizar apenas o `dados.db` pela UI quando houver nova carga, sem reinstalar o executável.
 
 ## Justificativa
 1. **Única alternativa que satisfaz todas as restrições simultaneamente:** atende privacidade (conteúdo cifrado em AES-256-GCM), **zero servidor próprio**, **zero conta GitHub** para usuários não-técnicos e **atualização automatizada pela UI** (sem Drive/e-mail).
@@ -43,4 +43,4 @@ Separar completamente a distribuição do aplicativo da distribuição dos dados
 * [ADR 0001: Migração da Camada de Dados para 100% SQLite](./ADR-0001-migracao-dados-100-sqlite.md)
 * [ADR 0002: Separação Física entre `dados.db` e `app.db`](./ADR-0002-separacao-dados-db-app-db.md)
 * [ADR 0006: Empacotamento Desktop sem Privilégio de Admin e Auto-Update Assistido](./ADR-0006-empacotamento-e-auto-update-desktop.md)
-* Estudo comparativo completo: [`Muninn/docs/resultados/estrategia-distribuicao-muninn.pdf`](../../Muninn/docs/resultados/estrategia-distribuicao-muninn.pdf)
+* Estudo comparativo completo: [`Adito/docs/resultados/estrategia-distribuicao-adito.pdf`](../../Adito/docs/resultados/estrategia-distribuicao-adito.pdf)

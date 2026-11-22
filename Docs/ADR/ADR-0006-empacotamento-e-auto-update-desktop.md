@@ -4,7 +4,7 @@
 **Data:** 20/11/2026
 
 ## Contexto/Problema
-O Muninn é distribuído como aplicativo desktop local (Tauri v2 + Vue 3 + sidecar Python via `stdin/stdout`) para o público interno do IFES Campus Serra. A maioria dos usuários utiliza máquinas institucionais **sem privilégio de administrador** (sem UAC no Windows e sem `sudo` no Linux), embora alguns também utilizem notebooks pessoais ou máquinas gerenciadas pela TI. Além disso, o projeto opera com **zero servidor próprio** e precisa garantir que novas versões do executável cheguem aos usuários sem exigir contas no GitHub nem causar acúmulo de múltiplos instaladores na pasta Downloads.
+O Adito é distribuído como aplicativo desktop local (Tauri v2 + Vue 3 + sidecar Python via `stdin/stdout`) para o público interno do IFES Campus Serra. A maioria dos usuários utiliza máquinas institucionais **sem privilégio de administrador** (sem UAC no Windows e sem `sudo` no Linux), embora alguns também utilizem notebooks pessoais ou máquinas gerenciadas pela TI. Além disso, o projeto opera com **zero servidor próprio** e precisa garantir que novas versões do executável cheguem aos usuários sem exigir contas no GitHub nem causar acúmulo de múltiplos instaladores na pasta Downloads.
 
 ## Decisão Tomada
 Adotar uma estratégia de distribuição baseada em **GitHub Releases público** (com o executável 100% livre de dados pessoais, conforme [ADR 0007](./ADR-0007-distribuicao-criptografada-dados-db.md)) combinando:
@@ -22,11 +22,11 @@ Adotar uma estratégia de distribuição baseada em **GitHub Releases público**
 
 ## Justificativa
 1. **Compatibilidade com o ambiente real do IFES:** `.exe` (NSIS `currentUser`) e `.AppImage` eliminam o bloqueio de privilégio de administrador sem depender de chamados à TI, enquanto `.msi` e `.deb` já fazem parte da matriz do Tauri e cobrem deploy corporativo e máquinas pessoais sem custo extra relevante no CI.
-2. **Experiência limpa e previsível:** o *auto-update* assistido substitui o aplicativo no local original (evitando múltiplos `Muninn_v0.1`, `v0.2`, `v0.3` em Downloads), ao mesmo tempo em que respeita o momento do usuário — não reinicia o app no meio de uma consulta ou reunião nem consome ~80–150 MB de banda sem aviso.
+2. **Experiência limpa e previsível:** o *auto-update* assistido substitui o aplicativo no local original (evitando múltiplos `Adito_v0.1`, `v0.2`, `v0.3` em Downloads), ao mesmo tempo em que respeita o momento do usuário — não reinicia o app no meio de uma consulta ou reunião nem consome ~80–150 MB de banda sem aviso.
 3. **Zero infraestrutura própria:** GitHub Releases público + assinatura Ed25519 gratuita eliminam a necessidade de manter servidor de updates.
 
 ## Alternativas Consideradas
-* **Windows somente `.exe` | Linux `.AppImage` + `.deb`:** descartada porque, caso a TI do IFES opte por instalar o Muninn em laboratórios via GPO/Intune, exigiria reintroduzir o target `.msi` posteriormente.
+* **Windows somente `.exe` | Linux `.AppImage` + `.deb`:** descartada porque, caso a TI do IFES opte por instalar o Adito em laboratórios via GPO/Intune, exigiria reintroduzir o target `.msi` posteriormente.
 * **Mínimo absoluto (somente `.exe` e `.AppImage`):** descartada porque usuários Linux pessoais em Ubuntu 22.04+ sem `libfuse2` ficariam sem a alternativa nativa do `.deb`, e a TI sem o `.msi`.
 * **Windows `.zip` portátil + Linux `.AppImage`:** descartada por oferecer UX inferior (extração manual, sem atalho no Menu Iniciar nem desinstalador) e não integrar nativamente com o `tauri-plugin-updater`.
 * **Auto-update silencioso em segundo plano:** descartada pelo risco de interromper/reiniciar o app durante apresentações ou reuniões e baixar ~80–150 MB (com sidecar Python) sem ciência do usuário em redes lentas.
@@ -42,7 +42,7 @@ Adotar uma estratégia de distribuição baseada em **GitHub Releases público**
   - *Limitação de auto-update em `.deb`/`.msi`:* mitigado exibindo link direto de download manual quando o formato instalado não suporta substituição sem privilégio elevado.
 
 ## Referências
-* [ADR 0005: Nome do produto passa a ser Muninn](./ADR-0005-nome-muninn.md)
+* [ADR 0008: Nome do produto volta a ser Adito](./ADR-0008-volta-ao-nome-adito.md)
 * [ADR 0007: Distribuição e Atualização Criptografada do Banco `dados.db`](./ADR-0007-distribuicao-criptografada-dados-db.md)
-* Configuração atual do bundle: [`Muninn/app/src-tauri/tauri.conf.json`](../../Muninn/app/src-tauri/tauri.conf.json)
-* Estudo comparativo completo: [`Muninn/docs/resultados/estrategia-distribuicao-muninn.pdf`](../../Muninn/docs/resultados/estrategia-distribuicao-muninn.pdf)
+* Configuração atual do bundle: [`Adito/app/src-tauri/tauri.conf.json`](../../Adito/app/src-tauri/tauri.conf.json)
+* Estudo comparativo completo: [`Adito/docs/resultados/estrategia-distribuicao-adito.pdf`](../../Adito/docs/resultados/estrategia-distribuicao-adito.pdf)

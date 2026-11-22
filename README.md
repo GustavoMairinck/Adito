@@ -1,4 +1,4 @@
-# Muninn (assistente de BI de pesquisa e extensão do IFES)
+# Adito (assistente de BI de pesquisa e extensão do IFES)
 <img width="700" height="76" alt="image" src="https://github.com/user-attachments/assets/bb871070-f07e-4c9a-b2fd-0a4e2146bb01" />
 
 
@@ -31,12 +31,12 @@ O projeto conta com um **Makefile centralizado na raiz** para agilizar todo o ci
 | `make test-perf` | Executa o benchmark local de cold-start, RPCs, 6 views fato e concorrência STDIO sobre `dados.db` (exporta JSON/MD) |
 | `make test-eval` | Executa a avaliação híbrida de acurácia da IA (SQL gabarito + LLM Judge, requer `GEMINI_API_KEY`; aceita `ARGS="--sample 6"`) |
 | `make setup` | Cria os ambientes virtuais Python (`.venv` do app e do ETL) e instala todas as dependências |
-| `make clean` | Remove arquivos temporários de log do Muninn, caches de compilação e pytest |
+| `make clean` | Remove arquivos temporários de log do Adito, caches de compilação e pytest |
 | `make clean-all` | Limpa também os diretórios de build gerados pelo frontend e Tauri (`dist/`, `target/`) |
 
 > **Primeira vez no projeto?** Execute `make setup` para configurar os ambientes virtuais e dependências e depois `make dev` para iniciar o sistema.  
-> **Pré-requisito para Playwright (`make test-e2e`):** caso não haja Chrome/Chromium instalado no sistema, instale o browser uma vez com `cd Muninn/app/frontend-vue && npx playwright install chromium`.  
-> **Relatórios de Performance e Acurácia:** `make test-perf` e `make test-eval` salvam relatórios em JSON e Markdown em `Muninn/app/data/reports/`. O `make test-eval` aceita `GEMINI_JUDGE_MODEL` (opcional, fallback para `GEMINI_MODEL`) e flags como `ARGS="--sample 6 --no-judge"`.  
+> **Pré-requisito para Playwright (`make test-e2e`):** caso não haja Chrome/Chromium instalado no sistema, instale o browser uma vez com `cd Adito/app/frontend-vue && npx playwright install chromium`.  
+> **Relatórios de Performance e Acurácia:** `make test-perf` e `make test-eval` salvam relatórios em JSON e Markdown em `Adito/app/data/reports/`. O `make test-eval` aceita `GEMINI_JUDGE_MODEL` (opcional, fallback para `GEMINI_MODEL`) e flags como `ARGS="--sample 6 --no-judge"`.  
 > **Compatibilidade de Sistema Operacional:** O `Makefile` foi projetado para ambientes **Linux**, **WSL** (Windows Subsystem for Linux) e **macOS** (com bash). No Windows nativo, recomenda-se executar os comandos via WSL.
 
 

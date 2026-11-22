@@ -4,7 +4,7 @@
 
 ## Escopo
 
-- **ETL validado:** pipeline PostgreSQL do Muninn (`Etls/Horizon/Etl/src/core/logic/carga`, schema `ModeloLogicoHorizon.sql` com `ajustes_postgres.sql`). Foi chamado `executar_carga`, que é o mesmo núcleo de `python -m src.flows.pipelines.horizon_postgres --sem-download`.
+- **ETL validado:** pipeline PostgreSQL do Adito (`Etls/Horizon/Etl/src/core/logic/carga`, schema `ModeloLogicoHorizon.sql` com `ajustes_postgres.sql`). Foi chamado `executar_carga`, que é o mesmo núcleo de `python -m src.flows.pipelines.horizon_postgres --sem-download`.
 - **Fontes:** SigPesq (grupos, projetos e bolsistas), CNPq (espelhos de grupo), Lattes (JSON do scriptLattes) e enriquecimento PJ (rodou sem documentos).
 - **Ambiente:** PostgreSQL 16 local, Python 3.13. Nenhum acesso à internet: o crawler do CNPq lê os espelhos de arquivo, e o `CnpqCrawlerAdapter` real continua em uso.
 - **Testes já existentes:** `tests/test_carga_*.py` contra o mesmo banco deram 100 aprovados e 2 com erro. Os 2 com erro são os testes do flow, que precisam do Prefect, e o Prefect não estava instalado no ambiente.
