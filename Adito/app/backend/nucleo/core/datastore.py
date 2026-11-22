@@ -26,7 +26,21 @@ APP_DIR_NAME = "br.edu.ifes.leds.adito"
 # Pastas antigas (a mais recente primeiro): Muninn e, antes dele, Oraculo-ESX.
 # Só servem para migrar os dados para o Adito.
 LEGACY_APP_DIR_NAMES = ("br.edu.ifes.leds.muninn", "br.edu.ifes.leds.oraculo-esx")
-REPO_APP_DIR = Path(__file__).resolve().parents[3]
+
+
+def _repo_app_dir() -> Path:
+    """Pasta `Adito/app` (onde ficam `contexts/` e `data/`).
+
+    Empacotado pelo PyInstaller (`adito-backend`, US-011), os arquivos do app vão para a pasta
+    temporária do executável (`sys._MEIPASS`), e não há `data/dados.db` ali: o dados.db vem da
+    pasta do usuário (ADR-0007).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    return Path(__file__).resolve().parents[3]
+
+
+REPO_APP_DIR = _repo_app_dir()
 DEFAULT_REPO_SQLITE = REPO_APP_DIR / "data" / "dados.db"
 
 _RE_LEADING_EXPLAIN = re.compile(r"^\s*EXPLAIN\s+", re.IGNORECASE)

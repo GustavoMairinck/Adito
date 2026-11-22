@@ -11,8 +11,14 @@
 //! Quando o app fecha, ou morre, o stdin do núcleo fecha e ele encerra sozinho.
 //! A chave do Gemini fica no cofre do SO e só chega ao núcleo por variável de ambiente;
 //! trocar a chave reinicia o núcleo.
+//!
+//! Distribuição (ADR-0006/0007): o app se atualiza pelo `tauri-plugin-updater` e a base
+//! `dados.db` chega cifrada pelo GitHub Releases (ver `dados.rs`); a chave dela também fica no cofre.
+
+pub mod dados;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -30,6 +36,8 @@ const START_TIMEOUT: Duration = Duration::from_secs(90);
 const STOP_GRACE: Duration = Duration::from_secs(3);
 const KEYRING_SERVICE: &str = "br.edu.ifes.leds.adito";
 const KEYRING_USER: &str = "gemini-api-key";
+/// Chave institucional que abre o `dados.db.enc` (ADR-0007).
+const KEYRING_DADOS: &str = "dados-chave";
 /// Identifiers antigos (o mais recente primeiro): Muninn e, antes dele, Oraculo-ESX.
 /// Só servem para migrar dados e chave para o Adito.
 const LEGACY_IDENTIFIERS: &[&str] = &["br.edu.ifes.leds.muninn", "br.edu.ifes.leds.oraculo-esx"];
@@ -469,6 +477,144 @@ async fn clear_llm_key(state: CoreState<'_>) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+// ── Base de dados cifrada (ADR-0007) ─────────────────────────────────────────
+
+fn dados_key_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_DADOS).map_err(|e| e.to_string())
+}
+
+fn read_dados_key() -> Result<Option<dados::Chave>, String> {
+    match dados_key_entry()?.get_password() {
+        Ok(texto) => dados::ler_chave(&texto).map(Some),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Em desenvolvimento o núcleo cai no `data/dados.db` do repositório quando a pasta do usuário
+/// não tem um (ver `dados_db_path()` no núcleo); aí não há o que pedir na tela.
+fn dados_do_repositorio() -> bool {
+    cfg!(debug_assertions) && Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/dados.db").is_file()
+}
+
+#[derive(Serialize)]
+struct DadosStatus {
+    /// Há um `dados.db` para o núcleo usar (baixado, ou o do repositório em desenvolvimento).
+    instalado: bool,
+    versao: Option<String>,
+    desenvolvimento: bool,
+    chave_configurada: bool,
+}
+
+#[tauri::command]
+async fn dados_status(state: CoreState<'_>) -> Result<DadosStatus, String> {
+    let data_dir = state.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let instalado = dados::ler_instalado(&data_dir);
+        let desenvolvimento = instalado.is_none() && dados_do_repositorio();
+        DadosStatus {
+            instalado: instalado.is_some() || desenvolvimento,
+            versao: instalado.map(|i| i.versao),
+            desenvolvimento,
+            chave_configurada: matches!(read_dados_key(), Ok(Some(_))),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+struct DadosRemoto {
+    versao: String,
+    tamanho: u64,
+    /// A versão publicada é outra que a instalada (ou não há nenhuma instalada).
+    atualizacao: bool,
+    /// A chave guardada não abre esta versão (falta, ou a instituição trocou a chave).
+    precisa_chave: bool,
+}
+
+/// Lê o `manifest.json` publicado. Não precisa de chave nem de conta no GitHub.
+#[tauri::command]
+async fn dados_verificar(state: CoreState<'_>) -> Result<DadosRemoto, String> {
+    let m = dados::baixar_manifesto().await?;
+    let data_dir = state.data_dir.clone();
+    let (local, chave) = tauri::async_runtime::spawn_blocking(move || {
+        (dados::ler_instalado(&data_dir), read_dados_key().ok().flatten())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(DadosRemoto {
+        atualizacao: local.is_none_or(|l| l.versao != m.versao),
+        precisa_chave: chave.is_none_or(|c| dados::chave_id(&c) != m.chave_id),
+        versao: m.versao,
+        tamanho: m.tamanho,
+    })
+}
+
+static INSTALANDO_DADOS: AtomicBool = AtomicBool::new(false);
+
+struct LiberaInstalacao;
+impl Drop for LiberaInstalacao {
+    fn drop(&mut self) {
+        INSTALANDO_DADOS.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Baixa, confere e troca o `dados.db`. Com `chave`, usa a chave digitada e, se ela abrir o
+/// pacote, guarda no cofre; sem, usa a do cofre. O `app.db` não é tocado.
+/// Devolve a versão instalada; o front espera `core_ready` depois.
+#[tauri::command]
+async fn dados_instalar(state: CoreState<'_>, chave: Option<String>) -> Result<String, String> {
+    if INSTALANDO_DADOS.swap(true, Ordering::SeqCst) {
+        return Err("Os dados já estão sendo atualizados.".into());
+    }
+    let _libera = LiberaInstalacao;
+
+    let digitada = match chave.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        Some(texto) => Some(dados::ler_chave(texto)?),
+        None => None,
+    };
+    let m = dados::baixar_manifesto().await?;
+    let chave = match digitada {
+        Some(c) => c,
+        None => tauri::async_runtime::spawn_blocking(read_dados_key)
+            .await
+            .map_err(|e| e.to_string())??
+            .ok_or("Informe a chave dos dados.")?,
+    };
+    if dados::chave_id(&chave) != m.chave_id {
+        return Err(if digitada.is_some() {
+            "Essa chave não abre esta versão dos dados. Confira com quem te passou a chave.".into()
+        } else {
+            "A chave dos dados mudou. Informe a nova chave para atualizar.".into()
+        });
+    }
+    let pacote = dados::baixar_pacote(&m).await?;
+
+    let core = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let banco = dados::abrir_pacote(&chave, &pacote, &m)?;
+        drop(pacote);
+        let novo = dados::preparar(&core.data_dir, &banco)?;
+        drop(banco);
+        if digitada.is_some() {
+            dados_key_entry()?.set_password(&dados::chave_texto(&chave)).map_err(|e| e.to_string())?;
+        }
+        // O núcleo segura o dados.db aberto (no Windows, a troca falharia): para, troca, sobe.
+        core.stop();
+        core.fail_pending(CoreError::new(503, "O núcleo está reiniciando para carregar os dados novos."));
+        let instalado = dados::Instalado { versao: m.versao.clone(), chave_id: m.chave_id.clone() };
+        let trocou = dados::trocar(&core.data_dir, &novo, &instalado);
+        if trocou.is_err() {
+            let _ = fs::remove_file(&novo);
+        }
+        core.spawn()?;
+        trocou.map(|_| m.versao)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_local_data_dir()?;
     let log_dir = app.path().app_log_dir()?;
@@ -497,6 +643,9 @@ fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>>
 pub fn run() {
     migrate_legacy_data();
     tauri::Builder::default()
+        // Atualização do app (ADR-0006): lê o latest.json do GitHub Releases; o front pergunta antes.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let core = setup_core(app)?;
             app.manage(core);
@@ -509,7 +658,10 @@ pub fn run() {
             core_cancel,
             llm_key_status,
             set_llm_key,
-            clear_llm_key
+            clear_llm_key,
+            dados_status,
+            dados_verificar,
+            dados_instalar
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Adito")

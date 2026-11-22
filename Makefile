@@ -45,6 +45,7 @@ COLOR_RED    := \033[31m
         db etl etl-popular etl-cruzar etl-ver etl-pii etl-extract \
         etl-src-acoes etl-src-participacoes etl-sigpesq etl-cnpq etl-lattes \
         test test-etl test-core test-mcp test-front test-e2e test-e2e-live test-perf test-eval test-tauri \
+        chave-dados publicar-dados nucleo instalador \
         setup setup-app setup-etl clean clean-all \
         check-setup check-front check-desktop check-brutos check-etl-env check-etl-env-src check-etl-env-sigpesq
 
@@ -194,6 +195,28 @@ test-eval: check-setup ## Executa avaliação híbrida de acurácia da IA (SQL g
 test-tauri: check-desktop ## Executa os testes unitários em Rust da casca Tauri
 	@echo -e "$(COLOR_CYAN)→ Executando testes do Tauri (Rust)...$(COLOR_RESET)"
 	@cd "$(TAURI_DIR)" && { command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && cargo test
+
+# ------------------------------------------------------------------------------
+# 📦 Distribuição (ADR-0006/0007)
+# ------------------------------------------------------------------------------
+nucleo: check-desktop ## Empacota o núcleo Python (adito-backend) com PyInstaller para ir no instalador
+	@[ -x "$(APP_PYTHON)" ] || { echo -e "$(COLOR_RED)❌ Falta o .venv do app: rode 'make setup-app'.$(COLOR_RESET)"; exit 1; }
+	@echo -e "$(COLOR_CYAN)→ Empacotando o núcleo Python (PyInstaller)...$(COLOR_RESET)"
+	@"$(APP_PYTHON)" -m pip install -q "pyinstaller>=6.16,<7"
+	@cd "$(APP_DIR)" && { command -v rustc >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && "$(APP_PYTHON)" scripts/empacotar_nucleo.py
+
+instalador: nucleo check-front ## Gera os instaladores Linux (.deb e .AppImage) com o núcleo embutido
+	@echo -e "$(COLOR_CYAN)→ Gerando os instaladores (Tauri)...$(COLOR_RESET)"
+	@cd "$(FRONT_DIR)" && npm run build
+	@cd "$(TAURI_DIR)" && { command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && \
+		"$(FRONT_DIR)/node_modules/.bin/tauri" build --bundles deb,appimage --config '{"bundle":{"externalBin":["binaries/adito-backend"]}}'
+	@echo -e "$(COLOR_GREEN)✓ Instaladores em $(TAURI_DIR)/target/release/bundle/$(COLOR_RESET)"
+
+chave-dados: check-desktop ## Gera uma chave institucional nova para trancar o dados.db (guarde num cofre)
+	@cd "$(TAURI_DIR)" && { command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && cargo run --quiet --example empacotar_dados -- gerar-chave
+
+publicar-dados: check-desktop ## Tranca e publica o dados.db no GitHub Releases (requer ADITO_DADOS_CHAVE e gh)
+	@{ command -v cargo >/dev/null 2>&1 || source "$$HOME/.cargo/env"; } && "$(SCRIPTS_DIR)/publicar_dados.sh" $(ARGS)
 
 # ------------------------------------------------------------------------------
 # ⚙️ Instalação, Setup & Verificações
