@@ -47,3 +47,7 @@ dbt_bak
 /data/
 *.duckdb
 *.duckdb.wal
+
+# Build do núcleo pelo PyInstaller (US-011)
+/backend/dist/
+/backend/build/

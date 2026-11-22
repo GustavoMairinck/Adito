@@ -19,3 +19,9 @@ serde_json = "1"
 tokio = { version = "1", features = ["sync"] }
 # Cofre do SO para a chave do Gemini: Secret Service (Linux) e Credential Manager (Windows).
 keyring = "4"
+# Distribuição (ADR-0006/0007): atualização do app e da base cifrada pelo GitHub Releases.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+aes-gcm = "0.10"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

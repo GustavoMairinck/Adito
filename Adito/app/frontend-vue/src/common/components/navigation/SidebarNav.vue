@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useRoute } from 'vue-router'
 import BrandIcon from '@/common/components/BrandIcon.vue'
+import AtualizacaoDisponivel from '@/common/components/navigation/AtualizacaoDisponivel.vue'
 import {
   AreaChart,
   MessageSquare,
@@ -167,6 +168,7 @@ function toggleTheme() {
 
     <div class="border-t border-white/10 bg-black/15 p-4">
       <div class="space-y-2">
+        <AtualizacaoDisponivel :collapsed="isEffectivelyCollapsed" />
         <button
           :class="['flex w-full items-center gap-2.5 rounded-md border border-white/[0.12] bg-white/[0.06] text-[10px] font-medium uppercase tracking-[0.1em] text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white', isEffectivelyCollapsed ? 'justify-center p-3' : 'px-4 py-2.5']"
           :title="isDark ? 'Modo Claro' : 'Modo Escuro'"

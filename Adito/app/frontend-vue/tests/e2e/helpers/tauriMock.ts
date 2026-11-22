@@ -16,6 +16,10 @@ export interface TauriMockOptions {
   llmConfigured?: boolean
   chatError503?: boolean
   role?: 'admin' | 'user'
+  /** Há uma versão nova dos dados publicada (acende o aviso do canto). */
+  dadosNovos?: boolean
+  /** Primeiro uso: ainda não há dados.db baixado. */
+  semDados?: boolean
 }
 
 /**
@@ -28,12 +32,15 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     llmConfigured: options.llmConfigured ?? true,
     chatError503: options.chatError503 ?? false,
     role: options.role ?? 'admin',
+    dadosNovos: options.dadosNovos ?? false,
+    semDados: options.semDados ?? false,
   }
 
   await page.addInitScript((cfg) => {
     const callbacks = new Map<number, (raw: unknown) => void>()
     let nextCbId = 1
     let llmConfigured = cfg.llmConfigured
+    let dadosInstalados = !cfg.semDados
 
     const CONTEXTOS = [
       {
@@ -261,6 +268,23 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         if (cmd === 'clear_llm_key') {
           llmConfigured = false
           return undefined
+        }
+        // Distribuição: por padrão os dados já estão instalados e nada novo foi publicado.
+        if (cmd === 'dados_status') {
+          return dadosInstalados
+            ? { instalado: true, versao: '2026-11-01', desenvolvimento: false, chave_configurada: true }
+            : { instalado: false, versao: null, desenvolvimento: false, chave_configurada: false }
+        }
+        if (cmd === 'dados_verificar') {
+          const novos = cfg.dadosNovos || !dadosInstalados
+          return { versao: novos ? '2026-11-22' : '2026-11-01', tamanho: 8000000, atualizacao: novos, precisa_chave: !dadosInstalados }
+        }
+        if (cmd === 'dados_instalar') {
+          if (!dadosInstalados && args.chave !== 'a'.repeat(64)) {
+            throw 'Essa chave não abre esta versão dos dados.'
+          }
+          dadosInstalados = true
+          return '2026-11-22'
         }
         if (cmd === 'core_call') {
           return handleRpc(String(args.method), (args.params as Record<string, unknown>) || {})

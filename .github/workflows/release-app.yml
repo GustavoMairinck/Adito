@@ -1,0 +1,163 @@
+# Release do app Adito (ADR-0006).
+#
+# Ao criar uma tag `vX.Y.Z`, gera os instaladores de Windows e Linux, assina cada um (Ed25519)
+# e monta o `latest.json` que o atualizador do app lê. Tudo vai para um release em RASCUNHO:
+# os usuários só veem o aviso depois que alguém revisar e clicar em "Publish release".
+#
+# O instalador nunca leva o dados.db (ADR-0007): os dados saem pela release `dados`
+# (make publicar-dados), cifrados, e o app baixa no primeiro uso.
+#
+# Segredos necessários (Settings → Secrets → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           chave privada gerada por `npx tauri signer generate`
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  senha dessa chave
+# A chave pública correspondente vai em Adito/app/src-tauri/tauri.conf.json → plugins.updater.pubkey.
+
+name: Release do app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag já existente a publicar (ex.: v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-app-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  instaladores:
+    name: Instalador ${{ matrix.nome }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: Linux
+            os: ubuntu-22.04
+          - nome: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Versão a partir da tag
+        id: versao
+        run: |
+          versao="${TAG#v}"
+          if ! [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].+)?$ ]]; then
+            echo "::error::A tag '$TAG' não segue vX.Y.Z."
+            exit 1
+          fi
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+
+      # Sem a chave privada nos Secrets, os instaladores saem sem os artefatos do atualizador
+      # (.sig e latest.json). Isso só importa para quem já tem o app: a primeira versão pode sair
+      # assim, mas as seguintes precisam ser assinadas para o aviso de atualização funcionar.
+      - name: Assinatura do atualizador
+        id: assinatura
+        env:
+          TEM_CHAVE: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$TEM_CHAVE" = "true" ]; then
+            echo "atualizador=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret TAURI_SIGNING_PRIVATE_KEY ausente: release sem latest.json/.sig. Quem instalar esta versão não recebe o aviso dela; configure os Secrets antes da próxima (Adito/docs/DISTRIBUICAO.md)."
+            echo "atualizador=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Conferir chave pública do atualizador
+        run: |
+          if grep -q 'SUBSTITUIR_PELA_CHAVE_PUBLICA' Adito/app/src-tauri/tauri.conf.json; then
+            echo "::error::Configure plugins.updater.pubkey no tauri.conf.json antes do primeiro release (ver Adito/docs/DISTRIBUICAO.md)."
+            exit 1
+          fi
+
+      - name: Conferir que o instalador não declara dados (ADR-0007)
+        run: |
+          if grep -Eiq 'dados\.db|"\.\./data' Adito/app/src-tauri/tauri.conf.json; then
+            echo "::error::O tauri.conf.json referencia o dados.db/pasta data: o instalador é público e não pode levar dados."
+            exit 1
+          fi
+
+      - name: Dependências do Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsecret-1-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Adito/app/frontend-vue/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: Adito/app/src-tauri -> target
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: Adito/app/backend/requirements.txt
+
+      # US-011: o núcleo vira o executável adito-backend, que vai dentro do instalador.
+      # O usuário não precisa de Python. O script confere que ele sobe antes de seguir.
+      - name: Núcleo Python (PyInstaller)
+        working-directory: Adito/app
+        run: |
+          python -m pip install -r backend/requirements.txt "pyinstaller>=6.16,<7"
+          python scripts/empacotar_nucleo.py
+
+      - name: Front (Vue)
+        working-directory: Adito/app/frontend-vue
+        run: |
+          npm ci
+          npm run build
+          # CLI do Tauri no PATH (o tauri-action chama `tauri`), na mesma versão do projeto.
+          npm install -g "@tauri-apps/cli@$(node -p "require('./package.json').devDependencies['@tauri-apps/cli'].replace(/^[\\^~]/, '')")"
+
+      - name: Instaladores assinados e latest.json
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: Adito/app/src-tauri
+          tauriScript: tauri
+          # Só no build de instalador: versão da tag, artefatos do atualizador (o build local não
+          # precisa da chave privada) e o núcleo empacotado (o modo dev usa o .venv).
+          args: --config '{"version":"${{ steps.versao.outputs.versao }}","bundle":{"createUpdaterArtifacts":${{ steps.assinatura.outputs.atualizador }},"externalBin":["binaries/adito-backend"]}}'
+          tagName: ${{ env.TAG }}
+          releaseName: Adito ${{ env.TAG }}
+          releaseBody: |
+            Instale pelo `.exe` (Windows, sem administrador) ou pelo `.AppImage` (Linux); `.msi` e `.deb` são alternativas para a TI e para quem tem administrador.
+            Não precisa de Python, Node nem Rust. No primeiro uso, o Adito pede a chave dos dados.
+            Quem já usa o Adito recebe o aviso "Atualização disponível" no canto da barra lateral.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: ${{ steps.assinatura.outputs.atualizador == 'true' }}
+
+      - name: Conferir que nenhum dado foi embutido
+        run: |
+          achados="$(find Adito/app/src-tauri/target/release/bundle -type f \( -iname '*.db' -o -iname '*.db.enc' -o -iname 'dados*' \) 2>/dev/null || true)"
+          if [ -n "$achados" ]; then
+            echo "::error::Arquivo de dados dentro do bundle (ADR-0007): $achados. O release ficou em rascunho: apague-o, não publique."
+            exit 1
+          fi

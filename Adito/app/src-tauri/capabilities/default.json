@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Janela principal: só as permissões básicas do core (inclui Channel); os comandos core_* são do próprio app.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "Janela principal: permissões básicas do core (inclui Channel), checar/instalar atualização do app e reiniciar depois dela; os comandos core_* e dados_* são do próprio app.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "process:allow-restart"
+  ]
 }

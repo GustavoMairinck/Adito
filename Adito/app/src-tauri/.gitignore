@@ -1,2 +1,4 @@
 /target
 /gen/schemas
+# Núcleo empacotado (scripts/empacotar_nucleo.py, US-011)
+/binaries

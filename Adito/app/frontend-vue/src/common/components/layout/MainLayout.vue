@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import SidebarNav from '@/common/components/navigation/SidebarNav.vue'
 import { Menu } from 'lucide-vue-next'
 
 import BrandIcon from '@/common/components/BrandIcon.vue'
+import PrimeiroUsoDados from '@/common/components/feedback/PrimeiroUsoDados.vue'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 
 const isSidebarOpen = ref(false)
+
+// Confere uma vez, em segundo plano, se há versão nova do app ou dos dados.
+const { precisaPrimeiraCarga, verificar } = useAtualizacoes()
+onMounted(() => {
+  verificar()
+})
 
 function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -41,5 +49,7 @@ function toggleSidebar() {
       class="md:hidden fixed inset-0 z-[55] bg-black/45 backdrop-blur-sm transition-opacity duration-300"
       @click="isSidebarOpen = false"
     />
+
+    <PrimeiroUsoDados v-if="precisaPrimeiraCarga" />
   </div>
 </template>

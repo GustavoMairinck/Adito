@@ -6,7 +6,7 @@
 **Prioridade:** Alta
 **Story Points:** -
 **Sprint:** -
-**Status:** Backlog
+**Status:** Em revisão
 
 ---
 
@@ -23,7 +23,7 @@ Hoje o app roda só a partir do código (README de desenvolvimento). O Tauri ger
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1:** O backend vira o executável `oraculo-backend` (PyInstaller ou Nuitka), declarado como `externalBin` no `tauri.conf.json`. Desde 2026-11-17 (US-016) ele não recebe argumentos e usa stdin/stdout: empacotar como aplicativo de console, sem `--port`, e sem Django/daphne no bundle.
+- [x] **Critério 1:** O backend vira o executável `oraculo-backend` (PyInstaller ou Nuitka), declarado como `externalBin` no `tauri.conf.json`. Desde 2026-11-17 (US-016) ele não recebe argumentos e usa stdin/stdout: empacotar como aplicativo de console, sem `--port`, e sem Django/daphne no bundle.
 - [ ] **Critério 2:** `tauri build` gera `.exe` (NSIS) e `.msi` no Windows e `.deb`/`.AppImage` no Linux.
 - [ ] **Critério 3:** Um workflow do GitHub Actions com matriz Windows e Linux gera os instaladores a cada tag.
 - [ ] **Critério 4:** O app instalado roda num PC limpo, sem nenhuma ferramenta de desenvolvimento.
@@ -98,6 +98,7 @@ N/A
 ## 📝 Notas e Comentários
 
 - 2026-11-04: o README deixa claro que o Build Tools é só para desenvolvimento no Windows.
+- 2026-11-22: núcleo empacotado com PyInstaller como `adito-backend` (executável único, ~79 MB no Linux, sobe em ~1 s). Spec em `backend/adito-backend.spec`, build e conferência em `scripts/empacotar_nucleo.py`, `make instalador` local e o workflow `.github/workflows/release-app.yml` (matriz Windows e Linux, junto com o atualizador do ADR-0006). O `externalBin` entra só no build de instalador, para o modo dev seguir usando o `.venv`. Os critérios 2 e 3 dependem da primeira execução do workflow (o Windows só sai do CI) e o 4 de teste manual num Windows e num Ubuntu limpos. Detalhes em `docs/DISTRIBUICAO.md`.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 
