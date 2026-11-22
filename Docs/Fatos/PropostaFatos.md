@@ -1,9 +1,9 @@
-# Proposta Arquitetural de Modelagem Dimensional — Muninn (v2.0)
+# Proposta Arquitetural de Modelagem Dimensional — Adito (v2.0)
 
 **Documento:** Especificação Formal de Fatos Analíticas (`vfact_*_resolved`)  
-**Projeto:** Muninn — assistente de BI local do IFES  
-**Contexto Alvo no App:** `pesquisa-extensao-ifes` ([`Muninn/app/contexts/pesquisa-extensao-ifes/`](../../Muninn/app/contexts/pesquisa-extensao-ifes/))  
-**Motor Analítico (conforme [ADR-0001](../ADR/ADR-0001-migracao-dados-100-sqlite.md)):** 100% SQLite (`Muninn/app/data/dados.db`, aberto em modo somente leitura)  
+**Projeto:** Adito — assistente de BI local do IFES  
+**Contexto Alvo no App:** `pesquisa-extensao-ifes` ([`Adito/app/contexts/pesquisa-extensao-ifes/`](../../Adito/app/contexts/pesquisa-extensao-ifes/))  
+**Motor Analítico (conforme [ADR-0001](../ADR/ADR-0001-migracao-dados-100-sqlite.md)):** 100% SQLite (`Adito/app/data/dados.db`, aberto em modo somente leitura)  
 **Diagnóstico e Racional das Correções:** [DocumentoSolucionalFatos.md](DocumentoSolucionalFatos.md)  
 **Status:** Proposta Reestruturada v2.0 (alinhada à ADR-0001 e às correções P1–P12)
 
@@ -15,9 +15,9 @@
 Permitir que gestores, coordenadores e pesquisadores consultem em português (via Chat Text-to-SQL ou Explorador de Dados) indicadores confiáveis de **Extensão, Pesquisa, Bolsas, Produção Científica e Grupos de Pesquisa**, sem exposição de dados pessoais sensíveis (LGPD), sem dependência de Docker/PostgreSQL/DuckDB e sem exigir que a IA ou o usuário naveguem pelas ~85 tabelas normalizadas (3FN).
 
 ### 1.2. Princípio Arquitetural
-Adota-se uma **Constelação de 6 Fatos Conformes (Kimball)** geradas diretamente no arquivo único `Muninn/app/data/dados.db` (SQLite) por script Python (`sqlite3`):
+Adota-se uma **Constelação de 6 Fatos Conformes (Kimball)** geradas diretamente no arquivo único `Adito/app/data/dados.db` (SQLite) por script Python (`sqlite3`):
 - Cada fato representa **um único evento de negócio**, com **grão explícito e indivisível** (materializadas como `TABLE` ou `VIEW` no `dados.db`).
-- Nenhum código/query do Muninn faz `JOIN` direto nas tabelas 3FN em tempo de execução — toda junção estrutural já vem resolvida nas 6 fatos.
+- Nenhum código/query do Adito faz `JOIN` direto nas tabelas 3FN em tempo de execução — toda junção estrutural já vem resolvida nas 6 fatos.
 - As 6 fatos se conectam entre si por **Dimensões Conformadas** (Campus IFES, Pessoa, Tempo, Área do Conhecimento e Fomento/Programa).
 
 ---
@@ -25,7 +25,7 @@ Adota-se uma **Constelação de 6 Fatos Conformes (Kimball)** geradas diretament
 ## 2. Escopo, Acesso a Dados e Governança (O Que Entra e O Que Fica Fora)
 
 ### 2.1. Fontes de Dados e Assimetria Conhecida
-O sistema consolida 4 fontes institucionais, previamente cruzadas por nome normalizado (`muninn-etl cruzar`):
+O sistema consolida 4 fontes institucionais, previamente cruzadas por nome normalizado (`adito-etl cruzar`):
 
 | Fonte | Domínio Coberto | Fato(s) Alimentada(s) | Escopo Geográfico Atual |
 | :--- | :--- | :--- | :--- |
@@ -47,7 +47,7 @@ O sistema consolida 4 fontes institucionais, previamente cruzadas por nome norma
 Com a eliminação da etapa intermediária de PostgreSQL + exportação JSON (ADR-0001), o script Python de carga popula diretamente as tabelas do modelo unificado no `dados.db` e constrói as **6 fatos**:
 - **Tabelas consumidas pelas 6 fatos (42 tabelas base):** as 41 tabelas originais + **`lideranca_grupo_pesquisa`** (agora disponível nativamente no `dados.db` para `flag_lider`).
 - **8 tabelas vazias por LGPD / desnecessárias:** `email`, `telefone`, `fax`, etc. não são populadas.
-- **35 tabelas de granularidade fina / pós-MVP:** ficam fora da exposição ao Muninn (`ReadPolicy` expõe apenas as 6 `vfact_*_resolved`), reservando `membro_equipe_execucao_src`, `linha_pesquisa`, `participacao_*_projeto`, `fomento_projeto` e `projeto_lattes` para expansões futuras controladas.
+- **35 tabelas de granularidade fina / pós-MVP:** ficam fora da exposição ao Adito (`ReadPolicy` expõe apenas as 6 `vfact_*_resolved`), reservando `membro_equipe_execucao_src`, `linha_pesquisa`, `participacao_*_projeto`, `fomento_projeto` e `projeto_lattes` para expansões futuras controladas.
 
 ```mermaid
 classDiagram
@@ -137,7 +137,7 @@ classDiagram
 | :--- | :--- | :--- |
 | **Tempo** | `ano_cadastro`, `ano_participacao`, `ano_inicio`, `ano`, `ano_formacao` | Datas armazenadas em ISO-8601 (`YYYY-MM-DD`), anos como `INTEGER` via `strftime('%Y', ...)`; diferença de dias calculada via `julianday()`. |
 | **Campus / Organização** | `campus` (e `instituicao_vinculo` em Produções) | `campus` contém **apenas campi do IFES** (`Serra`, `Vitória`, etc.) ou `'Não Informado'` / `'Externo / Não Vinculado'`. Agências (`FAPES`) e outras IES (`UFES`) nunca ocupam `campus`. |
-| **Pessoa** | `coordenador_nome`, `nome_participante`, `nome_orientador`, `nome_orientado`, `nome_autor`, `nome_membro` | Unificadas pelo nome normalizado (`muninn-etl cruzar`). |
+| **Pessoa** | `coordenador_nome`, `nome_participante`, `nome_orientador`, `nome_orientado`, `nome_autor`, `nome_membro` | Unificadas pelo nome normalizado (`adito-etl cruzar`). |
 | **Área do Conhecimento** | `grande_area`, `area_conhecimento` | Presente em Extensão (Ação e Participação), Projetos, Bolsas e Grupos. |
 | **Fomento / Programa** | `orgao_fomento`, `programa_fomento`, `agencia_financiadora`, `titulo_edital`, `parceiros_demandantes` | Domínios completos sem descarte de siglas reais (`pivic`, `pibic_em`, `jtc`, `picti`). |
 
@@ -587,17 +587,17 @@ LEFT JOIN grande_area ga ON ac.id_grande_area = ga.id;
 
 ## 5. Pré-requisitos de Implementação no Pipeline (ADR-0001)
 
-1. **Schema & Carga Única SQLite (`sqlite3` → `Muninn/app/data/dados.db`):**
+1. **Schema & Carga Única SQLite (`sqlite3` → `Adito/app/data/dados.db`):**
    - Criar e popular diretamente as tabelas base no `dados.db` sem passar por Docker/Postgres/JSON/DuckDB.
    - Incluir `'pivic'`, `'pibic_em'`, `'jtc'`, `'picti'` em `programa`; `'EXCLUIDO'` em `situacao_grupo`; `'ENSINO_FUNDAMENTAL'` em `nivel_treinamento`; `'FINANCIAMENTO'` em `tipo_apoio_financiamento`.
    - Permitir `patente_registro.id_instituicao_depositante` anulável e gravar `patentes_registros` / `softwares_com_patente` do Lattes.
    - Preservar campus IFES em `pesquisador.id_organizacao` (inclusive preenchendo pelo `cnpq()` e evitando `FAPES` como organização de lotação).
    - Materializar as 6 `vfact_*_resolved` acima diretamente no `dados.db` (com índices nas colunas de filtro frequentes como `campus`, `ano*`, `id_*`).
-2. **Backend & Segurança SQL ([`Muninn/app/backend/nucleo/`](../../Muninn/app/backend/nucleo/)):**
+2. **Backend & Segurança SQL ([`Adito/app/backend/nucleo/`](../../Adito/app/backend/nucleo/)):**
    - Atualizar `core/datastore.py` para `sqlite3` (`dados.db` somente leitura via `?mode=ro` + `PRAGMA query_only = ON`).
    - Atualizar `agents/bi_agent/sql_security.py` e `core/contexts.py` para o dialeto `sqlite` (e `PRAGMA table_info()` / transpilação via `sqlglot` quando necessário).
    - Substituir contagens fixas antigas em `core/tests.py` por validação estrutural.
-3. **Contexto do Muninn ([`Muninn/app/contexts/pesquisa-extensao-ifes/`](../../Muninn/app/contexts/pesquisa-extensao-ifes/)):**
+3. **Contexto do Adito ([`Adito/app/contexts/pesquisa-extensao-ifes/`](../../Adito/app/contexts/pesquisa-extensao-ifes/)):**
    - Atualizar `views.json`, `rules.md` (exemplos e diretrizes em sintaxe **SQLite**, sem `::` ou `ILIKE`) e `examples.json` com as novas colunas (`qtd_autorias`, `flag_obra_unica`, `flag_software_sem_patente`, `instituicao_vinculo`, `parceiros_demandantes`, `flag_projeto_completo`, `duracao_meses_efetiva`).
 
 ---

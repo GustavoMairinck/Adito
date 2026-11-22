@@ -1,5 +1,5 @@
 # ==============================================================================
-# Makefile — Muninn (Automação de Desenvolvimento, ETL e Desktop)
+# Makefile — Adito (Automação de Desenvolvimento, ETL e Desktop)
 # ==============================================================================
 #
 # Execute `make` ou `make help` para visualizar a lista completa de comandos.
@@ -14,12 +14,12 @@ SHELL := /bin/bash
 # Diretórios do Monorepo
 # ------------------------------------------------------------------------------
 ROOT_DIR     := $(shell pwd)
-APP_DIR      := $(ROOT_DIR)/Muninn/app
-ETL_DIR      := $(ROOT_DIR)/Muninn/etl
-SCRIPTS_DIR  := $(ROOT_DIR)/Muninn/scripts
+APP_DIR      := $(ROOT_DIR)/Adito/app
+ETL_DIR      := $(ROOT_DIR)/Adito/etl
+SCRIPTS_DIR  := $(ROOT_DIR)/Adito/scripts
 FRONT_DIR    := $(APP_DIR)/frontend-vue
 TAURI_DIR    := $(APP_DIR)/src-tauri
-DATA_DIR     := $(if $(XDG_DATA_HOME),$(XDG_DATA_HOME),$(HOME)/.local/share)/br.edu.ifes.leds.muninn
+DATA_DIR     := $(if $(XDG_DATA_HOME),$(XDG_DATA_HOME),$(HOME)/.local/share)/br.edu.ifes.leds.adito
 
 # ------------------------------------------------------------------------------
 # Ambientes Virtuais e Executáveis
@@ -29,7 +29,7 @@ APP_PYTHON   := $(APP_VENV)/bin/python
 
 ETL_VENV     := $(ETL_DIR)/.venv
 ETL_PYTHON   := $(ETL_VENV)/bin/python
-ETL_CLI      := $(ETL_VENV)/bin/muninn-etl
+ETL_CLI      := $(ETL_VENV)/bin/adito-etl
 
 # ------------------------------------------------------------------------------
 # Cores e Formatação ANSI para o Terminal
@@ -53,7 +53,7 @@ COLOR_RED    := \033[31m
 # ------------------------------------------------------------------------------
 help: ## Exibe esta mensagem de ajuda com todos os comandos disponíveis
 	@echo ""
-	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)🦅 Muninn — Automação de Desenvolvimento (Makefile)$(COLOR_RESET)"
+	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)🦅 Adito — Automação de Desenvolvimento (Makefile)$(COLOR_RESET)"
 	@echo -e "Uso: $(COLOR_YELLOW)make [alvo]$(COLOR_RESET)\n"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
@@ -63,20 +63,20 @@ help: ## Exibe esta mensagem de ajuda com todos os comandos disponíveis
 # ------------------------------------------------------------------------------
 all: check-setup check-front check-desktop ## Roda ETL (se brutos/ não existir), prepara banco/fatos e inicia o app desktop (#73, #88)
 	@if [ ! -d "$(ETL_DIR)/brutos" ] || [ -z "$$(find "$(ETL_DIR)/brutos" -type f ! -name '.*' 2>/dev/null | head -n 1)" ]; then \
-		echo -e "$(COLOR_YELLOW)→ Pasta Muninn/etl/brutos/ vazia ou ausente; executando ETL inicial antes de subir o app...$(COLOR_RESET)"; \
+		echo -e "$(COLOR_YELLOW)→ Pasta Adito/etl/brutos/ vazia ou ausente; executando ETL inicial antes de subir o app...$(COLOR_RESET)"; \
 		$(MAKE) etl; \
 	else \
-		echo -e "$(COLOR_CYAN)→ Dados brutos encontrados em Muninn/etl/brutos/; pulando extração web e atualizando banco...$(COLOR_RESET)"; \
+		echo -e "$(COLOR_CYAN)→ Dados brutos encontrados em Adito/etl/brutos/; pulando extração web e atualizando banco...$(COLOR_RESET)"; \
 		$(MAKE) db; \
 	fi
 	@$(MAKE) desktop
 
 dev: check-setup check-front check-desktop db ## Atalho mestre: verifica setup, reconstrói banco/fatos e sobe o app completo
-	@echo -e "$(COLOR_CYAN)→ Iniciando Muninn Desktop via script oficial...$(COLOR_RESET)"
+	@echo -e "$(COLOR_CYAN)→ Iniciando Adito Desktop via script oficial...$(COLOR_RESET)"
 	@"$(ROOT_DIR)/rodar_desktop.sh"
 
 desktop: check-setup check-front check-desktop ## Inicia o ambiente desktop via ./rodar_desktop.sh (banco existente)
-	@echo -e "$(COLOR_CYAN)→ Subindo Muninn Desktop (Vite + Núcleo Python + Janela Tauri)...$(COLOR_RESET)"
+	@echo -e "$(COLOR_CYAN)→ Subindo Adito Desktop (Vite + Núcleo Python + Janela Tauri)...$(COLOR_RESET)"
 	@"$(ROOT_DIR)/rodar_desktop.sh"
 
 dev-front: check-front ## Inicia apenas o servidor de desenvolvimento do frontend (Vite na porta 5173)
@@ -151,7 +151,7 @@ test: test-etl test-core test-mcp test-front ## Executa sequencialmente as suít
 	@echo -e "\n$(COLOR_BOLD)$(COLOR_GREEN)✓ Todas as suítes de testes foram executadas com sucesso!$(COLOR_RESET)\n"
 
 test-etl: check-setup ## Executa os testes automatizados do ETL (pytest)
-	@echo -e "$(COLOR_CYAN)→ Executando testes do ETL (Muninn/etl/tests)...$(COLOR_RESET)"
+	@echo -e "$(COLOR_CYAN)→ Executando testes do ETL (Adito/etl/tests)...$(COLOR_RESET)"
 	@cd "$(ETL_DIR)" && "$(ETL_PYTHON)" -m pytest tests
 
 test-core: check-setup ## Executa os testes unitários do núcleo Python (datastore, authorizer e regressão)
@@ -221,7 +221,7 @@ check-front:
 	@if [ ! -d "$(FRONT_DIR)/node_modules" ]; then \
 		echo -e "$(COLOR_RED)❌ Erro: Dependências do frontend não encontradas em:$(COLOR_RESET)"; \
 		echo -e "   $(FRONT_DIR)/node_modules"; \
-		echo -e "Execute '$(COLOR_BOLD)make setup-app$(COLOR_RESET)' (ou 'cd Muninn/app/frontend-vue && npm install') primeiro.\n"; \
+		echo -e "Execute '$(COLOR_BOLD)make setup-app$(COLOR_RESET)' (ou 'cd Adito/app/frontend-vue && npm install') primeiro.\n"; \
 		exit 1; \
 	fi
 
@@ -253,7 +253,7 @@ check-etl-env-sigpesq: check-setup
 	@"$(ETL_PYTHON)" "$(SCRIPTS_DIR)/validar_etl_env.py" --env-file "$(ETL_DIR)/.env" --escopo sigpesq
 
 setup: setup-app setup-etl ## Configura todos os ambientes (Python venvs, dependências e npm)
-	@echo -e "\n$(COLOR_BOLD)$(COLOR_GREEN)✓ Setup completo do Muninn concluído!$(COLOR_RESET)\n"
+	@echo -e "\n$(COLOR_BOLD)$(COLOR_GREEN)✓ Setup completo do Adito concluído!$(COLOR_RESET)\n"
 
 setup-app: ## Cria virtualenv do app, instala requirements e dependências do frontend
 	@echo -e "$(COLOR_CYAN)→ Configurando ambiente do App (Python + Node.js)...$(COLOR_RESET)"
@@ -262,7 +262,7 @@ setup-app: ## Cria virtualenv do app, instala requirements e dependências do fr
 	@"$(APP_VENV)/bin/pip" install -r "$(APP_DIR)/backend/requirements.txt"
 	@cd "$(FRONT_DIR)" && npm install
 
-setup-etl: ## Cria virtualenv do ETL e instala o pacote muninn_etl com extras de desenvolvimento
+setup-etl: ## Cria virtualenv do ETL e instala o pacote adito_etl com extras de desenvolvimento
 	@echo -e "$(COLOR_CYAN)→ Configurando ambiente do ETL...$(COLOR_RESET)"
 	@test -d "$(ETL_VENV)" || python3 -m venv "$(ETL_VENV)"
 	@"$(ETL_VENV)/bin/pip" install --upgrade pip
@@ -270,18 +270,18 @@ setup-etl: ## Cria virtualenv do ETL e instala o pacote muninn_etl com extras de
 	@if [ ! -f "$(ETL_DIR)/.env" ]; then \
 		cp "$(ETL_DIR)/.env.example" "$(ETL_DIR)/.env"; \
 		echo -e "\n$(COLOR_YELLOW)⚠️  Arquivo $(ETL_DIR)/.env criado a partir do modelo.$(COLOR_RESET)"; \
-		echo -e "$(COLOR_YELLOW)   Preencha as credenciais (MUNINN_CREDENCIAIS=infisical ou env) antes de executar 'make etl' ou 'make all'.$(COLOR_RESET)\n"; \
+		echo -e "$(COLOR_YELLOW)   Preencha as credenciais (ADITO_CREDENCIAIS=infisical ou env) antes de executar 'make etl' ou 'make all'.$(COLOR_RESET)\n"; \
 	fi
 
 # ------------------------------------------------------------------------------
 # 🧹 Limpeza
 # ------------------------------------------------------------------------------
-clean: ## Remove arquivos temporários de logs do Muninn, caches do Python e pytest
+clean: ## Remove arquivos temporários de logs do Adito, caches do Python e pytest
 	@echo -e "$(COLOR_CYAN)→ Limpando caches e arquivos temporários...$(COLOR_RESET)"
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@rm -f /tmp/muninn*.log /tmp/oraculo-vite.log
+	@rm -f /tmp/adito*.log /tmp/oraculo-vite.log
 	@echo -e "$(COLOR_GREEN)✓ Limpeza concluída.$(COLOR_RESET)"
 
 clean-all: clean ## Limpa também builds gerados pelo frontend e Tauri

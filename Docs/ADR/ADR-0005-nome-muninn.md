@@ -1,6 +1,8 @@
+> **Nota:** a equipe voltou atrás nesta decisão e o produto se chama Adito de novo (ver [ADR-0008](./ADR-0008-volta-ao-nome-adito.md)). O texto abaixo não foi reescrito; os caminhos `Muninn/` citados hoje são `Adito/`.
+
 # ADR 0005: Nome do produto passa a ser Muninn
 
-**Status:** Aceito  
+**Status:** Substituído pelo [ADR-0008](./ADR-0008-volta-ao-nome-adito.md)  
 **Data:** 18/11/2026  
 
 ## Contexto/Problema  
