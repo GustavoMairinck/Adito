@@ -53,7 +53,7 @@ COLOR_RED    := \033[31m
 # ------------------------------------------------------------------------------
 help: ## Exibe esta mensagem de ajuda com todos os comandos disponíveis
 	@echo ""
-	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)🦅 Adito — Automação de Desenvolvimento (Makefile)$(COLOR_RESET)"
+	@echo -e "$(COLOR_BOLD)$(COLOR_CYAN)Adito — Automação de Desenvolvimento (Makefile)$(COLOR_RESET)"
 	@echo -e "Uso: $(COLOR_YELLOW)make [alvo]$(COLOR_RESET)\n"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(COLOR_GREEN)%-24s$(COLOR_RESET) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""

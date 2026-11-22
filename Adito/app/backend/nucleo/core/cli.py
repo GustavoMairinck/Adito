@@ -6,7 +6,7 @@ Comandos de manutenção do Adito (substituem os do manage.py). Rodar de backend
     python -m core.cli rebuild-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]
     python -m core.cli flush-data [--dry-run] [--keep-email EMAIL]
 
-Usam o mesmo app.db do app (ADITO_DATA_DIR / ADITO_APP_DB) e o dados.duckdb atual.
+Usam o mesmo app.db do app (ADITO_DATA_DIR / ADITO_APP_DB) e o dados.db atual.
 """
 from __future__ import annotations
 

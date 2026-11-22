@@ -46,7 +46,7 @@ class User(Record):
 
 @dataclass
 class Contexto(Record):
-    """Pacote de views do dados.duckdb que um chat ou widget pode consultar (views.json)."""
+    """Pacote de views do dados.db que um chat ou widget pode consultar (views.json)."""
 
     table = "core_contexto"
     kinds = {"id": "id", "tenant_id": "id", "views": "json", "is_active": "bool", "created_at": "dt", "updated_at": "dt"}

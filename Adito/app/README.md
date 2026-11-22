@@ -176,7 +176,7 @@ A partir de `Adito/app`:
 .venv/bin/python scripts/teste_contrato.py
 ```
 
-Compara cada chamada que as telas fazem (status e JSON) com a referência gravada quando o núcleo ainda era um servidor Django. Deve terminar em `51/51 chamadas iguais à referência.`
+Compara cada chamada que as telas fazem (status e JSON) com a referência gravada quando o núcleo ainda era um servidor Django. Deve terminar em `41/41 chamadas iguais à referência.`
 
 ```bash
 .venv/bin/python scripts/teste_stdio.py
@@ -209,7 +209,7 @@ Comandos `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data` 
 ```text
 src-tauri/          janela Tauri: inicia o núcleo e fala com ele por stdin/stdout; guarda a chave no cofre do SO
 frontend-vue/       front Vue/Vite
-backend/nucleo/     núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, DuckDB), agentes (LangGraph)
+backend/nucleo/     núcleo local: rpc/ (métodos e protocolo), core/ (app.db, contextos, SQLite), agentes (LangGraph)
 contexts/           contexto de dados (pesquisa e extensão do IFES)
 scripts/            testes do núcleo
 ```
