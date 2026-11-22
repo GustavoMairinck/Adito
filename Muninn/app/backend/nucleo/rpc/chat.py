@@ -20,7 +20,7 @@ from core.records import Conversation, Message, QueryExecution, delete_conversat
 from core.rich_logging import log_info, log_section, log_success
 
 from .core_methods import LLM_KEY_MISSING, llm_configured
-from .errors import ApiError, not_found
+from .errors import ApiError, llm_error_message, not_found
 from .registry import rpc
 from .session import current
 
@@ -301,7 +301,7 @@ async def chat_stream(params, emit):
     except Exception as e:
         logger.exception("Erro no processamento do stream de chat")
         err_msg = str(e) or e.__class__.__name__
-        await emit("error", {"message": f"Erro interno ao processar sua pergunta: {err_msg}"})
+        await emit("error", {"message": llm_error_message(e) or f"Erro interno ao processar sua pergunta: {err_msg}"})
     return None
 
 

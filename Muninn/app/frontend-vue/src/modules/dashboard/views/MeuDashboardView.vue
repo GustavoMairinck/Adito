@@ -34,6 +34,7 @@ import { usePersonalDashboard, type Widget } from '@/modules/dashboard/composabl
 import WidgetTable from '@/modules/dashboard/components/WidgetTable.vue'
 import { chartKeys } from '@/common/utils/chartKeys'
 import { GridLayout, GridItem } from 'grid-layout-plus'
+import { axisKind, formatValue, valueKind } from '@/common/utils/valueFormat'
 
 const {
   widgets,
@@ -89,7 +90,7 @@ const getNamedGridDimensions = (size: string, chartType: string): GridDimensions
   }
 
   if (size === 'large') {
-    return { w: isMetric ? 6 : 9, h: isMetric ? 8 : 14 }
+    return { w: isMetric ? 6 : 8, h: isMetric ? 8 : 14 }
   }
 
   if (size === 'full') {
@@ -743,12 +744,11 @@ const displayedChartHasOthersBar = (widget: Widget) => {
   return getChartModel(widget).categories.includes('Outros')
 }
 
-const formatAxisCurrency = (value: any) => {
-  const num = Number.parseFloat(String(value || 0))
-  if (Number.isNaN(num)) return value
-  if (Math.abs(num) >= 1_000_000) return `R$ ${(num / 1_000_000).toFixed(1)}M`
-  if (Math.abs(num) >= 1_000) return `R$ ${(num / 1_000).toFixed(0)}K`
-  return `R$ ${num.toFixed(0)}`
+const formatMetricValue = (row: Record<string, any>) => {
+  const [chave, valor] = Object.entries(row || {})[0] || []
+  if (chave === undefined) return ''
+  const kind = valueKind(chave)
+  return kind === 'number' ? valor : formatValue(valor, kind, true)
 }
 
 const truncateLabel = (value: string, limit = 18) => {
@@ -852,7 +852,7 @@ const buildChartTooltip = (
           <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${row.color};flex-shrink:0;"></span>
           <span style="color:${muted};" class="text-xs font-medium">${row.name}</span>
         </div>
-        <span class="font-bold text-sm" style="color:${row.color}">${formatAxisCurrency(row.value)}</span>
+        <span class="font-bold text-sm" style="color:${row.color}">${formatValue(row.value, valueKind(row.name), true)}</span>
       </div>
     `).join('')
   return `
@@ -898,7 +898,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
           const label = w.globals.labels[seriesIndex]
           const val = series[seriesIndex]
           const sliceColor = w.globals.colors[seriesIndex]
-          return buildChartTooltip(model.dimensionLabel, label, [{ name: 'Valor', value: val, color: sliceColor }])
+          return buildChartTooltip(model.dimensionLabel, label, [{ name: model.series[0]?.name || 'Total', value: val, color: sliceColor }])
         }
       },
       stroke: { width: 2 },
@@ -911,6 +911,8 @@ const getChartOptions = (widget: Widget): ApexOptions => {
   const isLine = chartType === 'line'
   const isArea = chartType === 'area'
   const isHorizontalBar = chartType === 'horizontal_bar'
+  // Eixo em R$ só quando todas as séries são dinheiro; contagens ficam como número.
+  const eixoValores = axisKind(model.series.map((serie: DashboardChartSeries) => serie.name))
   const { chartIsWide, fontSize, rotate, labelLimit, maxHeight } = getChartDensitySettings(widget, categories.length)
 
   // ApexCharts type: area, line, ou bar
@@ -979,7 +981,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
           fontWeight: 600,
           colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         },
-        formatter: (value: any) => isHorizontalBar ? formatAxisCurrency(value) : truncateLabel(String(value), labelLimit)
+        formatter: (value: any) => isHorizontalBar ? formatValue(value, eixoValores) : truncateLabel(String(value), labelLimit)
       },
       axisBorder: { show: false },
       axisTicks: { show: true }
@@ -1000,7 +1002,7 @@ const getChartOptions = (widget: Widget): ApexOptions => {
           fontWeight: 600,
           colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
         },
-        formatter: (value: any) => isHorizontalBar ? truncateLabel(String(value), 25) : formatAxisCurrency(value)
+        formatter: (value: any) => isHorizontalBar ? truncateLabel(String(value), 25) : formatValue(value, eixoValores)
       }
     },
     tooltip: {
@@ -1304,7 +1306,7 @@ const getChartPixelHeight = (item: any): number => {
           >
             <p class="text-[10px] font-medium tracking-wide text-text-muted">Métrica</p>
             <h3 class="dashboard-metric-value font-semibold tracking-tight text-text-primary tabular-nums">
-              {{ Object.values(widgetData[item.widget.id][0])[0] }}
+              {{ formatMetricValue(widgetData[item.widget.id][0]) }}
             </h3>
           </div>
 

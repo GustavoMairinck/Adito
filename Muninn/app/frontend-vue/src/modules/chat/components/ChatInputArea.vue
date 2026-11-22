@@ -78,7 +78,7 @@ const handleKeydown = (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <div class="px-4 py-4 bg-transparent">
+  <div class="px-4 py-5 bg-transparent">
     <div class="mx-auto flex max-w-3xl flex-col">
       <div class="relative flex items-end rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-card transition-all focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/20">
         <textarea
@@ -87,14 +87,14 @@ const handleKeydown = (event: KeyboardEvent) => {
           rows="1"
           aria-label="Pergunta sobre pesquisa e extensão"
           placeholder="O que você quer consultar sobre pesquisa e extensão?"
-          class="min-h-[56px] w-full resize-none bg-transparent px-5 py-4 text-sm leading-relaxed text-[var(--neutral-dark)] outline-none placeholder:text-text-muted rounded-2xl"
+          class="min-h-[48px] w-full resize-none bg-transparent px-4 py-3 text-sm leading-relaxed text-[var(--neutral-dark)] outline-none placeholder:text-text-muted rounded-2xl"
           @input="handleInput"
           @keydown="handleKeydown"
         />
         <div class="flex items-center gap-2 pr-3 pb-2 pt-2">
           <button
             type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-full text-text-muted hover:bg-surface-elevated hover:text-[var(--neutral-dark)] transition-colors disabled:opacity-50"
+            class="flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-surface-elevated hover:text-[var(--neutral-dark)] transition-colors disabled:opacity-50"
             @click="toggleRecording"
             :class="{ 'text-[var(--brand-accent-danger)] hover:bg-[var(--brand-accent-danger)]/10 hover:text-[var(--brand-accent-danger)]': isRecording }"
             title="Ditar por voz"
@@ -105,7 +105,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           <button
             id="btn-send-chat"
             :disabled="!modelValue.trim() || loading"
-            class="flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-surface-elevated disabled:text-text-muted bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-dark)]"
+            class="flex h-9 w-9 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-surface-elevated disabled:text-text-muted bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-dark)]"
             @click="emit('send')"
             title="Enviar mensagem"
             aria-label="Enviar mensagem"
@@ -115,7 +115,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           </button>
         </div>
       </div>
-      <p class="mt-2 text-center text-xs text-text-muted">
+      <p class="mt-3 text-center text-xs text-text-muted">
         Enter para enviar · Shift+Enter para nova linha
       </p>
     </div>
