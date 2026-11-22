@@ -9,7 +9,7 @@ from core.datastore import connect_dados
 from .graph import build_graph
 
 def execute_query(sql: str, contexto_id: str | None, max_rows: int | None = None, dados_path=None) -> List[dict]:
-    """Executa a query no dados.duckdb (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas.
+    """Executa a query no dados.db (só leitura) com a política do contexto. Sem max_rows, devolve todas as linhas.
 
     Não depende do LLM: widgets e histórico do chat reexecutam SQL sem instanciar o agente.
     """

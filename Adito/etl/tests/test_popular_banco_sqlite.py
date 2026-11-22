@@ -12,6 +12,9 @@ def test_popular_banco_sqlite_execution(tmp_path):
     etl_dir = repo_root / "etl"
     temp_db = tmp_path / "teste_dados.db"
 
+    if not (etl_dir / "brutos").exists() or not (etl_dir / "trabalho" / "pessoas.json").exists():
+        pytest.skip("ainda não há brutos/pessoas.json nesta máquina")
+
     cmd = [
         sys.executable,
         str(script_path),

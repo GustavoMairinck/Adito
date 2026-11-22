@@ -370,7 +370,7 @@ def conversations_delete(params):
 
 @rpc("chat.message_rows")
 def message_rows(params):
-    """Reexecuta o SQL de uma resposta do histórico no dados.duckdb, com a política do contexto da conversa.
+    """Reexecuta o SQL de uma resposta do histórico no dados.db, com a política do contexto da conversa.
 
     O histórico não guarda linhas de resultado: abrir uma conversa antiga mostra os dados atuais.
     """
