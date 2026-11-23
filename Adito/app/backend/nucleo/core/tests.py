@@ -1276,7 +1276,8 @@ class QaAccuracyGuardsTests(unittest.TestCase):
         for idx, ex in enumerate(examples, start=1):
             self.assertTrue(ex.get("question"), f"Exemplo #{idx} sem question")
             self.assertTrue(ex.get("sql"), f"Exemplo #{idx} sem sql")
-            validate_read_only_sql(ex["sql"], allowed)
+            ok, motivo = validate_read_only_sql(ex["sql"], allowed)
+            self.assertTrue(ok, f"Exemplo #{idx} inválido: {motivo}")
 
         top16_sql = "\n".join(ex["sql"].lower() for ex in examples[:16])
         for view_name in allowed:

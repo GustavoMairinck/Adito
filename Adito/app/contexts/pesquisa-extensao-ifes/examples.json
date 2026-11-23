@@ -109,6 +109,6 @@
   },
   {
     "question": "Quais os 5 grupos de pesquisa certificados com mais membros ativos e qual o tempo médio de atuação dos membros em dias? Desempate pelo nome do grupo.",
-    "sql": "SELECT nome_grupo, SUM(flag_ativo) AS membros_ativos, COUNT(DISTINCT nome_membro) AS integrantes_distintos, ROUND(AVG(tempo_participacao_dias), 1) AS media_dias_atuacao FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo = 'CERTIFICADO' GROUP BY nome_grupo ORDER BY membros_ativos DESC, nome_grupo ASC LIMIT 5"
+    "sql": "SELECT nome_grupo, SUM(flag_ativo) AS membros_ativos, COUNT(DISTINCT nome_membro) AS integrantes_distintos, ROUND(AVG(tempo_participacao_dias), 1) AS media_dias_atuacao FROM vfact_grupo_pesquisa_membro_resolved WHERE situacao_grupo LIKE 'CERTIFICADO%' GROUP BY nome_grupo ORDER BY membros_ativos DESC, nome_grupo ASC LIMIT 5"
   }
 ]
