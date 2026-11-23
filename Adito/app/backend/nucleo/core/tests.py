@@ -414,6 +414,99 @@ class IndexacaoIncrementalTests(AppDbTestCase):
         self.assertEqual(self._indexados(), 2)
 
 
+class BaseConhecimentoTests(AppDbTestCase):
+    """Aba Base de conhecimento: lista do app.db, item manual, remoção e reindex que mantém os manuais."""
+
+    def setUp(self):
+        super().setUp()
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        base = Path(pasta.name)
+        dados_db = base / "dados.db"
+        conn = sqlite3.connect(dados_db)
+        conn.execute("CREATE TABLE t (ano INTEGER, area TEXT)")
+        conn.execute("INSERT INTO t VALUES (2024, 'Exatas')")
+        conn.commit()
+        conn.close()
+        self.folder = base / "contexts" / "ctx-teste"
+        self.folder.mkdir(parents=True)
+        (self.folder / "views.json").write_text(json.dumps({
+            "contexto": "ctx-teste", "nome": "Contexto teste", "views": [{"name": "t", "description": "Tabela."}],
+        }), encoding="utf-8")
+        (self.folder / "rules.md").write_text("Total: COUNT(*)\n", encoding="utf-8")
+        (self.folder / "examples.json").write_text(json.dumps([
+            {"question": "Total por ano?", "sql": "SELECT ano, COUNT(*) FROM t GROUP BY ano"},
+            {"question": "Total por área?", "sql": "SELECT area, COUNT(*) FROM t GROUP BY area"},
+        ]), encoding="utf-8")
+        env = patch.dict(os.environ, {
+            "ADITO_DATA_DIR": str(base), "ADITO_DADOS_DB": str(dados_db), "GEMINI_API_KEY": "chave-falsa",
+        })
+        env.start()
+        self.addCleanup(env.stop)
+        for alvo in ("rpc.admin.get_embedder", "rpc.admin._get_embedder"):
+            p = patch(alvo, return_value=EmbedderFalso())
+            p.start()
+            self.addCleanup(p.stop)
+        load_handlers()
+        _, tenant = session.current()
+        self.ctx, _, erros = load_context_dir(self.folder, tenant)
+        self.assertEqual(erros, [])
+
+    def _lista(self):
+        status, itens = call("admin.trainings.list")
+        self.assertEqual(status, 200, itens)
+        return itens
+
+    def test_reindex_gera_itens_do_contexto_e_bate_com_o_status(self):
+        status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body["contextos"][0]["indexado"], body)
+        itens = self._lista()
+        self.assertEqual(sorted(i["type"] for i in itens), ["ddl", "documentation", "sql", "sql"])
+        self.assertTrue(all(i["contexto_slug"] == "ctx-teste" and i["origem"] == "contexto" for i in itens))
+        self.assertIn("Esquema das views — Contexto teste", {i["name"] for i in itens})
+        _, sistema = call("admin.system_status")
+        stats = sistema["systemStats"]
+        self.assertEqual((stats["trainedDdl"], stats["trainedDoc"], stats["trainedExamples"]), (1, 1, 2))
+
+    def test_item_manual_persiste_sobrevive_ao_reindex_e_pode_ser_removido(self):
+        call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        status, novo = call("admin.trainings.create", {
+            "type": "sql", "question": "Quantas linhas?", "content": "SELECT COUNT(*) FROM t", "contexto": self.ctx.id,
+        })
+        self.assertEqual(status, 200, novo)
+        self.assertEqual((novo["origem"], novo["contexto_nome"]), ("manual", "Contexto teste"))
+
+        # Reindex: os gerados são refeitos, o manual fica.
+        gerados_antes = {i["id"] for i in self._lista() if i["origem"] == "contexto"}
+        status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        self.assertEqual(body["contextos"][0]["manuais_mantidos"], 1)
+        itens = self._lista()
+        self.assertIn(novo["id"], {i["id"] for i in itens})
+        self.assertFalse(gerados_antes & {i["id"] for i in itens if i["origem"] == "contexto"})
+        self.assertEqual(len(itens), 5)
+
+        status, body = call("admin.trainings.delete", {"id": novo["id"]})
+        self.assertEqual(status, 200, body)
+        self.assertNotIn(novo["id"], {i["id"] for i in self._lista()})
+        self.assertEqual(call("admin.trainings.delete", {"id": novo["id"]})[0], 404)
+
+    def test_item_sem_contexto_vale_para_todos_e_contexto_invalido_recusa(self):
+        status, novo = call("admin.trainings.create", {"type": "documentation", "content": "Bolsista é aluno com bolsa."})
+        self.assertEqual(status, 200, novo)
+        self.assertIsNone(novo["contexto"])
+        self.assertEqual(novo["origem"], "manual")
+        status, _ = call("admin.trainings.create", {
+            "type": "documentation", "content": "x", "contexto": "00000000-0000-0000-0000-000000000000",
+        })
+        self.assertEqual(status, 400)
+
+    def test_reindex_sem_chave_recusa(self):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
+            status, _ = call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        self.assertEqual(status, 400)
+
+
 class ChaveGeminiTests(AppDbTestCase):
     """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""
 

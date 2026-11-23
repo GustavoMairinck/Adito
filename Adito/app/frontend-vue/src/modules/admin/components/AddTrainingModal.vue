@@ -1,20 +1,42 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Plus, X, Code2, FileText, Database, Loader2 } from 'lucide-vue-next'
+
+export interface TrainingSubmit {
+  type: 'ddl' | 'sql' | 'documentation'
+  question: string
+  content: string
+  /** Id do contexto; null = vale para todos os contextos. */
+  contexto: string | null
+}
 
 const props = defineProps<{
   open: boolean
+  contextos: { id: string; nome: string }[]
+  /** O contexto já escolhido no filtro da lista, se houver. */
+  defaultContexto?: string | null
+  submitting?: boolean
+  error?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'submit', data: { type: string; question: string; content: string }): void
+  (e: 'submit', data: TrainingSubmit): void
 }>()
 
 const selectedType = ref<'ddl' | 'sql' | 'documentation'>('sql')
 const question = ref('')
 const content = ref('')
-const submitting = ref(false)
+const contexto = ref<string | null>(null)
+
+// Formulário limpo a cada abertura; o pai fecha o modal quando o item foi salvo.
+watch(() => props.open, (open) => {
+  if (!open) return
+  question.value = ''
+  content.value = ''
+  selectedType.value = 'sql'
+  contexto.value = props.defaultContexto ?? null
+})
 
 const isValid = computed(() => {
   if (!content.value.trim()) return false
@@ -28,24 +50,14 @@ const typeOptions = [
   { value: 'documentation', label: 'Conhecimento', icon: FileText, desc: 'Regras e Glossário' }
 ]
 
-async function handleSubmit() {
-  if (!isValid.value) return
-  submitting.value = true
-
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 800))
-
+function handleSubmit() {
+  if (!isValid.value || props.submitting) return
   emit('submit', {
     type: selectedType.value,
     question: question.value.trim(),
-    content: content.value.trim()
+    content: content.value.trim(),
+    contexto: contexto.value
   })
-
-  // Reset form
-  question.value = ''
-  content.value = ''
-  selectedType.value = 'sql'
-  submitting.value = false
 }
 </script>
 
@@ -123,6 +135,23 @@ async function handleSubmit() {
                 </div>
               </div>
 
+              <!-- Contexto -->
+              <div>
+                <label class="mb-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
+                  Contexto
+                </label>
+                <select
+                  v-model="contexto"
+                  class="w-full rounded-lg border border-border-subtle bg-primary/20 px-5 py-3 text-sm text-text-primary transition-all focus:border-accent/50 focus:bg-surface focus:ring-4 focus:ring-accent/5 outline-none dark:bg-primary/40 dark:focus:bg-primary/60"
+                >
+                  <option :value="null">Todos os contextos</option>
+                  <option v-for="c in contextos" :key="c.id" :value="c.id">{{ c.nome }}</option>
+                </select>
+                <p class="mt-2 text-xs text-text-muted">
+                  Itens de um contexto só entram nas perguntas feitas nele. O "Wipe &amp; Retrain" mantém os itens adicionados aqui.
+                </p>
+              </div>
+
               <!-- Question (SQL only) -->
               <div v-if="selectedType === 'sql'">
                 <label class="mb-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
@@ -154,6 +183,10 @@ async function handleSubmit() {
               </div>
             </div>
 
+            <p v-if="error" class="mx-8 mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+              {{ error }}
+            </p>
+
             <!-- Footer -->
             <div class="flex items-center justify-end gap-4 border-t border-border-subtle bg-surface/40 px-8 py-6">
               <button
@@ -172,7 +205,7 @@ async function handleSubmit() {
               >
                 <Plus v-if="!submitting" class="h-4 w-4" stroke-width="3" />
                 <Loader2 v-else class="h-4 w-4 animate-spin" />
-                {{ submitting ? 'Processando...' : 'Confirmar Treinamento' }}
+                {{ submitting ? 'Salvando...' : 'Confirmar Treinamento' }}
               </button>
             </div>
           </div>

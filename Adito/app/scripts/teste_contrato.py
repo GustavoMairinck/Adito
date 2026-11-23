@@ -196,6 +196,20 @@ async def roteiro(api) -> list[dict]:
                {"type": "sql", "question": "Quantas orientações?", "content": f"SELECT COUNT(*) FROM {VIEW}"})
     await call("trainings.create sem pergunta", "admin.trainings.create", {"type": "sql", "content": "SELECT 1"})
     await call("system_status depois", "admin.system_status")
+    await call("trainings.list", "admin.trainings.list")
+    manual = await call("trainings.create com contexto", "admin.trainings.create",
+                        {"type": "documentation", "content": "Bolsista é aluno com bolsa.", "contexto": cid})
+    await call("trainings.create contexto inexistente", "admin.trainings.create",
+               {"type": "documentation", "content": "x", "contexto": "00000000-0000-0000-0000-000000000000"})
+    await call("trainings.retrain", "admin.trainings.retrain", {"contexto": cid})
+    await call("trainings.list depois do retrain", "admin.trainings.list")
+    mid = manual.get("id") if isinstance(manual, dict) else None
+    await call("trainings.delete", "admin.trainings.delete", {"id": mid})
+    await call("trainings.delete inexistente", "admin.trainings.delete", {"id": mid})
+    await call("system_status depois do retrain", "admin.system_status")
+    del os.environ["GEMINI_API_KEY"]
+    await call("trainings.retrain sem chave", "admin.trainings.retrain", {"contexto": cid})
+    os.environ["GEMINI_API_KEY"] = "chave-falsa"
     del os.environ["GEMINI_API_KEY"]
     await call("bootstrap sem chave", "admin.bootstrap")
     os.environ["GEMINI_API_KEY"] = "chave-falsa"

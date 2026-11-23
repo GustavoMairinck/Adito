@@ -15,6 +15,7 @@ class Rpc:
 
         startup()
         rpc.admin._get_embedder = lambda: DeterministicFakeEmbedding(size=1024)
+        rpc.admin.get_embedder = lambda: DeterministicFakeEmbedding(size=1024)
 
     async def call(self, method, params):
         from rpc.errors import ApiError
