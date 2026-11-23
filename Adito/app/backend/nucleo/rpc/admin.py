@@ -3,17 +3,24 @@ import logging
 import os
 import time
 
-from analytics_index.embedder import get_embedder
+from analytics_index.embedder import CotaEsgotada, get_embedder
 from core import db
-from core.contexts import context_folders, index_contexto, load_context_dir, validate_contexto
+from core.contexts import (
+    ORIGEM_MANUAL,
+    context_folders,
+    index_contexto,
+    load_context_dir,
+    _slug_da_pasta as slug_da_pasta,
+    validate_contexto,
+)
 from core.datastore import REPO_APP_DIR, app_db_path, connect_dados, dados_db_path, data_dir
 from core.db import api_dt, to_db_id
 from core.records import Contexto, KnowledgeItem, QueryExecution, User
 from core.rich_logging import log_error, log_success
 
 from .core_methods import llm_configured
-from .errors import bad_request, forbidden
-from .params import Choice, Str, validate
+from .errors import COTA_ESGOTADA, bad_request, forbidden, llm_error_message, not_found
+from .params import Choice, Str, Uuid, validate
 from .registry import rpc
 from .session import current
 
@@ -193,39 +200,75 @@ def contextos(params):
     return out
 
 
-# ── Treino manual do RAG ────────────────────────────────────────────────────
+# ── Base de conhecimento (RAG) ──────────────────────────────────────────────
+# Cada contexto gera, pelo `index_contexto`, um item DDL (as views), um doc (o rules.md) e um
+# exemplo SQL por item do examples.json. O admin pode pôr itens à mão (`metadata.source` =
+# ORIGEM_MANUAL), que o reindex do contexto mantém. Item sem contexto vale para todos.
 
 TYPE_TO_ITEM_TYPE = {"ddl": "ddl", "sql": "query_example", "documentation": "doc"}
 TRAINING = {
     "type": Choice(required=True, choices=("ddl", "sql", "documentation")),
     "question": Str(),
     "content": Str(required=True, allow_blank=False),
+    "contexto": Uuid(allow_null=True),
 }
+TRAINING_ID = {"id": Uuid(required=True)}
+RETRAIN = {"contexto": Uuid(allow_null=True)}
 
 
-def _get_embedder():
-    from agents.config import get_embeddings
+def _contexto_do_tenant(tenant, contexto_id) -> Contexto:
+    ctx = Contexto.first("tenant_id = ? AND id = ?", [to_db_id(tenant.id), to_db_id(contexto_id)])
+    if ctx is None:
+        raise bad_request({"contexto": ["Contexto não encontrado."]})
+    return ctx
 
-    return get_embeddings()
+
+def _nome_gerado(item: KnowledgeItem, ctx: Contexto | None) -> str:
+    """Nome dos itens que o reindex gera, que não guardam um no metadata."""
+    sufixo = f" — {ctx.name}" if ctx else ""
+    if item.item_type == "ddl":
+        return f"Esquema das views{sufixo}"
+    if item.item_type == "doc":
+        return f"Regras do contexto{sufixo}"
+    return item.content[:60]
 
 
-def training_json(item: KnowledgeItem) -> dict:
+def training_json(item: KnowledgeItem, ctx: Contexto | None = None) -> dict:
     meta = item.metadata or {}
     public_type = {"query_example": "sql", "doc": "documentation"}.get(item.item_type, item.item_type)
     if item.item_type == "query_example":
         content = meta.get("sql") or item.content.removeprefix("Q: ").split("\nSQL: ", 1)[-1]
     else:
         content = item.content
+    manual = meta.get("source") == ORIGEM_MANUAL or item.contexto_id is None
     return {
         "id": item.id,
         "type": public_type,
-        "name": meta.get("name") or meta.get("question") or meta.get("source") or item.content[:60],
+        "name": meta.get("name") or meta.get("question") or (item.content[:60] if manual else _nome_gerado(item, ctx)),
         "question": meta.get("question", ""),
         "content": content,
         "metadata": meta,
+        # Sem contexto, o item entra na busca de todos os contextos.
+        "contexto": item.contexto_id,
+        "contexto_slug": ctx.slug if ctx else None,
+        "contexto_nome": ctx.name if ctx else None,
+        "origem": "manual" if manual else "contexto",
+        "indexado": item.embedding is not None,
         "created_at": api_dt(item.created_at),
         "updated_at": api_dt(item.updated_at),
     }
+
+
+@rpc("admin.trainings.list")
+def trainings_list(params):
+    """Itens do RAG do tenant (todos os contextos), do mais novo para o mais antigo."""
+    _, tenant = _staff()
+    if tenant is None:
+        return []
+    tid = to_db_id(tenant.id)
+    contextos = {c.id: c for c in Contexto.select("tenant_id = ?", [tid])}
+    items = KnowledgeItem.select("tenant_id = ?", [tid], order="created_at DESC, rowid DESC")
+    return [training_json(item, contextos.get(item.contexto_id)) for item in items]
 
 
 @rpc("admin.trainings.create")
@@ -236,6 +279,9 @@ def trainings_create(params):
     data = validate(TRAINING, params)
     if data["type"] == "sql" and not data.get("question"):
         raise bad_request({"question": ["Pergunta é obrigatória para training SQL."]})
+    ctx = _contexto_do_tenant(tenant, data["contexto"]) if data.get("contexto") else None
+    if not llm_configured():
+        raise bad_request({"detail": "Configure a chave do Gemini em Configurações para adicionar treinamentos."})
 
     item_type = TYPE_TO_ITEM_TYPE[data["type"]]
     question = data.get("question", "")
@@ -243,15 +289,91 @@ def trainings_create(params):
     content = f"Q: {question}\nSQL: {raw_content}" if item_type == "query_example" else raw_content
     metadata = {
         "name": question[:60] if item_type == "query_example" else raw_content[:60],
-        "source": "admin_panel",
+        "source": ORIGEM_MANUAL,
     }
     if item_type == "query_example":
         metadata.update({"question": question, "sql": raw_content})
 
     try:
-        embedding = _get_embedder().embed_query(question if item_type == "query_example" else raw_content)
+        embedding = get_embedder().embed_query(question if item_type == "query_example" else raw_content)
+    except CotaEsgotada as exc:
+        raise bad_request({"detail": str(exc)}) from None
     except Exception as exc:
-        raise bad_request({"message": f"Não foi possível gerar embedding do training: {exc}"}) from None
+        log_error("trainings_create", f"Falha ao gerar embedding: {exc}")
+        raise bad_request({"detail": llm_error_message(exc)
+                           or "Não foi possível gerar o embedding do treinamento. Verifique a chave do Gemini e a conexão e tente de novo."}) from None
 
-    item = KnowledgeItem(tenant_id=tenant.id, item_type=item_type, content=content, metadata=metadata, embedding=embedding)
-    return training_json(item.insert())
+    item = KnowledgeItem(
+        tenant_id=tenant.id, contexto_id=ctx.id if ctx else None,
+        item_type=item_type, content=content, metadata=metadata, embedding=embedding,
+    )
+    return training_json(item.insert(), ctx)
+
+
+@rpc("admin.trainings.delete")
+def trainings_delete(params):
+    """Apaga um item do RAG. Um item gerado pelos arquivos volta no próximo reindex do contexto."""
+    _, tenant = _staff()
+    data = validate(TRAINING_ID, params)
+    if tenant is None:
+        raise not_found("KnowledgeItem")
+    args = [to_db_id(data["id"]), to_db_id(tenant.id)]
+    if not KnowledgeItem.count("id = ? AND tenant_id = ?", args):
+        raise not_found("KnowledgeItem")
+    db.execute("DELETE FROM knowledge_knowledgeitem WHERE id = ? AND tenant_id = ?", args)
+    return {"id": data["id"], "deleted": True}
+
+
+@rpc("admin.trainings.retrain")
+def trainings_retrain(params):
+    """Refaz o RAG a partir dos arquivos de um contexto (ou de todos os ativos), mantendo os itens manuais."""
+    _, tenant = _staff()
+    if tenant is None:
+        raise bad_request({"message": "Usuário sem tenant."})
+    data = validate(RETRAIN, params)
+    if not llm_configured():
+        raise bad_request({"detail": "Configure a chave do Gemini em Configurações para refazer o índice."})
+    tid = to_db_id(tenant.id)
+    if data.get("contexto"):
+        alvos = [_contexto_do_tenant(tenant, data["contexto"])]
+    else:
+        alvos = Contexto.select("tenant_id = ? AND is_active = 1", [tid], order="name")
+    pastas = {}
+    for folder in context_folders():
+        pastas.setdefault(slug_da_pasta(folder), folder)
+
+    embedder = get_embedder()
+    out = []
+    cota_acabou = None
+    for ctx in alvos:
+        item = {"contexto": ctx.id, "slug": ctx.slug, "nome": ctx.name, "indexado": False, "erros": []}
+        if cota_acabou:
+            # A cota do Gemini acabou num contexto anterior: insistir só gastaria tentativas à toa.
+            item["erros"] = [f"Não processado: {cota_acabou}"]
+            out.append(item)
+            continue
+        folder = pastas.get(ctx.slug)
+        if folder is None:
+            item["erros"] = [f"Pasta do contexto '{ctx.slug}' não encontrada."]
+            out.append(item)
+            continue
+        try:
+            ctx, examples, errors = load_context_dir(folder, tenant)
+            if not ctx.is_active or errors:
+                item["erros"] = errors or ["Contexto inativo."]
+            else:
+                summary = index_contexto(ctx, embedder, examples)
+                item.update(indexado=True, rag_itens=summary["knowledge_items"])
+        except Exception as exc:
+            log_error("trainings_retrain", f"Falha ao reindexar {ctx.slug}: {exc}")
+            amigavel = str(exc) if isinstance(exc, CotaEsgotada) else llm_error_message(exc)
+            item["erros"] = [f"Indexação falhou: {amigavel or exc}"]
+            if isinstance(exc, CotaEsgotada) or amigavel == COTA_ESGOTADA:
+                cota_acabou = amigavel
+        item["manuais_mantidos"] = KnowledgeItem.count(
+            "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
+            [to_db_id(ctx.id), ORIGEM_MANUAL],
+        )
+        out.append(item)
+    log_success("trainings_retrain", f"{sum(c['indexado'] for c in out)}/{len(out)} contexto(s) reindexados")
+    return {"contextos": out}

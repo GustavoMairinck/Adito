@@ -1,20 +1,42 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Plus, X, Code2, FileText, Database, Loader2 } from 'lucide-vue-next'
+
+export interface TrainingSubmit {
+  type: 'ddl' | 'sql' | 'documentation'
+  question: string
+  content: string
+  /** Id do contexto; null = vale para todos os contextos. */
+  contexto: string | null
+}
 
 const props = defineProps<{
   open: boolean
+  contextos: { id: string; nome: string }[]
+  /** O contexto já escolhido no filtro da lista, se houver. */
+  defaultContexto?: string | null
+  submitting?: boolean
+  error?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'submit', data: { type: string; question: string; content: string }): void
+  (e: 'submit', data: TrainingSubmit): void
 }>()
 
 const selectedType = ref<'ddl' | 'sql' | 'documentation'>('sql')
 const question = ref('')
 const content = ref('')
-const submitting = ref(false)
+const contexto = ref<string | null>(null)
+
+// Formulário limpo a cada abertura; o pai fecha o modal quando o item foi salvo.
+watch(() => props.open, (open) => {
+  if (!open) return
+  question.value = ''
+  content.value = ''
+  selectedType.value = 'sql'
+  contexto.value = props.defaultContexto ?? null
+})
 
 const isValid = computed(() => {
   if (!content.value.trim()) return false
@@ -28,24 +50,20 @@ const typeOptions = [
   { value: 'documentation', label: 'Conhecimento', icon: FileText, desc: 'Regras e Glossário' }
 ]
 
-async function handleSubmit() {
-  if (!isValid.value) return
-  submitting.value = true
+/** Não fecha enquanto a requisição está em andamento. */
+function fechar() {
+  if (props.submitting) return
+  emit('close')
+}
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 800))
-
+function handleSubmit() {
+  if (!isValid.value || props.submitting) return
   emit('submit', {
     type: selectedType.value,
     question: question.value.trim(),
-    content: content.value.trim()
+    content: content.value.trim(),
+    contexto: contexto.value
   })
-
-  // Reset form
-  question.value = ''
-  content.value = ''
-  selectedType.value = 'sql'
-  submitting.value = false
 }
 </script>
 
@@ -62,7 +80,7 @@ async function handleSubmit() {
       <div
         v-if="open"
         class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
-        @click.self="emit('close')"
+        @click.self="fechar"
       >
         <Transition
           enter-active-class="transition duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -74,10 +92,10 @@ async function handleSubmit() {
         >
           <div
             v-if="open"
-            class="w-full max-w-2xl overflow-hidden rounded-2xl border border-border-standard bg-surface shadow-2xl"
+            class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border-standard bg-surface shadow-2xl"
           >
             <!-- Header -->
-            <div class="flex items-center justify-between border-b border-border-subtle bg-surface/20 px-8 py-6">
+            <div class="flex shrink-0 items-center justify-between border-b border-border-subtle bg-surface/20 px-8 py-6">
               <div class="flex items-center gap-4">
                 <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
                   <Plus class="h-6 w-6 text-accent" stroke-width="2.5" />
@@ -88,15 +106,16 @@ async function handleSubmit() {
                 </div>
               </div>
               <button
-                class="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary"
-                @click="emit('close')"
+                :disabled="submitting"
+                class="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                @click="fechar"
               >
                 <X class="h-5 w-5" />
               </button>
             </div>
 
             <!-- Body -->
-            <div class="space-y-8 p-8">
+            <div class="flex-1 space-y-8 overflow-y-auto p-8">
               <!-- Type Selector -->
               <div>
                 <label class="mb-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
@@ -121,6 +140,23 @@ async function handleSubmit() {
                     </div>
                   </button>
                 </div>
+              </div>
+
+              <!-- Contexto -->
+              <div>
+                <label class="mb-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
+                  Contexto
+                </label>
+                <select
+                  v-model="contexto"
+                  class="w-full rounded-lg border border-border-subtle bg-primary/20 px-5 py-3 text-sm text-text-primary transition-all focus:border-accent/50 focus:bg-surface focus:ring-4 focus:ring-accent/5 outline-none dark:bg-primary/40 dark:focus:bg-primary/60"
+                >
+                  <option :value="null">Todos os contextos</option>
+                  <option v-for="c in contextos" :key="c.id" :value="c.id">{{ c.nome }}</option>
+                </select>
+                <p class="mt-2 text-xs text-text-muted">
+                  Itens de um contexto só entram nas perguntas feitas nele. O "Wipe &amp; Retrain" mantém os itens adicionados aqui.
+                </p>
               </div>
 
               <!-- Question (SQL only) -->
@@ -154,11 +190,16 @@ async function handleSubmit() {
               </div>
             </div>
 
+            <p v-if="error" class="mx-8 mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300">
+              {{ error }}
+            </p>
+
             <!-- Footer -->
-            <div class="flex items-center justify-end gap-4 border-t border-border-subtle bg-surface/40 px-8 py-6">
+            <div class="flex shrink-0 items-center justify-end gap-4 border-t border-border-subtle bg-surface/40 px-8 py-6">
               <button
-                class="btn-secondary text-sm px-6"
-                @click="emit('close')"
+                :disabled="submitting"
+                class="btn-secondary text-sm px-6 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="fechar"
               >
                 Cancelar
               </button>
@@ -172,7 +213,7 @@ async function handleSubmit() {
               >
                 <Plus v-if="!submitting" class="h-4 w-4" stroke-width="3" />
                 <Loader2 v-else class="h-4 w-4 animate-spin" />
-                {{ submitting ? 'Processando...' : 'Confirmar Treinamento' }}
+                {{ submitting ? 'Salvando...' : 'Confirmar Treinamento' }}
               </button>
             </div>
           </div>

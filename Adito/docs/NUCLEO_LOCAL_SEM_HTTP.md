@@ -91,13 +91,14 @@ Cada mensagem é um objeto JSON numa linha. O `id` é gerado pelo front e casa c
 | `GET /api/admin/system-status` | `admin.system_status` |
 | `GET /api/chat/query-executions` | `admin.query_executions` |
 | `POST /api/admin/trainings` | `admin.trainings.create` |
+| — (novos em 2026-11-23, aba Base de conhecimento) | `admin.trainings.list`, `admin.trainings.delete`, `admin.trainings.retrain` (refaz o RAG de um contexto pelos arquivos e mantém os itens manuais) |
 
 Rotas que o front não usava saíram sem substituto:
 - `POST /api/chat`;
 - `conversations/ask`;
 - `api/dashboard/dashboards`;
 - `api/projects`;
-- o resto do CRUD de trainings;
+- o resto do CRUD de trainings (listar e apagar voltaram em 2026-11-23 como métodos; editar continua de fora);
 - o `/admin/` do Django.
 
 ## Como adicionar um método

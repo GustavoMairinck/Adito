@@ -1010,6 +1010,11 @@
     "question": "Quantas orientações?",
     "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
    },
+   "contexto": null,
+   "contexto_slug": null,
+   "contexto_nome": null,
+   "origem": "manual",
+   "indexado": true,
    "created_at": "<data>",
    "updated_at": "<data>"
   }
@@ -1050,6 +1055,222 @@
     "trainedExamples": 1,
     "lastTraining": "<data>"
    }
+  }
+ },
+ {
+  "nome": "trainings.list",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id18>",
+    "type": "sql",
+    "name": "Quantas orientações?",
+    "question": "Quantas orientações?",
+    "content": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved",
+    "metadata": {
+     "name": "Quantas orientações?",
+     "source": "admin_panel",
+     "question": "Quantas orientações?",
+     "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
+    },
+    "contexto": null,
+    "contexto_slug": null,
+    "contexto_nome": null,
+    "origem": "manual",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   }
+  ]
+ },
+ {
+  "nome": "trainings.create com contexto",
+  "status": "2xx",
+  "body": {
+   "id": "<id19>",
+   "type": "documentation",
+   "name": "Bolsista é aluno com bolsa.",
+   "question": "",
+   "content": "Bolsista é aluno com bolsa.",
+   "metadata": {
+    "name": "Bolsista é aluno com bolsa.",
+    "source": "admin_panel"
+   },
+   "contexto": "<id2>",
+   "contexto_slug": "ctx-contrato",
+   "contexto_nome": "Contrato",
+   "origem": "manual",
+   "indexado": true,
+   "created_at": "<data>",
+   "updated_at": "<data>"
+  }
+ },
+ {
+  "nome": "trainings.create contexto inexistente",
+  "status": 400,
+  "body": {
+   "contexto": [
+    "Contexto não encontrado."
+   ]
+  }
+ },
+ {
+  "nome": "trainings.retrain",
+  "status": "2xx",
+  "body": {
+   "contextos": [
+    {
+     "contexto": "<id2>",
+     "slug": "ctx-contrato",
+     "nome": "Contrato",
+     "indexado": true,
+     "erros": [],
+     "rag_itens": 3,
+     "manuais_mantidos": 1
+    }
+   ]
+  }
+ },
+ {
+  "nome": "trainings.list depois do retrain",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "<id20>",
+    "type": "sql",
+    "name": "Investimento por ano?",
+    "question": "Investimento por ano?",
+    "content": "SELECT ano, SUM(investimento_total_estimado) FROM vfact_orientacao_bolsa_resolved GROUP BY ano",
+    "metadata": {
+     "question": "Investimento por ano?"
+    },
+    "contexto": "<id2>",
+    "contexto_slug": "ctx-contrato",
+    "contexto_nome": "Contrato",
+    "origem": "contexto",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   },
+   {
+    "id": "<id21>",
+    "type": "documentation",
+    "name": "Regras do contexto — Contrato",
+    "question": "",
+    "content": "Investimento: SUM(investimento_total_estimado)\n",
+    "metadata": {},
+    "contexto": "<id2>",
+    "contexto_slug": "ctx-contrato",
+    "contexto_nome": "Contrato",
+    "origem": "contexto",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   },
+   {
+    "id": "<id22>",
+    "type": "ddl",
+    "name": "Esquema das views — Contrato",
+    "question": "",
+    "content": "- vfact_orientacao_bolsa_resolved(id_orientacao INTEGER, ano INTEGER, grande_area TEXT, programa_fomento TEXT, modalidade TEXT, titulo_projeto TEXT, titulo_edital TEXT, investimento_total_estimado REAL, nome_orientador TEXT, agencia_financiadora TEXT, data_inicio TEXT)\n  Uma linha por orientação.\n- dim_area(nome TEXT)\n  Áreas.",
+    "metadata": {},
+    "contexto": "<id2>",
+    "contexto_slug": "ctx-contrato",
+    "contexto_nome": "Contrato",
+    "origem": "contexto",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   },
+   {
+    "id": "<id19>",
+    "type": "documentation",
+    "name": "Bolsista é aluno com bolsa.",
+    "question": "",
+    "content": "Bolsista é aluno com bolsa.",
+    "metadata": {
+     "name": "Bolsista é aluno com bolsa.",
+     "source": "admin_panel"
+    },
+    "contexto": "<id2>",
+    "contexto_slug": "ctx-contrato",
+    "contexto_nome": "Contrato",
+    "origem": "manual",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   },
+   {
+    "id": "<id18>",
+    "type": "sql",
+    "name": "Quantas orientações?",
+    "question": "Quantas orientações?",
+    "content": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved",
+    "metadata": {
+     "name": "Quantas orientações?",
+     "source": "admin_panel",
+     "question": "Quantas orientações?",
+     "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
+    },
+    "contexto": null,
+    "contexto_slug": null,
+    "contexto_nome": null,
+    "origem": "manual",
+    "indexado": true,
+    "created_at": "<data>",
+    "updated_at": "<data>"
+   }
+  ]
+ },
+ {
+  "nome": "trainings.delete",
+  "status": "2xx",
+  "body": {
+   "id": "<id19>",
+   "deleted": true
+  }
+ },
+ {
+  "nome": "trainings.delete inexistente",
+  "status": 404,
+  "body": {
+   "detail": "No KnowledgeItem matches the given query."
+  }
+ },
+ {
+  "nome": "system_status depois do retrain",
+  "status": "2xx",
+  "body": {
+   "services": [
+    {
+     "name": "app.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    },
+    {
+     "name": "dados.db",
+     "status": "online",
+     "latency_ms": "<volátil>",
+     "url": "<volátil>"
+    }
+   ],
+   "systemStats": {
+    "version": "0.1.0",
+    "uptime": "<volátil>",
+    "vectorRows": 4,
+    "trainedDdl": 1,
+    "trainedDoc": 1,
+    "trainedExamples": 2,
+    "lastTraining": "<data>"
+   }
+  }
+ },
+ {
+  "nome": "trainings.retrain sem chave",
+  "status": 400,
+  "body": {
+   "detail": "Configure a chave do Gemini em Configurações para refazer o índice."
   }
  },
  {

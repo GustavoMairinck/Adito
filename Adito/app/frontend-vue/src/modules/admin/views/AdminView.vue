@@ -31,6 +31,7 @@ import {
 import { call } from '@/common/api/core'
 import TrainingItemCard from '@/modules/admin/components/TrainingItemCard.vue'
 import AddTrainingModal from '@/modules/admin/components/AddTrainingModal.vue'
+import type { TrainingSubmit } from '@/modules/admin/components/AddTrainingModal.vue'
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import type { TrainingItem } from '@/modules/admin/components/TrainingItemCard.vue'
 // ─── Active Tab ───
@@ -47,196 +48,56 @@ const tabs = [
 // TAB 1: GOVERNANCA IA (US-010 + US-025)
 // ════════════════════════════════════════════════════
 
-const trainingItems = ref<TrainingItem[]>([
-  {
-    id: 'ddl-001',
-    type: 'ddl',
-    name: 'unificado.projeto_pesquisa',
-    content: `CREATE TABLE unificado.projeto_pesquisa (
-  id BIGINT PRIMARY KEY REFERENCES unificado.iniciativa(id),
-  id_origem INTEGER, -- ID original do SigPesq
-  data_inicio DATE,
-  data_fim DATE,
-  palavras_chave TEXT,
-  sigilo BOOLEAN,
-  id_natureza_projeto unificado.tipo_natureza_projeto,
-  parecer_diretoria unificado.tipo_parecer_diretoria,
-  id_campus BIGINT REFERENCES unificado.organizacao(id),
-  id_area_conhecimento BIGINT REFERENCES unificado.area_conhecimento(id),
-  id_coordenador BIGINT REFERENCES unificado.pesquisador(id)
-)`,
-    created_at: '2026-01-15T10:05:00Z'
-  },
-  {
-    id: 'ddl-002',
-    type: 'ddl',
-    name: 'unificado.acao (Extensão SRC)',
-    content: `CREATE TABLE unificado.acao (
-  id BIGINT PRIMARY KEY REFERENCES unificado.iniciativa(id),
-  id_origem INTEGER, -- ID original do SRC
-  processo TEXT,
-  data_cadastro DATE,
-  relatorio_aprovado BOOLEAN,
-  url_detalhe TEXT,
-  id_natureza BIGINT REFERENCES unificado.natureza(id),
-  id_tipo_acao BIGINT REFERENCES unificado.tipo_acao(id),
-  id_area_conhecimento BIGINT REFERENCES unificado.area_conhecimento(id),
-  id_coordenador BIGINT REFERENCES unificado.pessoa(id)
-)`,
-    created_at: '2026-01-15T10:05:00Z'
-  },
-  {
-    id: 'ddl-003',
-    type: 'ddl',
-    name: 'unificado.grupo_pesquisa_cnpq',
-    content: `CREATE TABLE unificado.grupo_pesquisa_cnpq (
-  id BIGINT PRIMARY KEY REFERENCES unificado.grupo_pesquisa(id),
-  situacao_grupo unificado.tipo_situacao_grupo,
-  ano_formacao INTEGER,
-  data_situacao DATE,
-  data_ultimo_envio DATE,
-  repercussoes TEXT,
-  id_instituicao BIGINT NOT NULL REFERENCES unificado.organizacao(id),
-  id_campus BIGINT NOT NULL REFERENCES unificado.organizacao(id)
-)`,
-    created_at: '2026-01-16T11:10:00Z'
-  },
-  {
-    id: 'sql-001',
-    type: 'sql',
-    name: 'Projetos de pesquisa por área de conhecimento',
-    question: 'Quantos projetos de pesquisa estão cadastrados por área de conhecimento?',
-    content: `SELECT ac.nome AS area_conhecimento, COUNT(pp.id) AS total_projetos
-FROM unificado.projeto_pesquisa pp
-JOIN unificado.area_conhecimento ac ON ac.id = pp.id_area_conhecimento
-GROUP BY ac.nome
-ORDER BY total_projetos DESC`,
-    created_at: '2026-02-01T14:30:00Z'
-  },
-  {
-    id: 'sql-002',
-    type: 'sql',
-    name: 'Ações de extensão e participantes por área',
-    question: 'Quantas ações e atividades de extensão foram registradas por área?',
-    content: `SELECT ac.nome AS area_conhecimento,
-       COUNT(DISTINCT a.id) AS total_acoes,
-       COUNT(DISTINCT atv.id) AS total_atividades
-FROM unificado.acao a
-LEFT JOIN unificado.area_conhecimento ac ON ac.id = a.id_area_conhecimento
-LEFT JOIN unificado.atividade atv ON atv.id_acao = a.id
-GROUP BY ac.nome
-ORDER BY total_acoes DESC`,
-    created_at: '2026-02-01T14:35:00Z'
-  },
-  {
-    id: 'sql-003',
-    type: 'sql',
-    name: 'Grupos de pesquisa CNPq por situação e ano',
-    question: 'Quais grupos de pesquisa estão certificados no diretório do CNPq?',
-    content: `SELECT gp.nome, gp.sigla, gpc.situacao_grupo, gpc.ano_formacao
-FROM unificado.grupo_pesquisa gp
-JOIN unificado.grupo_pesquisa_cnpq gpc ON gpc.id = gp.id
-ORDER BY gpc.ano_formacao DESC`,
-    created_at: '2026-02-05T09:00:00Z'
-  },
-  {
-    id: 'sql-004',
-    type: 'sql',
-    name: 'Produção científica anual (Lattes)',
-    question: 'Qual a evolução anual de artigos publicados e trabalhos em eventos?',
-    content: `SELECT p.ano, COUNT(ate.id) AS total_publicacoes
-FROM unificado.producao p
-JOIN unificado.artigo_trabalho_evento ate ON ate.id = p.id
-WHERE p.ano IS NOT NULL
-GROUP BY p.ano
-ORDER BY p.ano DESC`,
-    created_at: '2026-02-10T11:20:00Z'
-  },
-  {
-    id: 'sql-005',
-    type: 'sql',
-    name: 'Bolsas e orientações por edital',
-    question: 'Quantos planos de trabalho e orientações estão vinculados a cada edital?',
-    content: `SELECT e.titulo AS edital,
-       COUNT(DISTINCT pt.id) AS planos_trabalho,
-       COUNT(DISTINCT o.id) AS orientacoes,
-       COALESCE(SUM(o.valor_bolsa), 0) AS total_bolsas
-FROM unificado.edital e
-LEFT JOIN unificado.plano_trabalho pt ON pt.id_edital = e.id
-LEFT JOIN unificado.orientacao o ON o.id_plano_trabalho = pt.id
-GROUP BY e.titulo
-ORDER BY orientacoes DESC`,
-    created_at: '2026-02-12T16:45:00Z'
-  },
-  {
-    id: 'sql-006',
-    type: 'sql',
-    name: 'Pesquisadores por titulação acadêmica',
-    question: 'Qual a distribuição de pesquisadores por titulação acadêmica?',
-    content: `SELECT t.nome AS titulacao, COUNT(pesq.id) AS total_pesquisadores
-FROM unificado.pesquisador pesq
-JOIN unificado.titulacao t ON t.id = pesq.id_titulacao
-GROUP BY t.nome
-ORDER BY total_pesquisadores DESC`,
-    created_at: '2026-02-15T08:00:00Z'
-  },
-  {
-    id: 'doc-001',
-    type: 'documentation',
-    name: 'Glossário Institucional - Iniciativas (Pesquisa & Extensão)',
-    content: `GLOSSÁRIO IFES / ADITO - Iniciativas
-Superclasse: unificado.iniciativa (id, nome)
-- Projetos de Pesquisa (SigPesq): unificado.projeto_pesquisa
-- Projetos Lattes: unificado.projeto_lattes
-- Ações de Extensão (SRC): unificado.acao e unificado.atividade`,
-    created_at: '2026-02-20T10:00:00Z'
-  },
-  {
-    id: 'doc-002',
-    type: 'documentation',
-    name: 'Glossário Institucional - Produção Científica (Lattes)',
-    content: `GLOSSÁRIO IFES / ADITO - Produção Científica
-Superclasse: unificado.producao (id, titulo, descricao, ano)
-Especializações:
-- unificado.artigo_trabalho_evento (artigos e anais com DOI/ISSN)
-- unificado.livro_capitulo (livros e capítulos com ISBN/editora)
-- unificado.patente_registro (patentes e registros no INPI)
-- unificado.producao_tecnica_artistica_bibliografica`,
-    created_at: '2026-02-20T10:05:00Z'
-  },
-  {
-    id: 'doc-003',
-    type: 'documentation',
-    name: 'Ontologia - Editais, Planos de Trabalho e Orientações',
-    content: `CONCEITO INSTITUCIONAL - Fomento e Iniciação Científica
-Fluxo relacional:
-unificado.edital -> unificado.plano_trabalho -> unificado.orientacao
-- orientacao contém: ano, valor_bolsa, modalidade, id_orientador (pesquisador), id_orientado (estudante) e id_financiador (organizacao).`,
-    created_at: '2026-02-22T14:00:00Z'
-  },
-  {
-    id: 'doc-004',
-    type: 'documentation',
-    name: 'Dicionário Semântico - Fontes Adito (IFES Campus Serra)',
-    content: `MAPEAMENTO DE FONTES INTEGRADAS (Adito)
-- SRC -> unificado.acao, unificado.atividade, unificado.registro_participante
-- SigPesq / Horizon -> unificado.projeto_pesquisa, unificado.plano_trabalho, unificado.orientacao
-- Diretório CNPq (DGP) -> unificado.grupo_pesquisa, unificado.grupo_pesquisa_cnpq, unificado.linha_pesquisa
-- Currículo Lattes -> unificado.pessoa_lattes, unificado.formacao_academica, unificado.producao`,
-    created_at: '2026-02-25T09:30:00Z'
+// Itens do RAG no app.db (knowledge_knowledgeitem): os gerados dos arquivos de cada contexto
+// (esquema das views, rules.md, examples.json) e os postos à mão aqui ou pela Auditoria SQL.
+const trainingItems = ref<TrainingItem[]>([])
+const loadingTrainings = ref(false)
+const trainingsError = ref('')
+
+async function fetchTrainings() {
+  loadingTrainings.value = true
+  trainingsError.value = ''
+  try {
+    trainingItems.value = await call<TrainingItem[]>('admin.trainings.list')
+  } catch (error: any) {
+    trainingsError.value = error?.message || 'Não foi possível ler a base de conhecimento.'
+  } finally {
+    loadingTrainings.value = false
   }
-])
+}
 
 const expandedId = ref<string | null>(null)
 const filterType = ref<'all' | 'ddl' | 'sql' | 'documentation'>('all')
+/** 'all', 'global' (itens sem contexto) ou o id de um contexto. */
+const filterContexto = ref<string>('all')
 const searchQuery = ref('')
 const showAddModal = ref(false)
+const addingTraining = ref(false)
+const addTrainingError = ref('')
 const confirmWipe = ref(false)
 const wipingInProgress = ref(false)
+const wipeResult = ref<{ ok: boolean; text: string } | null>(null)
 const itemToDelete = ref<TrainingItem | null>(null)
+const removingItem = ref(false)
+
+/** Contextos que aparecem no filtro e no modal: os do app.db mais os citados por algum item. */
+const contextOptions = computed(() => {
+  const map = new Map<string, string>()
+  for (const c of contextosCarregados.value) map.set(c.id, c.nome)
+  for (const i of trainingItems.value) {
+    if (i.contexto && !map.has(i.contexto)) map.set(i.contexto, i.contexto_nome || i.contexto_slug || i.contexto)
+  }
+  return [...map].map(([id, nome]) => ({ id, nome })).sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'))
+})
+
+const itemsDoContexto = computed(() => {
+  if (filterContexto.value === 'all') return trainingItems.value
+  if (filterContexto.value === 'global') return trainingItems.value.filter(i => !i.contexto)
+  return trainingItems.value.filter(i => i.contexto === filterContexto.value)
+})
 
 const filteredItems = computed(() => {
-  let items = trainingItems.value
+  let items = itemsDoContexto.value
   if (filterType.value !== 'all') {
     items = items.filter(i => i.type === filterType.value)
   }
@@ -251,53 +112,124 @@ const filteredItems = computed(() => {
   return items
 })
 
+// Contagens do contexto escolhido no filtro (com "Todos", batem com o app.db inteiro).
 const stats = computed(() => ({
-  ddl: trainingItems.value.filter(i => i.type === 'ddl').length,
-  sql: trainingItems.value.filter(i => i.type === 'sql').length,
-  doc: trainingItems.value.filter(i => i.type === 'documentation').length,
-  total: trainingItems.value.length
+  ddl: itemsDoContexto.value.filter(i => i.type === 'ddl').length,
+  sql: itemsDoContexto.value.filter(i => i.type === 'sql').length,
+  doc: itemsDoContexto.value.filter(i => i.type === 'documentation').length,
+  total: itemsDoContexto.value.length
 }))
 
 function handleToggle(id: string) {
   expandedId.value = expandedId.value === id ? null : id
 }
 
-function handleRemove(id: string) {
-  trainingItems.value = trainingItems.value.filter(i => i.id !== id)
-  if (expandedId.value === id) expandedId.value = null
-}
-
 function requestRemove(item: TrainingItem) {
   itemToDelete.value = item
 }
 
-function confirmRemoveItem() {
-  if (!itemToDelete.value) return
-  handleRemove(itemToDelete.value.id)
-  itemToDelete.value = null
+const removeMessage = computed(() => {
+  const item = itemToDelete.value
+  if (!item) return ''
+  const base = `Tem certeza que deseja remover '${item.name}'?`
+  return item.origem === 'contexto'
+    ? `${base} Ele foi gerado dos arquivos do contexto e volta no próximo Wipe & Retrain.`
+    : `${base} Esta ação não pode ser desfeita.`
+})
+
+async function confirmRemoveItem() {
+  const item = itemToDelete.value
+  if (!item || removingItem.value) return
+  removingItem.value = true
+  try {
+    await call('admin.trainings.delete', { id: item.id })
+    trainingItems.value = trainingItems.value.filter(i => i.id !== item.id)
+    if (expandedId.value === item.id) expandedId.value = null
+  } catch (error: any) {
+    trainingsError.value = error?.message || 'Não foi possível remover o item.'
+  } finally {
+    removingItem.value = false
+    itemToDelete.value = null
+  }
 }
 
-function handleAdd(data: { type: string; question: string; content: string }) {
-  const newItem: TrainingItem = {
-    id: `${data.type}-${Date.now()}`,
-    type: data.type as TrainingItem['type'],
-    name: data.type === 'sql'
-      ? data.question.substring(0, 60)
-      : data.content.substring(0, 60),
-    content: data.content,
-    question: data.type === 'sql' ? data.question : undefined,
-    created_at: new Date().toISOString()
-  }
-  trainingItems.value.unshift(newItem)
-  showAddModal.value = false
+function openAddModal() {
+  addTrainingError.value = ''
+  showAddModal.value = true
 }
+
+async function handleAdd(data: TrainingSubmit) {
+  addingTraining.value = true
+  addTrainingError.value = ''
+  try {
+    const created = await call<TrainingItem>('admin.trainings.create', {
+      type: data.type,
+      question: data.question,
+      content: data.content,
+      contexto: data.contexto
+    })
+    trainingItems.value.unshift(created)
+    // Se o filtro atual esconderia o item recém-criado, ajusta para ele aparecer.
+    if (filterType.value !== 'all' && filterType.value !== created.type) filterType.value = 'all'
+    if (filterContexto.value !== 'all' && filterContexto.value !== (created.contexto || 'global')) {
+      filterContexto.value = created.contexto || 'global'
+    }
+    expandedId.value = created.id
+    showAddModal.value = false
+  } catch (error: any) {
+    const d = error?.data
+    addTrainingError.value = d?.message || d?.detail || d?.question?.[0] || d?.contexto?.[0]
+      || error?.message || 'Não foi possível salvar o treinamento.'
+  } finally {
+    addingTraining.value = false
+  }
+}
+
+/** Contexto que o Wipe & Retrain vai refazer: o do filtro, ou todos os ativos. */
+const wipeAlvo = computed(() => {
+  const id = filterContexto.value
+  if (id === 'all' || id === 'global') return null
+  return contextOptions.value.find(c => c.id === id) ?? null
+})
+
+const wipeMessage = computed(() => {
+  const alvo = wipeAlvo.value
+  const itens = alvo ? trainingItems.value.filter(i => i.contexto === alvo.id) : trainingItems.value.filter(i => i.contexto)
+  const gerados = itens.filter(i => i.origem === 'contexto').length
+  const manuais = itens.filter(i => i.origem === 'manual').length
+  const onde = alvo ? `do contexto "${alvo.nome}"` : 'de todos os contextos ativos'
+  return `Os ${gerados} itens gerados dos arquivos ${onde} serão apagados e refeitos a partir do esquema das views, do rules.md e do examples.json (usa a chave do Gemini). `
+    + (manuais
+      ? `Os ${manuais} itens adicionados à mão (Novo Treinamento ou Auditoria SQL) serão mantidos. `
+      : '')
+    + 'Itens sem contexto não são tocados. Deseja continuar?'
+})
 
 async function handleWipeRetrain() {
-  wipingInProgress.value = true
-  // Simulate wipe & retrain
-  await new Promise(resolve => setTimeout(resolve, 2500))
-  wipingInProgress.value = false
+  if (wipingInProgress.value) return
   confirmWipe.value = false
+  wipingInProgress.value = true
+  wipeResult.value = null
+  try {
+    // Sem limite de tempo: o reindex roda no núcleo local e pode levar minutos.
+    const res = await call<{ contextos: { nome: string; indexado: boolean; erros: string[]; rag_itens?: number }[] }>(
+      'admin.trainings.retrain',
+      wipeAlvo.value ? { contexto: wipeAlvo.value.id } : {}
+    )
+    const falhas = res.contextos.filter(c => !c.indexado)
+    const ok = res.contextos.filter(c => c.indexado)
+    const partes = ok.map(c => `${c.nome}: ${c.rag_itens ?? 0} itens`)
+    for (const f of falhas) partes.push(`${f.nome}: ${f.erros.join(' ')}`)
+    wipeResult.value = {
+      ok: falhas.length === 0 && ok.length > 0,
+      text: res.contextos.length ? partes.join(' · ') : 'Nenhum contexto ativo para reindexar.'
+    }
+  } catch (error: any) {
+    wipeResult.value = { ok: false, text: error?.data?.detail || error?.message || 'O reindex falhou.' }
+  } finally {
+    wipingInProgress.value = false
+    await Promise.all([fetchTrainings(), fetchContextos()])
+  }
 }
 
 // ════════════════════════════════════════════════════
@@ -552,17 +484,21 @@ async function promoteAuditRow(row: any) {
   if (!row.generated_sql) return
   auditError.value = ''
   try {
-    const data = await call('admin.trainings.create', {
+    const data = await call<TrainingItem>('admin.trainings.create', {
       type: 'sql',
       question: row.question_original || 'Consulta auditada',
-      content: row.generated_sql
+      content: row.generated_sql,
+      // A consulta foi feita num contexto: o exemplo vale para as perguntas desse contexto.
+      contexto: row.contexto || null
     })
     trainingItems.value.unshift(data)
     filterType.value = 'sql'
+    filterContexto.value = data.contexto || 'global'
     expandedId.value = data.id
     activeTab.value = 'governance'
-  } catch (err) {
-    auditError.value = 'Não foi possível promover a consulta para treinamento.'
+  } catch (err: any) {
+    auditError.value = err?.data?.detail || err?.data?.message || err?.message
+      || 'Não foi possível promover a consulta para treinamento.'
   }
 }
 
@@ -622,6 +558,11 @@ watch(activeTab, (val) => {
   }
 
   if (val === 'etl') {
+    fetchContextos()
+  }
+
+  if (val === 'governance') {
+    fetchTrainings()
     fetchContextos()
   }
 }, { immediate: true })
@@ -736,6 +677,17 @@ onBeforeUnmount(() => {
               />
             </div>
 
+            <!-- Contexto -->
+            <select
+              v-model="filterContexto"
+              title="Contexto dos itens"
+              class="rounded-lg border border-border-subtle bg-surface px-3 py-2.5 text-sm text-text-primary focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
+            >
+              <option value="all">Todos os contextos</option>
+              <option v-for="c in contextOptions" :key="c.id" :value="c.id">{{ c.nome }}</option>
+              <option value="global">Sem contexto (vale para todos)</option>
+            </select>
+
             <!-- Filter -->
             <div class="flex items-center gap-1 rounded-lg bg-surface p-1 border border-border-subtle">
               <button
@@ -762,7 +714,7 @@ onBeforeUnmount(() => {
           <div class="flex flex-wrap items-center gap-3">
             <button
               class="btn-primary flex items-center gap-2"
-              @click="showAddModal = true"
+              @click="openAddModal"
             >
               <Plus class="h-4 w-4" stroke-width="2.5" />
               Novo Treinamento
@@ -770,13 +722,33 @@ onBeforeUnmount(() => {
             <button
               :disabled="wipingInProgress"
               class="btn-secondary flex items-center gap-2 text-[#C50707] border-[#C50707]/30 hover:border-[#C50707]/60 hover:bg-[#C50707]/8 dark:text-red-300 dark:border-red-400/40 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:hover:border-red-400/60"
+              :title="wipeAlvo ? `Refazer o índice de ${wipeAlvo.nome}` : 'Refazer o índice de todos os contextos ativos'"
               @click="confirmWipe = true"
             >
-              <Zap class="h-4 w-4" />
-              Wipe & Retrain
+              <Loader2 v-if="wipingInProgress" class="h-4 w-4 animate-spin" />
+              <Zap v-else class="h-4 w-4" />
+              {{ wipingInProgress ? 'Reindexando...' : 'Wipe & Retrain' }}
             </button>
           </div>
         </div>
+
+        <p
+          v-if="wipeResult"
+          :class="[
+            'rounded-lg border px-4 py-3 text-sm',
+            wipeResult.ok
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+              : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300'
+          ]"
+        >
+          {{ wipeResult.ok ? 'Índice refeito.' : 'O reindex não terminou em todos os contextos.' }} {{ wipeResult.text }}
+        </p>
+        <p
+          v-if="trainingsError"
+          class="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-300"
+        >
+          {{ trainingsError }}
+        </p>
 
         <!-- Training Items List -->
         <div class="space-y-3">
@@ -790,18 +762,34 @@ onBeforeUnmount(() => {
           />
 
           <div
-            v-if="filteredItems.length === 0"
+            v-if="loadingTrainings && trainingItems.length === 0"
+            class="premium-card flex items-center justify-center gap-3 py-16 text-sm text-text-secondary"
+          >
+            <Loader2 class="h-5 w-5 animate-spin" /> Lendo a base de conhecimento...
+          </div>
+          <div
+            v-else-if="filteredItems.length === 0"
             class="premium-card flex flex-col items-center justify-center gap-3 py-16 text-center"
           >
             <Brain class="h-12 w-12 text-text-muted opacity-40" />
-            <p class="text-sm font-medium text-text-secondary">Nenhum item de treinamento encontrado</p>
-            <p class="text-xs text-text-muted">Ajuste os filtros ou adicione um novo treinamento</p>
+            <template v-if="trainingItems.length === 0">
+              <p class="text-sm font-medium text-text-secondary">A base de conhecimento está vazia</p>
+              <p class="text-xs text-text-muted">Carregue os contextos na aba "Contextos de dados" ou use o Wipe &amp; Retrain para indexá-los</p>
+            </template>
+            <template v-else>
+              <p class="text-sm font-medium text-text-secondary">Nenhum item de treinamento encontrado</p>
+              <p class="text-xs text-text-muted">Ajuste os filtros ou adicione um novo treinamento</p>
+            </template>
           </div>
         </div>
 
         <!-- Add Training Modal -->
         <AddTrainingModal
           :open="showAddModal"
+          :contextos="contextOptions"
+          :default-contexto="wipeAlvo?.id ?? null"
+          :submitting="addingTraining"
+          :error="addTrainingError"
           @close="showAddModal = false"
           @submit="handleAdd"
         />
@@ -809,8 +797,8 @@ onBeforeUnmount(() => {
         <!-- Wipe Confirmation Modal -->
         <ConfirmModal
           :is-open="confirmWipe"
-          title="Atenção Crítica: Wipe & Retrain"
-          message="Esta ação irá reconstruir os vetores RAG no SQLite local (app.db) a partir dos arquivos de contexto. Treinamentos manuais não persistidos serão perdidos. Deseja continuar?"
+          :title="wipeAlvo ? `Wipe & Retrain: ${wipeAlvo.nome}` : 'Wipe & Retrain: todos os contextos'"
+          :message="wipeMessage"
           confirm-text="Wipe & Retrain"
           @confirm="handleWipeRetrain"
           @close="confirmWipe = false"
@@ -820,7 +808,7 @@ onBeforeUnmount(() => {
         <ConfirmModal
           :is-open="!!itemToDelete"
           title="Excluir treinamento"
-          :message="itemToDelete ? `Tem certeza que deseja remover '${itemToDelete.name}'? Esta ação não pode ser desfeita.` : ''"
+          :message="removeMessage"
           confirm-text="Remover item"
           @confirm="confirmRemoveItem"
           @close="itemToDelete = null"

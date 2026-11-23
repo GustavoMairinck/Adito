@@ -176,7 +176,7 @@ A partir de `Adito/app`:
 .venv/bin/python scripts/teste_contrato.py
 ```
 
-Compara cada chamada que as telas fazem (status e JSON) com a referência gravada quando o núcleo ainda era um servidor Django. Deve terminar em `41/41 chamadas iguais à referência.`
+Compara cada chamada que as telas fazem (status e JSON) com a referência gravada quando o núcleo ainda era um servidor Django. Deve terminar em `50/50 chamadas iguais à referência.`
 
 ```bash
 .venv/bin/python scripts/teste_stdio.py

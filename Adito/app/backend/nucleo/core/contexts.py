@@ -269,6 +269,10 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
     return synced
 
 
+# `metadata.source` dos itens do RAG criados pelo painel admin; o reindex do contexto não os apaga.
+ORIGEM_MANUAL = "admin_panel"
+
+
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
     """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa a chave do usuário."""
     from analytics_index.services import update_text_embeddings
@@ -286,7 +290,12 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
     # Os embeddings (rede) saem antes da transação para não segurar o app.db travado.
     rows = [(item_type, content, metadata, embedder.embed_query(content)) for item_type, content, metadata in items]
     with db.transaction():
-        db.execute("DELETE FROM knowledge_knowledgeitem WHERE contexto_id = ?", [to_db_id(contexto.id)])
+        # Os itens que o admin pôs à mão (Novo treinamento, promover consulta) não vêm dos arquivos e ficam.
+        db.execute(
+            "DELETE FROM knowledge_knowledgeitem WHERE contexto_id = ?"
+            " AND COALESCE(json_extract(metadata, '$.source'), '') <> ?",
+            [to_db_id(contexto.id), ORIGEM_MANUAL],
+        )
         for item_type, content, metadata, embedding in rows:
             KnowledgeItem(
                 tenant_id=contexto.tenant_id,

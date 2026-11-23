@@ -2,12 +2,21 @@
 import { computed, ref } from 'vue'
 import { Code2, FileText, Database, Trash2, ChevronDown, ChevronUp, Copy, Check } from 'lucide-vue-next'
 
+/** Item do RAG como `admin.trainings.list` devolve (knowledge_knowledgeitem do app.db). */
 export interface TrainingItem {
   id: string
   type: 'ddl' | 'sql' | 'documentation'
   name: string
   content: string
   question?: string
+  /** Id do contexto; null = vale para todos os contextos. */
+  contexto?: string | null
+  contexto_slug?: string | null
+  contexto_nome?: string | null
+  /** 'contexto' = gerado dos arquivos do contexto (o reindex refaz); 'manual' = posto pelo admin. */
+  origem?: 'contexto' | 'manual'
+  /** false quando o vetor foi apagado (troca de modelo de embedding) e o item ainda não entra na busca. */
+  indexado?: boolean
   created_at?: string
 }
 
@@ -91,6 +100,31 @@ const copyToClipboard = async () => {
         <p class="truncate text-sm font-semibold text-text-primary group-hover:text-accent transition-colors">
           {{ item.name }}
         </p>
+        <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider">
+          <span class="rounded border border-border-subtle bg-surface-elevated/60 px-2 py-0.5 text-text-secondary">
+            {{ item.contexto_nome || 'Todos os contextos' }}
+          </span>
+          <span
+            :class="[
+              'rounded border px-2 py-0.5',
+              item.origem === 'manual'
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                : 'border-border-subtle text-text-muted'
+            ]"
+            :title="item.origem === 'manual' ? 'Adicionado no painel; o Wipe & Retrain mantém.' : 'Gerado dos arquivos do contexto; o Wipe & Retrain refaz.'"
+          >
+            {{ item.origem === 'manual' ? 'Manual' : 'Dos arquivos' }}
+          </span>
+          <span
+            v-if="item.indexado === false"
+            class="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-600 dark:text-red-300"
+            :title="item.origem === 'manual'
+              ? 'Sem vetor: não entra na busca. Remova e adicione de novo.'
+              : 'Sem vetor: não entra na busca até o próximo Wipe & Retrain.'"
+          >
+            Sem vetor
+          </span>
+        </div>
         <p v-if="item.question" class="mt-1 truncate text-xs text-text-secondary leading-relaxed">
           <span class="text-text-muted font-bold mr-1">Q:</span> {{ item.question }}
         </p>
@@ -179,7 +213,7 @@ const copyToClipboard = async () => {
         <!-- Footer / Metadata -->
         <div class="mt-5 flex items-center justify-end border-t border-border-subtle/50 pt-3">
           <p v-if="item.created_at" class="text-[11px] font-medium text-text-muted">
-            Sincronizado em {{ new Date(item.created_at).toLocaleString('pt-BR') }}
+            Criado em {{ new Date(item.created_at).toLocaleString('pt-BR') }}
           </p>
         </div>
       </div>
