@@ -38,7 +38,7 @@ O banco **SQLite 3 (`dados.db`)** expõe exclusivamente **6 views analíticas (`
      - Canceladas no geral: `flag_cancelado = 1`.
      - Canceladas **antecipadamente / precocemente / antes do fim / antes do prazo**: **sempre** exija `flag_cancelado = 1 AND data_cancelado IS NOT NULL AND data_fim IS NOT NULL AND julianday(data_cancelado) < julianday(data_fim)`.
      - Orientações **vigentes / ativas**: exija **sempre** `flag_cancelado = 0` (e `data_fim >= date('now')` quando o foco for vigência atual).
-   - **Financeiro (apenas quando a pergunta pedir R$ / investimento / gasto):** use `SUM(investimento_total_estimado)` e avise na resposta que se trata de **estimativa calculada** (já descontando cancelamentos), pois a base não tem folha de pagamento. Só recuse se o usuário explicitamente proibir estimativas. **Nunca** cite esse aviso em perguntas que não falam de dinheiro.
+   - **Financeiro (quando a pergunta pedir R$ / investimento / gasto):** use `SUM(investimento_total_estimado)` e trate o valor como **estimativa calculada** (já descontando cancelamentos), pois a base não tem folha de pagamento. Só recuse se o usuário explicitamente proibir estimativas.
 
 5. **`vfact_producao_cientifica_resolved` (1 Autoria Lattes por linha — `id_producao` + `id_pessoa_lattes`)**
    - Use para **publicações, artigos (`flag_artigo_periodico = 1`), livros/capítulos (`tipo_macro_producao = 'LIVRO_OU_CAPITULO'`), softwares registrados (`flag_patente_software = 1`), softwares sem patente (`flag_software_sem_patente = 1`) e veículos (`veiculo_publicacao`)**.
@@ -48,7 +48,10 @@ O banco **SQLite 3 (`dados.db`)** expõe exclusivamente **6 views analíticas (`
 
 6. **`vfact_grupo_pesquisa_membro_resolved` (1 Vínculo de Membro em Grupo CNPq por linha — `id_membro_grupo`)**
    - Use para **Grupos de Pesquisa CNPq**, situação (`'CERTIFICADO'`, `'EM_PREENCHIMENTO'`, `'EXCLUIDO'`), líderes (`flag_lider = 1`), status (`'ATIVO'` vs `'EGRESSO'`, `flag_ativo = 1`), papel (`'Pesquisador'`, `'Estudante'`, `'Técnico'`) e tempo de atuação (`tempo_participacao_dias`).
-   - **Grupos distintos:** `COUNT(DISTINCT id_grupo_pesquisa)`. **Pessoas distintas** (*pesquisadores, líderes, estudantes, técnicos*): use **SEMPRE `COUNT(DISTINCT nome_membro)`** (ou `COUNT(DISTINCT CASE WHEN ... THEN nome_membro END)`) — **nunca** `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` (que conta vínculos repetidos em vez de pessoas).
+   - **Grupos distintos:** `COUNT(DISTINCT id_grupo_pesquisa)`.
+   - **Pessoas distintas vs. Vínculos (membros):**
+     - Para **pessoas/integrantes distintos** (*"quantos pesquisadores / líderes / estudantes / técnicos"*, *"integrantes distintos"*): use **`COUNT(DISTINCT nome_membro)`** (ou `COUNT(DISTINCT CASE WHEN ... THEN nome_membro END)`).
+     - Para **vínculos / membros ativos agrupados por papel ou por grupo** (*"quantos membros ativos existem agrupados por papel"*, *"grupos com mais membros ativos"*): use **`COUNT(*)`** (com `WHERE flag_ativo = 1`) ou **`SUM(flag_ativo)`** (podendo incluir `COUNT(DISTINCT nome_membro) AS integrantes_distintos` em paralelo).
    - **Papéis (`"pesquisadores"` = SEMPRE esta view):** filtre sempre com `LIKE` (`papel_membro LIKE 'Pesquisador'`, `papel_membro LIKE 'Estudante'`, `papel_membro LIKE 'Técnico%'`), nunca com `IN` em caixa alta. **Nunca** use `coordenador_nome` de pesquisa ou `nome_orientador` para contar `"pesquisadores"`.
 
 ---
@@ -78,3 +81,8 @@ O banco **SQLite 3 (`dados.db`)** expõe exclusivamente **6 views analíticas (`
 - **Invariância lexical (`"já"`, tempos verbais):** `"já"`, `"ao todo"` e presente/passado retornam o histórico completo; só filtre ativos (`flag_ativo = 1`, `flag_cancelado = 0`, `situacao_grupo <> 'EXCLUIDO'`) quando pedido explicitamente (*"ativos"*, *"vigentes"*, *"atuais"*).
 - **Cruzamentos entre views:** agregue/deduplique cada view em sua própria CTE antes de `INNER JOIN` (evita *fan-out*).
 - **Rankings e datas:** exclua `'Sem Parceiro Demandante'` / `'Recurso Próprio / Sem Fomento'` em rankings de parceiros/fomentos; use `ORDER BY metrica DESC, nome ASC` determinístico; use `NULLIF` em divisões; para `"ano passado"`, use `CAST(strftime('%Y','now') AS INTEGER) - 1`.
+- **Valores ausentes (`NULL` real vs. texto padronizado):**
+  - **Texto padronizado:** `grande_area` e `area_conhecimento` em Extensão (`'Não Informada'`), `orgao_fomento` (`'Recurso Próprio / Sem Fomento'`), `titulacao_coordenador` e `titulacao_membro` (`'Não Informada'`), `parceiros_demandantes` (`'Sem Parceiro Demandante'`), `programa_fomento` (`'Não Especificado'`), `titulo_edital` (`'Sem Edital Vinculado'`), `agencia_financiadora` (`'Recurso Institucional Ifes'`), `campus` (`'Não Informado'`, `'Campus Não Informado'` ou `'Externo / Não Vinculado'` no Lattes).
+  - **`NULL` real:** Projetos (`coordenador_nome`, `natureza_projeto`, `parecer_diretoria`, `data_inicio`, `data_fim`, `ano_inicio`, `ano_fim`, `duracao_meses_prevista`, `grande_area`, `palavras_chave`); Bolsas (`titulacao_orientador`, `nivel_treinamento_aluno`, `curso_orientado`, `nome_cancelador`, `data_cancelado`); Produções (`ano`, `veiculo_publicacao`, `doi`, `issn_isbn`, `natureza_artigo`); Grupos (`sigla_grupo`, `grande_area`, `data_inicio`, `data_fim`, `tempo_participacao_dias`).
+  - **Regra para "sem X informado":** verifique sempre `col IS NULL OR TRIM(col) = ''` combinado com o texto padronizado quando aplicável.
+  - **Transparência sobre `ano IS NULL` em Produções:** ao filtrar ou agrupar por ano em `vfact_producao_cientifica_resolved`, considere que existem registros com `ano IS NULL` — informe se foram excluídos ou apresente-os separadamente (`COALESCE(CAST(ano AS TEXT), 'Sem Ano')`) quando solicitado.

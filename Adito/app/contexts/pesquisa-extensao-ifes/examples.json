@@ -28,12 +28,12 @@
     "sql": "SELECT status_participacao, COUNT(DISTINCT nome_membro) AS integrantes_distintos, COUNT(DISTINCT id_membro_grupo) AS total_vinculos FROM vfact_grupo_pesquisa_membro_resolved GROUP BY status_participacao ORDER BY integrantes_distintos DESC, status_participacao ASC"
   },
   {
-    "question": "Quais pesquisadores lideram mais grupos de pesquisa no CNPq e quantos grupos cada líder comanda?",
-    "sql": "SELECT nome_membro AS lider, COUNT(DISTINCT id_grupo_pesquisa) AS grupos_liderados FROM vfact_grupo_pesquisa_membro_resolved WHERE flag_lider = 1 GROUP BY nome_membro ORDER BY grupos_liderados DESC, nome_membro ASC LIMIT 10"
+    "question": "Quantas obras distintas e quantas autorias existem no Lattes por campus de lotação, separando autores do Ifes e vínculos externos?",
+    "sql": "SELECT campus, COUNT(DISTINCT id_producao) AS total_obras_distintas, SUM(qtd_autorias) AS total_autorias FROM vfact_producao_cientifica_resolved GROUP BY campus ORDER BY total_obras_distintas DESC, campus ASC"
   },
   {
-    "question": "Quais grupos de pesquisa estão alocados no campus Serra e qual área de conhecimento está vinculada a cada grupo?",
-    "sql": "SELECT nome_grupo, situacao_grupo, area_conhecimento, grande_area, COUNT(DISTINCT nome_membro) AS integrantes_distintos FROM vfact_grupo_pesquisa_membro_resolved WHERE campus LIKE 'Serra' GROUP BY id_grupo_pesquisa, nome_grupo, situacao_grupo, area_conhecimento, grande_area ORDER BY integrantes_distintos DESC, nome_grupo ASC"
+    "question": "Qual o total de participações, pessoas distintas impactadas, certificados emitidos e a taxa de certificação em extensão por ano?",
+    "sql": "SELECT ano_participacao, SUM(qtd_participacoes) AS total_participacoes, COUNT(DISTINCT nome_participante) AS pessoas_impactadas, SUM(flag_certificado) AS total_certificados, ROUND(100.0 * SUM(flag_certificado) / NULLIF(SUM(qtd_participacoes), 0), 2) AS taxa_certificacao_pct FROM vfact_extensao_participacao_resolved WHERE ano_participacao IS NOT NULL GROUP BY ano_participacao ORDER BY ano_participacao DESC"
   },
   {
     "question": "Quais os 10 orientadores com maior número de orientações de pesquisa registradas e quantos orientandos distintos cada um orientou?",
@@ -76,8 +76,8 @@
     "sql": "SELECT ano_cadastro, COUNT(DISTINCT id_acao) AS total_acoes, SUM(flag_relatorio_aprovado) AS aprovadas, ROUND(100.0 * SUM(flag_relatorio_aprovado) / NULLIF(COUNT(DISTINCT id_acao), 0), 2) AS percentual_aprovado FROM vfact_extensao_acao_resolved WHERE ano_cadastro IS NOT NULL GROUP BY ano_cadastro ORDER BY ano_cadastro DESC"
   },
   {
-    "question": "Qual o total de participações, pessoas distintas impactadas, certificados emitidos e a taxa de certificação em extensão por ano?",
-    "sql": "SELECT ano_participacao, SUM(qtd_participacoes) AS total_participacoes, COUNT(DISTINCT nome_participante) AS pessoas_impactadas, SUM(flag_certificado) AS total_certificados, ROUND(100.0 * SUM(flag_certificado) / NULLIF(SUM(qtd_participacoes), 0), 2) AS taxa_certificacao_pct FROM vfact_extensao_participacao_resolved WHERE ano_participacao IS NOT NULL GROUP BY ano_participacao ORDER BY ano_participacao DESC"
+    "question": "Quais grupos de pesquisa estão alocados no campus Serra e qual área de conhecimento está vinculada a cada grupo?",
+    "sql": "SELECT nome_grupo, situacao_grupo, area_conhecimento, grande_area, COUNT(DISTINCT nome_membro) AS integrantes_distintos FROM vfact_grupo_pesquisa_membro_resolved WHERE campus LIKE 'Serra' GROUP BY id_grupo_pesquisa, nome_grupo, situacao_grupo, area_conhecimento, grande_area ORDER BY integrantes_distintos DESC, nome_grupo ASC"
   },
   {
     "question": "Qual a proporção entre projetos de pesquisa aplicada e pesquisa básica entre os projetos com natureza informada?",
@@ -92,8 +92,8 @@
     "sql": "SELECT programa_fomento, modalidade, COUNT(DISTINCT id_orientacao) AS total_orientacoes, COUNT(DISTINCT nome_orientador) AS orientadores_distintos, COUNT(DISTINCT nome_orientado) AS orientandos_distintos FROM vfact_orientacao_bolsa_resolved GROUP BY programa_fomento, modalidade ORDER BY total_orientacoes DESC, programa_fomento ASC, modalidade ASC LIMIT 10"
   },
   {
-    "question": "Quantas obras distintas e quantas autorias existem no Lattes por campus de lotação, separando autores do Ifes e vínculos externos?",
-    "sql": "SELECT campus, COUNT(DISTINCT id_producao) AS total_obras_distintas, SUM(qtd_autorias) AS total_autorias FROM vfact_producao_cientifica_resolved GROUP BY campus ORDER BY total_obras_distintas DESC, campus ASC"
+    "question": "Quais pesquisadores lideram mais grupos de pesquisa no CNPq e quantos grupos cada líder comanda?",
+    "sql": "SELECT nome_membro AS lider, COUNT(DISTINCT id_grupo_pesquisa) AS grupos_liderados FROM vfact_grupo_pesquisa_membro_resolved WHERE flag_lider = 1 GROUP BY nome_membro ORDER BY grupos_liderados DESC, nome_membro ASC LIMIT 10"
   },
   {
     "question": "Quantos softwares sem registro de patente distintos foram produzidos no Lattes por ano, incluindo os registros sem ano informado?",
