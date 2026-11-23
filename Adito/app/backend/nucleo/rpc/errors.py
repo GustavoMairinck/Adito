@@ -28,6 +28,7 @@ _COTA = (
     "A cota de uso do Gemini acabou. Se for o limite por minuto, tente de novo em alguns instantes; "
     "se for o diário, só volta a liberar amanhã. Você também pode trocar a chave em Configurações."
 )
+COTA_ESGOTADA = _COTA
 _CHAVE = "A chave do Gemini é inválida ou não tem permissão para este modelo. Confira a chave em Configurações."
 _SOBRECARGA = "O Gemini está sobrecarregado ou fora do ar no momento. Tente de novo em alguns instantes."
 _REDE = "Não consegui falar com o Gemini. Verifique a conexão com a internet e tente de novo."

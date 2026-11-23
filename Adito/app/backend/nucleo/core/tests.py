@@ -511,6 +511,22 @@ class BaseConhecimentoTests(AppDbTestCase):
             status, _ = call("admin.trainings.retrain", {"contexto": self.ctx.id})
         self.assertEqual(status, 400)
 
+    def test_reindex_com_cota_esgotada_devolve_mensagem_clara(self):
+        from analytics_index.embedder import CotaEsgotada
+
+        class SemCota:
+            def embed_documents(self, texts):
+                raise CotaEsgotada("A cota diária da chave do Gemini acabou.")
+
+            embed_query = embed_documents
+
+        with patch("rpc.admin.get_embedder", return_value=SemCota()):
+            status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        self.assertEqual(status, 200, body)
+        erro = body["contextos"][0]["erros"][0]
+        self.assertFalse(body["contextos"][0]["indexado"])
+        self.assertIn("cota diária", erro)
+
 
 class ChaveGeminiTests(AppDbTestCase):
     """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""

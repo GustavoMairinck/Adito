@@ -19,7 +19,7 @@ from core.records import Contexto, KnowledgeItem, QueryExecution, User
 from core.rich_logging import log_error, log_success
 
 from .core_methods import llm_configured
-from .errors import bad_request, forbidden, not_found
+from .errors import COTA_ESGOTADA, bad_request, forbidden, llm_error_message, not_found
 from .params import Choice, Str, Uuid, validate
 from .registry import rpc
 from .session import current
@@ -300,7 +300,8 @@ def trainings_create(params):
         raise bad_request({"detail": str(exc)}) from None
     except Exception as exc:
         log_error("trainings_create", f"Falha ao gerar embedding: {exc}")
-        raise bad_request({"detail": "Não foi possível gerar o embedding do treinamento. Verifique a chave do Gemini e a conexão e tente de novo."}) from None
+        raise bad_request({"detail": llm_error_message(exc)
+                           or "Não foi possível gerar o embedding do treinamento. Verifique a chave do Gemini e a conexão e tente de novo."}) from None
 
     item = KnowledgeItem(
         tenant_id=tenant.id, contexto_id=ctx.id if ctx else None,
@@ -343,8 +344,14 @@ def trainings_retrain(params):
 
     embedder = get_embedder()
     out = []
+    cota_acabou = None
     for ctx in alvos:
         item = {"contexto": ctx.id, "slug": ctx.slug, "nome": ctx.name, "indexado": False, "erros": []}
+        if cota_acabou:
+            # A cota do Gemini acabou num contexto anterior: insistir só gastaria tentativas à toa.
+            item["erros"] = [f"Não processado: {cota_acabou}"]
+            out.append(item)
+            continue
         folder = pastas.get(ctx.slug)
         if folder is None:
             item["erros"] = [f"Pasta do contexto '{ctx.slug}' não encontrada."]
@@ -359,7 +366,10 @@ def trainings_retrain(params):
                 item.update(indexado=True, rag_itens=summary["knowledge_items"])
         except Exception as exc:
             log_error("trainings_retrain", f"Falha ao reindexar {ctx.slug}: {exc}")
-            item["erros"] = [f"Indexação falhou: {exc}"]
+            amigavel = str(exc) if isinstance(exc, CotaEsgotada) else llm_error_message(exc)
+            item["erros"] = [f"Indexação falhou: {amigavel or exc}"]
+            if isinstance(exc, CotaEsgotada) or amigavel == COTA_ESGOTADA:
+                cota_acabou = amigavel
         item["manuais_mantidos"] = KnowledgeItem.count(
             "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
             [to_db_id(ctx.id), ORIGEM_MANUAL],

@@ -169,6 +169,11 @@ async function handleAdd(data: TrainingSubmit) {
       contexto: data.contexto
     })
     trainingItems.value.unshift(created)
+    // Se o filtro atual esconderia o item recém-criado, ajusta para ele aparecer.
+    if (filterType.value !== 'all' && filterType.value !== created.type) filterType.value = 'all'
+    if (filterContexto.value !== 'all' && filterContexto.value !== (created.contexto || 'global')) {
+      filterContexto.value = created.contexto || 'global'
+    }
     expandedId.value = created.id
     showAddModal.value = false
   } catch (error: any) {
@@ -491,8 +496,9 @@ async function promoteAuditRow(row: any) {
     filterContexto.value = data.contexto || 'global'
     expandedId.value = data.id
     activeTab.value = 'governance'
-  } catch (err) {
-    auditError.value = 'Não foi possível promover a consulta para treinamento.'
+  } catch (err: any) {
+    auditError.value = err?.data?.detail || err?.data?.message || err?.message
+      || 'Não foi possível promover a consulta para treinamento.'
   }
 }
 
