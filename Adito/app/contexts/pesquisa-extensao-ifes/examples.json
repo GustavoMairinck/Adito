@@ -52,6 +52,10 @@
     "sql": "SELECT (SELECT COUNT(DISTINCT id_projeto) FROM vfact_projeto_pesquisa_resolved WHERE coordenador_nome IS NULL OR TRIM(coordenador_nome) = '' OR coordenador_nome IN ('Não Informado', 'Não Informada')) AS projetos_sem_coordenador, (SELECT COUNT(DISTINCT id_orientacao) FROM vfact_orientacao_bolsa_resolved WHERE programa_fomento IS NULL OR TRIM(programa_fomento) = '' OR programa_fomento IN ('Não Especificado', 'Não Informado')) AS orientacoes_sem_programa"
   },
   {
+    "question": "Quantas orientações foram canceladas antes do prazo final previsto e quantos orientandos distintos tiveram cancelamento antecipado?",
+    "sql": "SELECT COUNT(DISTINCT id_orientacao) AS orientacoes_canceladas_antecipadamente, COUNT(DISTINCT nome_orientado) AS orientandos_distintos FROM vfact_orientacao_bolsa_resolved WHERE flag_cancelado = 1 AND data_cancelado IS NOT NULL AND data_fim IS NOT NULL AND julianday(data_cancelado) < julianday(data_fim)"
+  },
+  {
     "question": "Quantas orientações existem no programa PIBIC-EM e qual o investimento total estimado por modalidade?",
     "sql": "SELECT modalidade, COUNT(DISTINCT id_orientacao) AS total_orientacoes, ROUND(SUM(investimento_total_estimado), 2) AS investimento_total_estimado FROM vfact_orientacao_bolsa_resolved WHERE LOWER(programa_fomento) = 'pibic_em' GROUP BY modalidade ORDER BY total_orientacoes DESC, modalidade ASC"
   },

@@ -1264,6 +1264,41 @@ class QaAccuracyGuardsTests(unittest.TestCase):
         self.assertIn("Do NOT add extra WHERE filters", BASE_SQL_RULES)
         self.assertIn("explicit tie-breaker", BASE_SQL_RULES)
 
+    def test_examples_json_validos_e_top16_cobre_todas_as_views(self) -> None:
+        from agents.bi_agent.nodes.sql_validator import validate_read_only_sql
+
+        ctx_dir = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
+        views_spec = json.loads((ctx_dir / "views.json").read_text(encoding="utf-8"))
+        allowed = [v["name"] for v in views_spec["views"]]
+        examples = json.loads((ctx_dir / "examples.json").read_text(encoding="utf-8"))
+
+        self.assertGreaterEqual(len(examples), 16)
+        for idx, ex in enumerate(examples, start=1):
+            self.assertTrue(ex.get("question"), f"Exemplo #{idx} sem question")
+            self.assertTrue(ex.get("sql"), f"Exemplo #{idx} sem sql")
+            validate_read_only_sql(ex["sql"], allowed)
+
+        top16_sql = "\n".join(ex["sql"].lower() for ex in examples[:16])
+        for view_name in allowed:
+            self.assertIn(view_name.lower(), top16_sql, f"View {view_name} ausente do top-16 de fallback")
+
+    def test_examples_json_executam_com_linhas_no_dados_db(self) -> None:
+        from core.datastore import connect_dados
+
+        dados_db = RAIZ_REPO / "Adito" / "app" / "data" / "dados.db"
+        if not dados_db.is_file():
+            self.skipTest("dados.db não encontrado no ambiente de teste")
+
+        examples = json.loads(
+            (RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes" / "examples.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        with connect_dados(path=dados_db) as conn:
+            for idx, ex in enumerate(examples, start=1):
+                rows = conn.execute(ex["sql"]).fetchall()
+                self.assertGreater(len(rows), 0, f"Exemplo #{idx} retornou 0 linhas: {ex['question']}")
+
     def _run_extractor(self, system_prompt: str, fake_items: dict[str, list]) -> str:
         from types import SimpleNamespace
         from agents.bi_agent.nodes.query_extractor import query_extractor
