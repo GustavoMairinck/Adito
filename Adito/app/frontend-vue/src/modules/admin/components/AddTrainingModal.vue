@@ -50,6 +50,12 @@ const typeOptions = [
   { value: 'documentation', label: 'Conhecimento', icon: FileText, desc: 'Regras e Glossário' }
 ]
 
+/** Não fecha enquanto a requisição está em andamento. */
+function fechar() {
+  if (props.submitting) return
+  emit('close')
+}
+
 function handleSubmit() {
   if (!isValid.value || props.submitting) return
   emit('submit', {
@@ -74,7 +80,7 @@ function handleSubmit() {
       <div
         v-if="open"
         class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
-        @click.self="emit('close')"
+        @click.self="fechar"
       >
         <Transition
           enter-active-class="transition duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -86,10 +92,10 @@ function handleSubmit() {
         >
           <div
             v-if="open"
-            class="w-full max-w-2xl overflow-hidden rounded-2xl border border-border-standard bg-surface shadow-2xl"
+            class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border-standard bg-surface shadow-2xl"
           >
             <!-- Header -->
-            <div class="flex items-center justify-between border-b border-border-subtle bg-surface/20 px-8 py-6">
+            <div class="flex shrink-0 items-center justify-between border-b border-border-subtle bg-surface/20 px-8 py-6">
               <div class="flex items-center gap-4">
                 <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 border border-accent/20">
                   <Plus class="h-6 w-6 text-accent" stroke-width="2.5" />
@@ -100,15 +106,16 @@ function handleSubmit() {
                 </div>
               </div>
               <button
-                class="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary"
-                @click="emit('close')"
+                :disabled="submitting"
+                class="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                @click="fechar"
               >
                 <X class="h-5 w-5" />
               </button>
             </div>
 
             <!-- Body -->
-            <div class="space-y-8 p-8">
+            <div class="flex-1 space-y-8 overflow-y-auto p-8">
               <!-- Type Selector -->
               <div>
                 <label class="mb-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
@@ -188,10 +195,11 @@ function handleSubmit() {
             </p>
 
             <!-- Footer -->
-            <div class="flex items-center justify-end gap-4 border-t border-border-subtle bg-surface/40 px-8 py-6">
+            <div class="flex shrink-0 items-center justify-end gap-4 border-t border-border-subtle bg-surface/40 px-8 py-6">
               <button
-                class="btn-secondary text-sm px-6"
-                @click="emit('close')"
+                :disabled="submitting"
+                class="btn-secondary text-sm px-6 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="fechar"
               >
                 Cancelar
               </button>

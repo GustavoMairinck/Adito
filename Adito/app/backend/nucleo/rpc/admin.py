@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from analytics_index.embedder import get_embedder
+from analytics_index.embedder import CotaEsgotada, get_embedder
 from core import db
 from core.contexts import (
     ORIGEM_MANUAL,
@@ -216,12 +216,6 @@ TRAINING_ID = {"id": Uuid(required=True)}
 RETRAIN = {"contexto": Uuid(allow_null=True)}
 
 
-def _get_embedder():
-    from agents.config import get_embeddings
-
-    return get_embeddings()
-
-
 def _contexto_do_tenant(tenant, contexto_id) -> Contexto:
     ctx = Contexto.first("tenant_id = ? AND id = ?", [to_db_id(tenant.id), to_db_id(contexto_id)])
     if ctx is None:
@@ -286,6 +280,8 @@ def trainings_create(params):
     if data["type"] == "sql" and not data.get("question"):
         raise bad_request({"question": ["Pergunta é obrigatória para training SQL."]})
     ctx = _contexto_do_tenant(tenant, data["contexto"]) if data.get("contexto") else None
+    if not llm_configured():
+        raise bad_request({"detail": "Configure a chave do Gemini em Configurações para adicionar treinamentos."})
 
     item_type = TYPE_TO_ITEM_TYPE[data["type"]]
     question = data.get("question", "")
@@ -299,9 +295,12 @@ def trainings_create(params):
         metadata.update({"question": question, "sql": raw_content})
 
     try:
-        embedding = _get_embedder().embed_query(question if item_type == "query_example" else raw_content)
+        embedding = get_embedder().embed_query(question if item_type == "query_example" else raw_content)
+    except CotaEsgotada as exc:
+        raise bad_request({"detail": str(exc)}) from None
     except Exception as exc:
-        raise bad_request({"message": f"Não foi possível gerar embedding do training: {exc}"}) from None
+        log_error("trainings_create", f"Falha ao gerar embedding: {exc}")
+        raise bad_request({"detail": "Não foi possível gerar o embedding do treinamento. Verifique a chave do Gemini e a conexão e tente de novo."}) from None
 
     item = KnowledgeItem(
         tenant_id=tenant.id, contexto_id=ctx.id if ctx else None,

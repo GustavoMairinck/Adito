@@ -443,10 +443,9 @@ class BaseConhecimentoTests(AppDbTestCase):
         })
         env.start()
         self.addCleanup(env.stop)
-        for alvo in ("rpc.admin.get_embedder", "rpc.admin._get_embedder"):
-            p = patch(alvo, return_value=EmbedderFalso())
-            p.start()
-            self.addCleanup(p.stop)
+        p = patch("rpc.admin.get_embedder", return_value=EmbedderFalso())
+        p.start()
+        self.addCleanup(p.stop)
         load_handlers()
         _, tenant = session.current()
         self.ctx, _, erros = load_context_dir(self.folder, tenant)
@@ -490,6 +489,12 @@ class BaseConhecimentoTests(AppDbTestCase):
         self.assertEqual(status, 200, body)
         self.assertNotIn(novo["id"], {i["id"] for i in self._lista()})
         self.assertEqual(call("admin.trainings.delete", {"id": novo["id"]})[0], 404)
+
+    def test_create_sem_chave_do_gemini_devolve_aviso_claro(self):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
+            status, body = call("admin.trainings.create", {"type": "documentation", "content": "Regra qualquer."})
+        self.assertEqual(status, 400, body)
+        self.assertIn("chave do Gemini", body["detail"])
 
     def test_item_sem_contexto_vale_para_todos_e_contexto_invalido_recusa(self):
         status, novo = call("admin.trainings.create", {"type": "documentation", "content": "Bolsista é aluno com bolsa."})
