@@ -125,10 +125,10 @@ O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expo
 
 ---
 
-## 4. Decisão sobre as ~85 Tabelas na Arquitetura 100% SQLite (`dados.db`)
+## 4. Decisão sobre as 82 Tabelas na Arquitetura 100% SQLite (`dados.db`)
 
-- **No banco `dados.db`:** o script Python único cria e popula o schema relacional necessário diretamente com `sqlite3` (sem Docker/Postgres/JSON intermediário) e materializa/expõe as **6 fatos (`vfact_*_resolved`)**.
-- **Para o Adito (`ReadPolicy` + `views.json`):** o agente e o Explorador continuam acessando **exclusivamente as 6 fatos** (nunca as ~85 tabelas 3FN cruas), mantendo baixo risco de alucinação de SQL, proteção LGPD (`email`/`telefone`/`fax` ausentes) e latência < 10 ms em SQLite.
+- **No banco `dados.db`:** o script Python único cria e popula diretamente com `sqlite3` as **82 tabelas relacionais em 3FN** do modelo unificado (excluindo fisicamente `email`, `fax` e `telefone` por LGPD, conforme ADR-0003 revisada) e expõe as **6 fatos (`vfact_*_resolved`)** como views dinâmicas, preservando as tabelas extras já populadas (Lattes, bancas, linhas de pesquisa, etc.) para futuras views.
+- **Para o Adito (`ReadPolicy` + `views.json`):** o agente e o Explorador continuam acessando **exclusivamente as 6 fatos** (nunca as 82 tabelas 3FN cruas), mantendo baixo risco de alucinação de SQL, proteção LGPD (`email`/`telefone`/`fax` removidas do DDL) e latência < 10 ms em SQLite.
 
 ---
 
