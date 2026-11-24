@@ -1,7 +1,7 @@
 # Especificação Técnica: Mapeamento Objeto-Relacional do Modelo Unificado (100% SQLite)
 
 **Status:** Aprovado  
-**Data da Revisão Final:** 18/11/2026  
+**Data da Revisão Final:** 24/11/2026  
 **Fonte Original:** `Docs/ModelosClasses/ModeloClassesUnificado.asta` (Diagrama `ModeloCore_SRC_DGP_SIGPESQ_LATTES`)  
 **Banco Alvo:** SQLite 3 nativo (`Adito/app/data/dados.db`), 100% OLTP como Single Source of Truth
 
@@ -12,8 +12,8 @@
 1. **Diagrama Canônico:** Apenas o diagrama unificado final (`ModeloCore_SRC_DGP_SIGPESQ_LATTES`) foi considerado como fonte canônica.
 2. **Arquitetura 100% SQLite (dados.db):**
    * Eliminação total de Docker, PostgreSQL e DuckDB (`dados.duckdb`).
-   * **42 Tabelas Base** em 3ª Forma Normal (3FN), com integridade referencial estrita (`PRAGMA foreign_keys = ON`).
-   * **6 Tabelas Fato Analíticas** modeladas como **VIEWs relacionais dinâmicas (`vfact_*_resolved`)**, calculadas em tempo real sobre as tabelas base sem duplicação física em disco.
+   * **82 Tabelas Base** em 3ª Forma Normal (3FN), com integridade referencial estrita (`PRAGMA foreign_keys = ON`): 14 tabelas de domínio (`01_tipos_e_dominios.sql`), 48 de entidades/heranças (`02_tabelas.sql`) e 20 associativas/junções (`03_relacionamentos_e_juncoes.sql`). As 3 tabelas de contato/PII vazias (`email`, `fax`, `telefone`) foram removidas conforme a revisão da ADR-0003.
+   * **6 Tabelas Fato Analíticas** modeladas como **VIEWs relacionais dinâmicas (`vfact_*_resolved`)**, calculadas em tempo real sobre 42 das tabelas base sem duplicação física em disco; as demais tabelas populadas (ex.: Lattes, bancas, eventos, formação e linhas de pesquisa) ficam preservadas para futuras views.
 3. **Estratégia de Herança (Tabela por Subclasse / Joined-Table):**
    * A superclasse define a chave primária `id INTEGER PRIMARY KEY`.
    * As subclasses possuem a chave primária `id INTEGER PRIMARY KEY REFERENCES superclasse(id) ON DELETE CASCADE`.

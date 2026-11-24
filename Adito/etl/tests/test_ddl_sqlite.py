@@ -31,7 +31,18 @@ def test_ddl_sqlite_execution_and_integrity():
     fk_errors = list(conn.execute("PRAGMA foreign_key_check;"))
     assert len(fk_errors) == 0, f"Erros de Foreign Key encontrados: {fk_errors}"
 
-    # 2. Verifica as 6 views analíticas criadas
+    # 2. Contrato de tabelas da ADR-0003 revisada: 82 tabelas 3FN, sem tabelas PII vazias
+    tables = [
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+        )
+    ]
+    assert len(tables) == 82, f"Esperadas 82 tabelas 3FN (ADR-0003), encontradas {len(tables)}"
+    for pii_table in ("email", "fax", "telefone"):
+        assert pii_table not in tables, f"Tabela de contato/PII '{pii_table}' não deve existir no schema"
+
+    # 3. Verifica as 6 views analíticas criadas
     views = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name;")]
     expected_views = [
         "vfact_extensao_acao_resolved",

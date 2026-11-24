@@ -190,29 +190,11 @@ CREATE TABLE IF NOT EXISTS equipamento_software (
     tipo TEXT
 );
 
--- Comunicacoes do GrupoPesquisaCNPQ
-CREATE TABLE IF NOT EXISTS telefone (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT NOT NULL,
-    id_grupo_pesquisa_cnpq INTEGER NOT NULL REFERENCES grupo_pesquisa_cnpq(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS fax (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numero TEXT NOT NULL,
-    id_grupo_pesquisa_cnpq INTEGER NOT NULL REFERENCES grupo_pesquisa_cnpq(id) ON DELETE CASCADE
-);
-
+-- Comunicacoes publicas do GrupoPesquisaCNPQ
+-- Tabelas telefone, fax e email foram removidas por politica LGPD/ADR-0003 (PII vazia)
 CREATE TABLE IF NOT EXISTS website (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     url TEXT NOT NULL,
-    id_grupo_pesquisa_cnpq INTEGER NOT NULL REFERENCES grupo_pesquisa_cnpq(id) ON DELETE CASCADE
-);
-
--- Email de contato do GrupoPesquisaCNPQ (e-mail de pessoa não é guardado: LGPD)
-CREATE TABLE IF NOT EXISTS email (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    endereco TEXT NOT NULL,
     id_grupo_pesquisa_cnpq INTEGER NOT NULL REFERENCES grupo_pesquisa_cnpq(id) ON DELETE CASCADE
 );
 

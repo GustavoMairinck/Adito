@@ -3,7 +3,7 @@
 Este diretório contém os scripts SQL e os utilitários de carga e visualização da base de dados acadêmicos do Adito em **100% SQLite (`Adito/app/data/dados.db`)**.
 
 A arquitetura adota o modelo **100% OLTP como Single Source of Truth**:
-- **42 Tabelas Base** em 3ª Forma Normal (3FN), com integridade referencial estrita (`PRAGMA foreign_keys = ON`).
+- **82 Tabelas Base** em 3ª Forma Normal (3FN), derivadas do `ModeloClassesUnificado.asta` sem as 3 tabelas de contato/PII vazias (`email`, `fax`, `telefone`), com integridade referencial estrita (`PRAGMA foreign_keys = ON`). Dessas, 42 alimentam diretamente as 6 views atuais, 2 são dependências de FK (`endereco`, `tipo_organizacao`) e 38 preservam dados acadêmicos já extraídos (Lattes, bancas, eventos, formação, linhas de pesquisa) para futuras views.
 - **6 Tabelas Fato Analíticas** modeladas como **VIEWs relacionais dinâmicas (`vfact_*_resolved`)**, calculadas em tempo real sobre as tabelas base sem duplicação física em disco.
 - **Segurança em Profundidade**: O backend desktop acessa o banco estritamente em modo somente-leitura (`mode=ro`, `PRAGMA query_only = ON`, `set_authorizer` e normalização Unicode NFD sem acento).
 - **Zero Infraestrutura Externa**: Eliminação completa de Docker, PostgreSQL, DuckDB e arquivos JSON intermediários.
@@ -21,7 +21,7 @@ python popular_banco.py
 O comando realiza o pipeline completo em **~1 segundo**:
 1. Cria `Adito/app/data/dados.db` a partir dos scripts DDL (`00_schema.sql` até `04_fatos_views.sql`).
 2. Lê os arquivos brutos do ETL (`SRC`, `SigPesq`, `Lattes`, `CNPq/DGP`) e o cruzamento (`trabalho/pessoas.json`).
-3. Executa a carga atômica de 42 tabelas relacionais em transação única (`BEGIN TRANSACTION`).
+3. Executa a carga atômica das 82 tabelas relacionais em transação única (`BEGIN TRANSACTION`).
 4. Valida integridade referencial (`PRAGMA foreign_key_check`), varredura anti-PII (zero vazamento de CPFs e e-mails) e sanidade estrutural das 6 views analíticas.
 
 ### Ou via CLI `adito-etl`:
@@ -54,8 +54,8 @@ Os scripts são executados na ordem topológica de dependência:
 
 * `sql/00_schema.sql`: Pragmas de inicialização SQLite (`foreign_keys = ON`, `encoding = 'UTF-8'`).
 * `sql/01_tipos_e_dominios.sql`: 14 tabelas de domínio com `AUTOINCREMENT` e domínios ampliados.
-* `sql/02_tabelas.sql`: 42 tabelas de entidades de negócio em 3FN, com tipagem e chaves estrangeiras.
-* `sql/03_relacionamentos_e_juncoes.sql`: Classes associativas (com `id`), tabelas N:N puras e índices de alta performance.
+* `sql/02_tabelas.sql`: 48 tabelas de entidades de negócio e heranças em 3FN, com tipagem e chaves estrangeiras (excluindo `email`, `fax` e `telefone` por LGPD).
+* `sql/03_relacionamentos_e_juncoes.sql`: 20 tabelas associativas (com `id`) e junções N:N puras, além de índices de performance.
 * `sql/04_fatos_views.sql`: Definição SQLite das 6 views analíticas dinâmicas (`vfact_*_resolved`) com todas as correções de consistência e novos campos da especificação v2.0.
 * `sql/99_validacao.sql`: Consultas de auditoria estrutural do schema SQLite.
 

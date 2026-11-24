@@ -2,8 +2,8 @@
 """Popula o banco de dados acadêmicos SQLite (`dados.db`) com o que o ETL do Adito já extraiu.
 
 Lê a pasta do ETL (`brutos/` de cada fonte + `trabalho/pessoas.json` do
-cruzamento), recria o schema SQLite nativo (DDLs 00 a 04), insere todas as 42
-tabelas base em uma única transação atômica e compila as 6 views analíticas
+cruzamento), recria o schema SQLite nativo (DDLs 00 a 04), insere as 82
+tabelas base em 3FN em uma única transação atômica e compila as 6 views analíticas
 (100% OLTP, zero duplicação em disco).
 
 Não depende de Docker, PostgreSQL ou DuckDB.

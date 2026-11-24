@@ -69,8 +69,6 @@ def listar_tabelas(conn: sqlite3.Connection):
         view_rows.append([v, str(qtd)])
     print(formatar_tabela(["View Analítica", "Total Registros"], view_rows))
 
-    print("\n📦 42 TABELAS RELACIONAIS EM 3FN:")
-    print("-" * 80)
     cursor = conn.execute(
         """
         SELECT name AS table_name
@@ -80,6 +78,8 @@ def listar_tabelas(conn: sqlite3.Connection):
         """
     )
     tabelas = [row[0] for row in cursor.fetchall()]
+    print(f"\n📦 {len(tabelas)} TABELAS RELACIONAIS EM 3FN:")
+    print("-" * 80)
     tab_rows = []
     for t in tabelas:
         qtd = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
