@@ -82,8 +82,17 @@ def _v2_sem_django_e_sem_vendas(conn: sqlite3.Connection) -> None:
         conn.execute('CREATE INDEX IF NOT EXISTS "core_user_tenant_id_8a6e30cc" ON "core_user" ("tenant_id")')
 
 
+def _v3_embedding_metadata_em_analytics(conn: sqlite3.Connection) -> None:
+    """Versão 2 → 3: guarda provedor e modelo dos vetores em analytics_text_embedding."""
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(analytics_text_embedding)")}
+    if "embedding_provider" not in colunas:
+        conn.execute('ALTER TABLE "analytics_text_embedding" ADD COLUMN "embedding_provider" varchar(50) NULL')
+    if "embedding_model" not in colunas:
+        conn.execute('ALTER TABLE "analytics_text_embedding" ADD COLUMN "embedding_model" varchar(120) NULL')
+
+
 # Versão 1 = esquema herdado do Django. Cada item leva o banco da versão i+1 para i+2.
-MIGRACOES: list = [_v2_sem_django_e_sem_vendas]
+MIGRACOES: list = [_v2_sem_django_e_sem_vendas, _v3_embedding_metadata_em_analytics]
 VERSAO = 1 + len(MIGRACOES)
 
 

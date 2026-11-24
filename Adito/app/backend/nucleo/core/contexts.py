@@ -276,7 +276,8 @@ ORIGEM_MANUAL = "admin_panel"
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
     """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa o provedor ativo."""
     from agents.providers import resolve_active_llm_config
-    from analytics_index.services import update_text_embeddings
+    from analytics_index.services import embed_texts, update_text_embeddings
+    from .vectors import vector_matches_provider
 
     cfg = resolve_active_llm_config()
     emb_meta = {"embedding_provider": cfg.provider, "embedding_model": cfg.embedding_model}
@@ -291,11 +292,12 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
             {"question": example["question"], **emb_meta},
         ))
 
-    # Os embeddings (rede) saem antes da transação para não segurar o app.db travado.
+    # Todos os embeddings (rede) saem ANTES da transação: se houver erro de cota/rede no meio,
+    # o banco atual permanece intacto sem mistura parcial.
     rows = [(item_type, content, metadata, embedder.embed_query(content)) for item_type, content, metadata in items]
     new_dim_bytes = len(rows[0][3]) * 4 if rows and rows[0][3] is not None else None
 
-    # Re-embedar itens manuais com dimensão incompatível para não ficarem órfãos no novo espaço vetorial.
+    # Re-embedar em lote os itens manuais cuja dimensão ou provedor/modelo divergir do ativo.
     cid = to_db_id(contexto.id)
     manual_updates: list[tuple[KnowledgeItem, object]] = []
     if new_dim_bytes:
@@ -303,13 +305,23 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
             "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
             [cid, ORIGEM_MANUAL],
         )
+        manuais_para_reembedar: list[tuple[KnowledgeItem, str]] = []
         for manual in manuais:
+            meta = manual.metadata or {}
             same_dim = manual.embedding is not None and (len(manual.embedding) * 4 == new_dim_bytes)
-            same_provider = (manual.metadata or {}).get("embedding_provider") == cfg.provider
-            if not same_dim or (manual.metadata or {}).get("embedding_provider") and not same_provider:
-                text_to_embed = (manual.metadata or {}).get("question") if manual.item_type == "query_example" else manual.content
-                new_vec = embedder.embed_query(text_to_embed or manual.content)
-                manual_updates.append((manual, new_vec))
+            same_space = vector_matches_provider(
+                meta.get("embedding_provider"),
+                meta.get("embedding_model"),
+                cfg,
+            )
+            if (not same_dim) or (not same_space):
+                text_to_embed = meta.get("question") if manual.item_type == "query_example" else manual.content
+                manuais_para_reembedar.append((manual, text_to_embed or manual.content))
+        if manuais_para_reembedar:
+            novos_vetores = embed_texts(embedder, [text for _, text in manuais_para_reembedar])
+            manual_updates = [
+                (manual, vec) for (manual, _), vec in zip(manuais_para_reembedar, novos_vetores)
+            ]
 
     with db.transaction():
         # Os itens que o admin pôs à mão (Novo treinamento, promover consulta) não vêm dos arquivos e ficam.
@@ -334,11 +346,15 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
             manual.embedding = new_vec
             manual.update("metadata", "embedding")
         if new_dim_bytes:
-            # Apaga vetores de valores de outro espaço/dimensão para que update_text_embeddings reindexe todos.
+            # Apaga vetores de valores de outro espaço/provedor/modelo/dimensão (inclusive mesma dimensão,
+            # como Gemini 1024 → Mistral 1024) para que update_text_embeddings reindexe todos no novo espaço.
             db.execute(
                 "DELETE FROM analytics_text_embedding WHERE contexto_id = ? "
-                "AND (embedding IS NULL OR LENGTH(embedding) <> ?)",
-                [cid, new_dim_bytes],
+                "AND (embedding IS NULL "
+                "OR LENGTH(embedding) <> ? "
+                "OR COALESCE(embedding_provider, '') <> ? "
+                "OR (COALESCE(embedding_model, '') <> ? AND ? <> ''))",
+                [cid, new_dim_bytes, cfg.provider, cfg.embedding_model or "", cfg.embedding_model or ""],
             )
 
     values = update_text_embeddings(contexto, embedder)

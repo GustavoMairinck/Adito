@@ -188,10 +188,12 @@ def normalize_base_url(url: str | None) -> str:
 def validate_base_url(url: str | None) -> tuple[bool, str | None]:
     cleaned = normalize_base_url(url)
     if not cleaned:
-        return False, "Informe a Base URL do provedor (ex.: https://api.openai.com/v1 ou http://localhost:11434/v1)."
+        return False, "Informe a Base URL do provedor (ex.: https://api.z.ai/api/paas/v4 ou http://localhost:11434/v1)."
     parsed = urlparse(cleaned)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        return False, "Base URL inválida. Use http:// ou https:// com um endereço válido."
+        return False, "Base URL inválida. Use https:// (ou http:// apenas para servidor local)."
+    if parsed.scheme == "http" and not is_loopback_url(cleaned):
+        return False, "Use https:// para servidores que não sejam locais."
     return True, None
 
 
@@ -221,7 +223,10 @@ def resolve_active_llm_config() -> ActiveLLMConfig:
     model = env_model or spec.default_model
 
     env_base_url = normalize_base_url(os.environ.get("ADITO_LLM_BASE_URL"))
-    base_url = env_base_url or spec.base_url
+    if env_base_url and spec.allow_custom_base_url:
+        base_url = env_base_url
+    else:
+        base_url = spec.base_url
 
     env_emb_model = (os.environ.get("ADITO_LLM_EMBEDDING_MODEL") or "").strip()
     if not env_emb_model and spec.id == "gemini":

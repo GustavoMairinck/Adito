@@ -1,4 +1,6 @@
 import os
+import sys
+from typing import Any
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -53,10 +55,16 @@ def get_chat_llm(temperature: float = 0.0):
     return ChatOpenAI(**kwargs)
 
 
-def bind_structured_output(llm_model, schema, *, prefer_function_calling: bool = False):
+def _is_chat_openai(llm_model: Any) -> bool:
+    """Detecta ChatOpenAI via isinstance sem forçar import antecipado no startup."""
+    mod = sys.modules.get("langchain_openai")
+    chat_openai_cls = getattr(mod, "ChatOpenAI", None) if mod is not None else None
+    return bool(chat_openai_cls is not None and isinstance(llm_model, chat_openai_cls))
+
+
+def bind_structured_output(llm_model: Any, schema: type[Any], *, prefer_function_calling: bool = False) -> Any:
     """Configura structured output de forma compatível entre Gemini e provedores OpenAI-compatíveis."""
-    is_openai_compat = type(llm_model).__name__ == "ChatOpenAI"
-    if prefer_function_calling or is_openai_compat:
+    if prefer_function_calling or _is_chat_openai(llm_model):
         return llm_model.with_structured_output(schema, method="function_calling")
     return llm_model.with_structured_output(schema)
 

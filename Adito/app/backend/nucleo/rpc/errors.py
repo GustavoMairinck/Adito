@@ -4,6 +4,8 @@ import re
 
 import httpx
 
+from agents.providers import resolve_active_llm_config
+
 
 class ApiError(Exception):
     def __init__(self, status: int, data):
@@ -22,9 +24,6 @@ def not_found(what: str) -> ApiError:
 
 def forbidden(detail: str) -> ApiError:
     return ApiError(403, {"detail": detail})
-
-
-from agents.providers import resolve_active_llm_config
 
 
 def _provider_label() -> str:

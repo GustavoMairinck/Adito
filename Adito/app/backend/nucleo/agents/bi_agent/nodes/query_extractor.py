@@ -1,15 +1,19 @@
 from contextvars import ContextVar
 import json
+import logging
 from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
+from agents.providers import resolve_active_llm_config
 from core.contexts import ORIGEM_MANUAL, get_contexto
 from core.datastore import REPO_APP_DIR, data_dir
 from core.db import to_db_id
 from core.records import KnowledgeItem
 from core.rich_logging import log_kv, log_node_end, log_node_start, log_warning
-from core.vectors import nearest_with_stats
+from core.vectors import nearest_with_stats, vector_matches_provider
+
+logger = logging.getLogger(__name__)
 
 from ..config import KNOWLEDGE_LABELS, KNOWLEDGE_LIMITS
 from ..state import BiAgentState
@@ -55,7 +59,8 @@ def _manual_knowledge_for_fallback(
             order="created_at DESC, rowid DESC",
             limit=limit,
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("Falha ao carregar itens manuais para fallback textual: %s", exc)
         return ""
 
     by_type: dict[str, list[str]] = {}
@@ -99,10 +104,20 @@ _incompatible_hits: ContextVar[list[int] | None] = ContextVar("adito_extractor_i
 
 def _search_knowledge(tenant_id: str, contexto_id: str | None, query_embedding: Any, item_type: str):
     items = KnowledgeItem.select(_DO_CONTEXTO + " AND item_type = ?", [*_ids(tenant_id, contexto_id), item_type])
-    matches, incompatible = nearest_with_stats(items, query_embedding, KNOWLEDGE_LIMITS[item_type])
+    cfg = resolve_active_llm_config()
+    compatible_items = []
+    provider_incompatible = 0
+    for item in items:
+        meta = item.metadata or {}
+        if vector_matches_provider(meta.get("embedding_provider"), meta.get("embedding_model"), cfg):
+            compatible_items.append(item)
+        else:
+            provider_incompatible += 1
+    matches, dim_incompatible = nearest_with_stats(compatible_items, query_embedding, KNOWLEDGE_LIMITS[item_type])
+    total_incompatible = provider_incompatible + dim_incompatible
     tracker = _incompatible_hits.get()
-    if tracker is not None and incompatible:
-        tracker.append(incompatible)
+    if tracker is not None and total_incompatible:
+        tracker.append(total_incompatible)
     return [item for item, _ in matches]
 
 

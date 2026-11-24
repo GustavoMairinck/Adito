@@ -1,7 +1,12 @@
 """Vetores em SQLite: guardados como BLOB float32 (core.db) e buscados por força bruta com numpy."""
+import logging
 from typing import Any, Iterable
 
 import numpy as np
+
+from agents.providers import ActiveLLMConfig
+
+logger = logging.getLogger(__name__)
 
 
 def to_blob(vector: Any) -> bytes:
@@ -51,38 +56,76 @@ def nearest(items: Iterable[Any], query: Any, k: int, attr: str = "embedding") -
     return matches
 
 
-def embedding_diagnostics(cfg) -> dict[str, object]:
-    """Diagnostica suporte e compatibilidade de dimensão/provedor dos vetores persistidos no app.db."""
+def vector_matches_provider(
+    stored_provider: str | None,
+    stored_model: str | None,
+    cfg: ActiveLLMConfig,
+) -> bool:
+    """Confere se um vetor pertence ao provedor/modelo ativo.
+
+    Vetores legados sem tag (criados na v0.1.0) são assumidos como Gemini; ao usar outro provedor
+    são considerados incompatíveis para evitar misturar espaços vetoriais de mesma dimensão (ex.: 1024).
+    """
+    prov = (stored_provider or "").strip().lower()
+    model = (stored_model or "").strip()
+    if not prov:
+        return cfg.provider == "gemini"
+    if prov != cfg.provider:
+        return False
+    if model and cfg.embedding_model and model != cfg.embedding_model:
+        return False
+    return True
+
+
+def embedding_diagnostics(cfg: ActiveLLMConfig) -> dict[str, object]:
+    """Diagnostica suporte e compatibilidade de dimensão, provedor e modelo dos vetores no app.db."""
     from core import db
 
     dim_counts: dict[int, int] = {}
-    stored_providers: set[str] = set()
-    provider_mismatch_rows = 0
+    incompatible_vectors = 0
+    needs_retrain = False
 
-    for table in ("knowledge_knowledgeitem", "analytics_text_embedding"):
-        try:
-            for byte_len, total in db.execute(
-                f"SELECT LENGTH(embedding), COUNT(*) FROM {table} WHERE embedding IS NOT NULL GROUP BY LENGTH(embedding)"
-            ):
-                if byte_len and byte_len > 0:
-                    dim = int(byte_len // 4)
-                    dim_counts[dim] = dim_counts.get(dim, 0) + int(total)
-        except Exception:
-            continue
+    def _accumulate(byte_len: int | None, prov: str | None, model: str | None, total: int) -> None:
+        nonlocal incompatible_vectors, needs_retrain
+        if not byte_len or byte_len <= 0:
+            return
+        dim = int(byte_len // 4)
+        dim_counts[dim] = dim_counts.get(dim, 0) + int(total)
+        if not cfg.supports_embeddings:
+            return
+        dim_mismatch = cfg.embedding_dim is not None and dim != cfg.embedding_dim
+        prov_mismatch = not vector_matches_provider(prov, model, cfg)
+        if dim_mismatch or prov_mismatch:
+            incompatible_vectors += int(total)
+            needs_retrain = True
 
     try:
-        for provider, total in db.execute(
-            "SELECT COALESCE(json_extract(metadata, '$.embedding_provider'), ''), COUNT(*) "
+        for byte_len, prov, model, total in db.execute(
+            "SELECT LENGTH(embedding), "
+            "COALESCE(json_extract(metadata, '$.embedding_provider'), ''), "
+            "COALESCE(json_extract(metadata, '$.embedding_model'), ''), "
+            "COUNT(*) "
             "FROM knowledge_knowledgeitem WHERE embedding IS NOT NULL "
-            "GROUP BY COALESCE(json_extract(metadata, '$.embedding_provider'), '')"
+            "GROUP BY LENGTH(embedding), "
+            "COALESCE(json_extract(metadata, '$.embedding_provider'), ''), "
+            "COALESCE(json_extract(metadata, '$.embedding_model'), '')"
         ):
-            clean = str(provider or "").strip().lower()
-            if clean:
-                stored_providers.add(clean)
-                if clean != cfg.provider:
-                    provider_mismatch_rows += int(total)
-    except Exception:
-        pass
+            _accumulate(byte_len, prov, model, total)
+    except Exception as exc:
+        logger.warning("Falha ao diagnosticar embeddings em knowledge_knowledgeitem: %s", exc)
+
+    try:
+        for byte_len, prov, model, total in db.execute(
+            "SELECT LENGTH(embedding), "
+            "COALESCE(embedding_provider, ''), "
+            "COALESCE(embedding_model, ''), "
+            "COUNT(*) "
+            "FROM analytics_text_embedding WHERE embedding IS NOT NULL "
+            "GROUP BY LENGTH(embedding), COALESCE(embedding_provider, ''), COALESCE(embedding_model, '')"
+        ):
+            _accumulate(byte_len, prov, model, total)
+    except Exception as exc:
+        logger.warning("Falha ao diagnosticar embeddings em analytics_text_embedding: %s", exc)
 
     stored_dims = sorted(dim_counts.keys())
     expected_dim = cfg.embedding_dim
@@ -99,20 +142,11 @@ def embedding_diagnostics(cfg) -> dict[str, object]:
             "incompatible_vectors": 0,
         }
 
-    incompatible_by_dim = 0
-    if expected_dim is not None:
-        incompatible_by_dim = sum(count for dim, count in dim_counts.items() if dim != expected_dim)
-    elif len(stored_dims) > 1:
-        # Dimensão esperada desconhecida (ex.: modelo custom/Z.AI), mas há mistura no banco.
-        dominant = max(dim_counts.values())
-        incompatible_by_dim = sum(dim_counts.values()) - dominant
-
-    incompatible_vectors = max(incompatible_by_dim, provider_mismatch_rows)
-    needs_retrain = bool(
-        incompatible_vectors > 0
-        or len(stored_dims) > 1
-        or any(p != cfg.provider for p in stored_providers)
-    )
+    if len(stored_dims) > 1:
+        needs_retrain = True
+        if incompatible_vectors == 0:
+            # Dimensão esperada desconhecida (ex.: modelo custom/Z.AI) e mesma tag, mas há mistura de dimensões.
+            incompatible_vectors = sum(dim_counts.values()) - max(dim_counts.values())
 
     return {
         "supports_embeddings": True,

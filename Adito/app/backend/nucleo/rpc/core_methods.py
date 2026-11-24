@@ -14,25 +14,30 @@ from agents.providers import (
 )
 from core.contexts import active_contextos, sync_default_contexts
 
-from .errors import ApiError
+from .errors import (
+    ApiError,
+    capacidade_plano_message,
+    chave_invalida_message,
+    cota_esgotada_message,
+    rede_message,
+)
 from .registry import rpc
 from .session import current
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-KEY_INVALID_CHARS = (
-    "A chave tem acento, espaço ou outro caractere que não pode existir numa chave de API. "
-    "Copie de novo direto do provedor, sem alterar."
-)
-LLM_KEY_MISSING = "Configure a chave do provedor de IA em Configurações para usar o chat."
 
 
-def key_invalid_chars_message(label: str) -> str:
+def key_invalid_chars_message(label: str = "API") -> str:
     return (
         f"A chave tem acento, espaço ou outro caractere que não pode existir numa chave de {label}. "
         "Copie de novo direto do provedor, sem alterar."
     )
+
+
+KEY_INVALID_CHARS = key_invalid_chars_message("API")
+LLM_KEY_MISSING = "Configure a chave do provedor de IA em Configurações para usar o chat."
 
 
 def llm_missing_message(acao: str = "usar o chat") -> str:
@@ -102,23 +107,60 @@ def _extract_provider_error(resp: httpx.Response, key: str = "") -> str:
     return detail
 
 
+def _status_reason(
+    status_code: int,
+    label: str,
+    model: str,
+    base_url: str,
+    is_local: bool,
+    detail: str = "",
+    *,
+    is_gemini: bool = False,
+) -> str:
+    if status_code == 401:
+        return f"Chave inválida para {label}."
+    if status_code == 403:
+        return chave_invalida_message(label)
+    if status_code == 404:
+        if is_gemini:
+            return f"Modelo {label} ('{model}') indisponível. Verifique o modelo configurado (GEMINI_MODEL)."
+        if is_local:
+            return (
+                f"Modelo '{model}' não encontrado no servidor local ({base_url}). "
+                f"Verifique se o modelo foi baixado (ex.: ollama pull {model})."
+            )
+        return f"Modelo '{model}' ou endpoint não encontrado em {label}."
+    if status_code == 429:
+        lower = detail.lower()
+        if "capacity" in lower or "service tier" in lower:
+            base = capacidade_plano_message(label, model)
+            return f"{base} ({detail})" if detail else base
+        if detail:
+            return f"Limite de uso ou plano em {label} (HTTP 429): {detail}"
+        return cota_esgotada_message(label)
+    if status_code == 400:
+        if detail:
+            return f"Solicitação recusada por {label}: {detail}"
+        return f"Chave inválida ou solicitação recusada por {label}. Verifique a chave e o modelo '{model}'."
+    return f"{label} respondeu com erro {status_code}." + (f" ({detail})" if detail else "")
+
+
 def _test_gemini(key: str, model: str, label: str) -> dict:
     try:
         resp = httpx.get(f"{GEMINI_MODELS_URL}/{model}", headers={"x-goog-api-key": key}, timeout=15)
     except UnicodeError:
         return {"ok": False, "reason": key_invalid_chars_message(label)}
     except httpx.HTTPError:
-        return {"ok": False, "reason": f"Sem conexão com o {label}. Verifique a internet e tente de novo."}
+        return {"ok": False, "reason": rede_message(label, GEMINI_MODELS_URL, False)}
     if resp.status_code == 200:
         return {"ok": True}
-    reasons = {
-        400: f"Chave inválida ou solicitação recusada pelo {label}.",
-        401: f"Chave inválida para {label}.",
-        403: f"Chave sem permissão para a API ou para o modelo '{model}' no {label}.",
-        404: f"Modelo {label} ('{model}') indisponível. Verifique o modelo configurado (GEMINI_MODEL).",
-        429: f"Cota da chave esgotada ou limite de uso atingido no {label}.",
+    detail = _extract_provider_error(resp, key)
+    if detail:
+        logger.warning("Validação %s (modelo=%s) retornou HTTP %s: %s", label, model, resp.status_code, detail)
+    return {
+        "ok": False,
+        "reason": _status_reason(resp.status_code, label, model, GEMINI_MODELS_URL, False, detail, is_gemini=True),
     }
-    return {"ok": False, "reason": reasons.get(resp.status_code, f"O {label} respondeu com erro {resp.status_code}.")}
 
 
 def _test_openai_compatible(key: str, model: str, base_url: str, label: str, is_local: bool) -> dict:
@@ -131,7 +173,7 @@ def _test_openai_compatible(key: str, model: str, base_url: str, label: str, is_
     }
     try:
         resp = httpx.post(endpoint, headers=headers, json=body, timeout=15)
-        if resp.status_code == 400 and "max_completion_tokens" in _extract_provider_error(resp).lower():
+        if resp.status_code == 400 and "max_completion_tokens" in _extract_provider_error(resp, key).lower():
             retry_body = {
                 "model": model,
                 "messages": [{"role": "user", "content": "ok"}],
@@ -141,12 +183,7 @@ def _test_openai_compatible(key: str, model: str, base_url: str, label: str, is_
     except UnicodeError:
         return {"ok": False, "reason": key_invalid_chars_message(label)}
     except httpx.HTTPError:
-        if is_local:
-            return {
-                "ok": False,
-                "reason": f"Não consegui conectar ao servidor local em {base_url}. Verifique se o {label} está rodando.",
-            }
-        return {"ok": False, "reason": f"Sem conexão com {label}. Verifique a internet e a Base URL e tente de novo."}
+        return {"ok": False, "reason": rede_message(label, base_url, is_local)}
 
     if resp.status_code == 200:
         return {"ok": True}
@@ -154,42 +191,7 @@ def _test_openai_compatible(key: str, model: str, base_url: str, label: str, is_
     detail = _extract_provider_error(resp, key)
     if detail:
         logger.warning("Validação %s (modelo=%s) retornou HTTP %s: %s", label, model, resp.status_code, detail)
-
-    if resp.status_code == 401:
-        return {"ok": False, "reason": f"Chave inválida para {label}."}
-    if resp.status_code == 403:
-        return {"ok": False, "reason": f"Chave sem permissão para a API ou para o modelo '{model}' em {label}."}
-    if resp.status_code == 404:
-        if is_local:
-            return {
-                "ok": False,
-                "reason": (
-                    f"Modelo '{model}' não encontrado no servidor local ({base_url}). "
-                    f"Verifique se o modelo foi baixado (ex.: ollama pull {model})."
-                ),
-            }
-        return {"ok": False, "reason": f"Modelo '{model}' ou endpoint não encontrado em {label}."}
-    if resp.status_code == 429:
-        lower = detail.lower()
-        if "capacity" in lower or "service tier" in lower:
-            return {
-                "ok": False,
-                "reason": (
-                    f"O modelo '{model}' está sem capacidade disponível no plano atual da {label} ({detail}). "
-                    "Tente outro modelo (ex.: open-mistral-nemo ou ministral-8b-latest) ou verifique seu plano no console do provedor."
-                ),
-            }
-        if detail:
-            return {
-                "ok": False,
-                "reason": f"Limite de uso ou plano em {label} (HTTP 429): {detail}",
-            }
-        return {"ok": False, "reason": f"Cota esgotada ou limite de uso atingido em {label}."}
-    if resp.status_code == 400:
-        if detail:
-            return {"ok": False, "reason": f"Solicitação recusada por {label}: {detail}"}
-        return {"ok": False, "reason": f"Solicitação recusada por {label}. Verifique a chave e o modelo '{model}'."}
-    return {"ok": False, "reason": f"{label} respondeu com erro {resp.status_code}." + (f" ({detail})" if detail else "")}
+    return {"ok": False, "reason": _status_reason(resp.status_code, label, model, base_url, is_local, detail)}
 
 
 @rpc("config.test_llm_key")
@@ -203,6 +205,8 @@ def test_llm_key(params):
 
     key = str(params.get("key") or "").strip()
     raw_base_url = normalize_base_url(params.get("base_url"))
+    if raw_base_url and not spec.allow_custom_base_url and raw_base_url != normalize_base_url(spec.base_url):
+        return {"ok": False, "reason": f"O provedor {spec.label} não permite alterar a Base URL."}
     base_url = raw_base_url or spec.base_url
 
     if spec.protocol == "openai_compatible":

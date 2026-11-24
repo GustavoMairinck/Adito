@@ -847,12 +847,15 @@ class MigracaoV2Tests(unittest.TestCase):
         from core.schema import TABELAS_DJANGO, VERSAO
 
         self.assertEqual(ensure_schema(), VERSAO)
-        self.assertEqual(VERSAO, 2)
+        self.assertEqual(VERSAO, 3)
         self.assertTrue(Path(str(self.app_db) + ".bak-v1").exists(), "faltou a cópia de segurança")
         self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
         colunas = [r[1] for r in db.execute("PRAGMA table_info(core_user)")]
         self.assertEqual(sorted(colunas), sorted(
             ["id", "username", "first_name", "last_name", "email", "is_staff", "created_at", "updated_at", "tenant_id"]))
+        colunas_ate = {r[1] for r in db.execute("PRAGMA table_info(analytics_text_embedding)")}
+        self.assertIn("embedding_provider", colunas_ate)
+        self.assertIn("embedding_model", colunas_ate)
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         self.assertEqual(db.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
@@ -1935,6 +1938,93 @@ class MultiProvedorLLMTests(AppDbTestCase):
         self.assertEqual(diag["stored_dims"], [1024])
         self.assertEqual(diag["expected_dim"], 1536)
         self.assertEqual(diag["incompatible_vectors"], 1)
+
+    def test_mesma_dimensao_1024_entre_gemini_e_mistral_sinaliza_retrain_e_isola_busca(self) -> None:
+        from agents.providers import resolve_active_llm_config
+        from analytics_index.services import search_text_embeddings
+        from core.records import AnalyticsTextEmbedding, KnowledgeItem
+        from core.vectors import embedding_diagnostics
+
+        _, tenant = session.current()
+        ctx = Contexto(tenant_id=tenant.id, slug="ctx-1024", name="SameDim", views=[{"name": "t", "embed_columns": ["nome"]}]).insert()
+        # Item legado v0.1.0 sem tag + valor analytics gerado no Gemini (ambos 1024 dims).
+        KnowledgeItem(
+            tenant_id=tenant.id,
+            contexto_id=ctx.id,
+            item_type="doc",
+            content="Regra legada",
+            metadata={},
+            embedding=[0.1] * 1024,
+        ).insert()
+        AnalyticsTextEmbedding(
+            id=db.new_id(),
+            tenant_id=tenant.id,
+            contexto_id=ctx.id,
+            source_table="t",
+            embedding_text="Nome: PIBIC",
+            payload_json={"nome": "PIBIC"},
+            value_hash="h1",
+            embedding=[0.2] * 1024,
+            embedding_provider="gemini",
+            embedding_model="gemini-embedding-2",
+        ).insert()
+
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "mistral", "ADITO_LLM_API_KEY": "mis-x"}):
+            cfg = resolve_active_llm_config()
+            diag = embedding_diagnostics(cfg)
+            # Mesmo tendo 1024 dims iguais, Gemini/legado são incompatíveis com Mistral!
+            self.assertTrue(diag["needs_retrain"])
+            self.assertEqual(diag["incompatible_vectors"], 2)
+            # Busca semântica de valores não mistura vetores do Gemini com query da Mistral.
+            self.assertEqual(search_text_embeddings(ctx, [0.2] * 1024, table="t"), [])
+
+    def test_base_url_exige_https_remoto_e_recusa_url_custom_em_provedor_fechado(self) -> None:
+        from agents.providers import resolve_active_llm_config, validate_base_url
+
+        ok_http_remote, err_http = validate_base_url("http://api.exemplo.com/v1")
+        self.assertFalse(ok_http_remote)
+        self.assertIn("https://", err_http)
+        self.assertTrue(validate_base_url("http://localhost:11434/v1")[0])
+        self.assertTrue(validate_base_url("https://open.bigmodel.cn/api/paas/v4")[0])
+
+        # OpenAI não permite URL custom: test_llm_key recusa e resolve_active_llm_config ignora env.
+        with patch("rpc.core_methods.httpx.post") as post:
+            status, body = call("config.test_llm_key", {
+                "provider": "openai",
+                "key": "sk-test",
+                "base_url": "https://atacante.example/v1",
+            })
+        self.assertEqual(status, 200)
+        self.assertFalse(body["ok"])
+        self.assertIn("não permite alterar", body["reason"])
+        post.assert_not_called()
+
+        with self._clean_llm_env({
+            "ADITO_LLM_PROVIDER": "openai",
+            "ADITO_LLM_API_KEY": "sk-test",
+            "ADITO_LLM_BASE_URL": "https://atacante.example/v1",
+        }):
+            self.assertEqual(resolve_active_llm_config().base_url, "https://api.openai.com/v1")
+
+    def test_lista_de_provedores_sincronizada_entre_python_rust_e_frontend(self) -> None:
+        import re
+        from agents.providers import PROVIDER_CATALOG
+
+        app_dir = Path(__file__).resolve().parents[3]
+        py_ids = [spec.id for spec in PROVIDER_CATALOG]
+
+        rust_src = (app_dir / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+        rust_block = re.search(r"const KNOWN_PROVIDERS:\s*&\[&str\]\s*=\s*&\[(.*?)\];", rust_src, re.S)
+        self.assertIsNotNone(rust_block)
+        rust_ids = re.findall(r'"([a-z0-9_-]+)"', rust_block.group(1))
+
+        ts_src = (app_dir / "frontend-vue" / "src" / "common" / "api" / "llmKey.ts").read_text(encoding="utf-8")
+        ts_block = re.search(r"export const DEFAULT_LLM_PROVIDERS:.*?=\s*\[(.*?)\n\]", ts_src, re.S)
+        self.assertIsNotNone(ts_block)
+        ts_ids = re.findall(r"id:\s*'([a-z0-9_-]+)'", ts_block.group(1))
+
+        self.assertEqual(rust_ids, py_ids)
+        self.assertEqual(ts_ids, py_ids)
 
 
 if __name__ == "__main__":

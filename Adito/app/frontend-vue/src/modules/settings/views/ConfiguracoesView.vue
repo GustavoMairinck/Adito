@@ -59,13 +59,12 @@ const selectedIsLocal = computed(
 )
 
 const showBaseUrlField = computed(
-  () => selectedProviderId.value === 'custom' || (selectedProvider.value.allow_custom_base_url && showAdvanced.value)
+  () => selectedProvider.value.allow_custom_base_url && showAdvanced.value
 )
 
 const canSubmit = computed(() => {
   if (busy.value) return false
   if (!model.value.trim()) return false
-  if (selectedProviderId.value === 'custom' && !baseUrl.value.trim()) return false
   if (selectedIsLocal.value) return true
   return Boolean(key.value.trim() || selectedHasSavedKey.value)
 })
@@ -80,8 +79,8 @@ function applyProviderDefaults(providerId: string, savedStatus?: LlmConfigStatus
   const spec = providers.value.find((p) => p.id === providerId) ?? providers.value[0]
   const isActive = savedStatus && savedStatus.provider === spec.id
   model.value = (isActive && savedStatus.model) || spec.default_model
-  baseUrl.value = (isActive && savedStatus.base_url) || (spec.id === 'custom' ? '' : spec.base_url)
-  showAdvanced.value = spec.id === 'custom' || Boolean(isActive && savedStatus.base_url && savedStatus.base_url !== spec.base_url)
+  baseUrl.value = (isActive && savedStatus.base_url) || spec.base_url
+  showAdvanced.value = Boolean(isActive && savedStatus.base_url && savedStatus.base_url !== spec.base_url)
   key.value = ''
 }
 
@@ -110,7 +109,7 @@ async function save() {
   const useSavedKey = !typedKey && selectedHasSavedKey.value
   const spec = selectedProvider.value
   const customUrl =
-    spec.id === 'custom' || (spec.allow_custom_base_url && baseUrl.value.trim() && baseUrl.value.trim() !== spec.base_url)
+    spec.allow_custom_base_url && baseUrl.value.trim() && baseUrl.value.trim() !== spec.base_url
       ? baseUrl.value.trim()
       : undefined
 
@@ -243,7 +242,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="selectedProvider.allow_custom_base_url && selectedProviderId !== 'custom'">
+        <div v-if="selectedProvider.allow_custom_base_url">
           <button
             type="button"
             class="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-primary)] hover:underline dark:text-[#68d388]"

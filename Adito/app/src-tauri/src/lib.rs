@@ -219,6 +219,10 @@ fn default_base_url_for(provider: &str) -> &'static str {
     }
 }
 
+fn allow_custom_base_url_for(provider: &str) -> bool {
+    matches!(provider, "zai" | "ollama")
+}
+
 /// Aceita chave vazia apenas quando o endpoint aponta explicitamente para loopback (http/https).
 fn is_loopback_url(url: &str) -> bool {
     let trimmed = url.trim();
@@ -237,6 +241,29 @@ fn is_loopback_url(url: &str) -> bool {
         host_port.split(':').next().unwrap_or("")
     };
     matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1")
+}
+
+fn validate_custom_base_url(provider: &str, raw: Option<String>) -> Result<Option<String>, String> {
+    let cleaned = raw
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty());
+    let Some(url) = cleaned else {
+        return Ok(None);
+    };
+    let default_url = default_base_url_for(provider).trim_end_matches('/');
+    if !allow_custom_base_url_for(provider) {
+        if url == default_url {
+            return Ok(None);
+        }
+        return Err(format!("O provedor '{provider}' não permite alterar a Base URL."));
+    }
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Base URL inválida. Use https:// (ou http:// apenas para servidor local).".into());
+    }
+    if url.starts_with("http://") && !is_loopback_url(&url) {
+        return Err("Use https:// para servidores que não sejam locais.".into());
+    }
+    Ok(Some(url))
 }
 
 fn effective_base_url<'a>(provider: &str, base_url: Option<&'a str>) -> &'a str {
@@ -274,6 +301,88 @@ fn save_llm_config(data_dir: &Path, cfg: &LlmConfigFile) -> Result<(), String> {
     fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
     fs::write(llm_config_path(data_dir), json).map_err(|e| e.to_string())
+}
+
+fn remove_llm_config(data_dir: &Path) -> Result<(), String> {
+    let path = llm_config_path(data_dir);
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Aplica `llm_config.json` antes de gravar no cofre e desfaz o JSON se a gravação no cofre falhar.
+fn apply_llm_config(
+    data_dir: &Path,
+    store: &dyn SecretStore,
+    provider: &str,
+    model: Option<String>,
+    base_url: Option<String>,
+    key: Option<String>,
+    use_saved_key: bool,
+) -> Result<(), String> {
+    let provider = normalize_provider(provider)?;
+    let trimmed_key = key.unwrap_or_default().trim().to_string();
+    let trimmed_model = model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let trimmed_url = validate_custom_base_url(&provider, base_url)?;
+    let is_local = provider != "gemini" && is_loopback_url(effective_base_url(&provider, trimmed_url.as_deref()));
+
+    if trimmed_key.is_empty() {
+        if use_saved_key {
+            let saved = read_provider_key(store, &provider)?;
+            if saved.is_none() && !is_local {
+                return Err("Nenhuma chave salva para este provedor. Informe a chave de API.".into());
+            }
+        } else if !is_local {
+            return Err("Informe a chave de API.".into());
+        }
+    }
+
+    let path = llm_config_path(data_dir);
+    let previous = fs::read(&path).ok();
+    let cfg = LlmConfigFile {
+        provider: provider.clone(),
+        model: trimmed_model,
+        base_url: trimmed_url,
+    };
+    save_llm_config(data_dir, &cfg)?;
+
+    if !trimmed_key.is_empty() {
+        if let Err(err) = save_provider_key(store, &provider, &trimmed_key) {
+            // Reverte llm_config.json para manter cofre e arquivo sincronizados em caso de falha.
+            match previous {
+                Some(bytes) => {
+                    let _ = fs::write(&path, bytes);
+                }
+                None => {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
+/// Remove a chave do provedor e limpa `llm_config.json` se ele era o provedor ativo.
+/// Retorna `true` quando o provedor removido era o ativo e o núcleo precisa reiniciar.
+fn clear_provider_key_and_config(
+    data_dir: &Path,
+    store: &dyn SecretStore,
+    provider: Option<String>,
+) -> Result<bool, String> {
+    let (active_cfg, _) = load_llm_config(data_dir);
+    let target = match provider {
+        Some(p) if !p.trim().is_empty() => normalize_provider(&p)?,
+        _ => active_cfg.provider.clone(),
+    };
+    delete_provider_key(store, &target)?;
+    if target == active_cfg.provider {
+        remove_llm_config(data_dir)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 
 fn read_provider_key(store: &dyn SecretStore, provider: &str) -> Result<Option<String>, String> {
@@ -734,9 +843,10 @@ async fn test_llm_config(
     let provider = normalize_provider(&provider).map_err(|e| CoreError::new(400, e))?;
     let trimmed_key = key.unwrap_or_default().trim().to_string();
     let trimmed_model = model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let trimmed_url = base_url
-        .map(|s| s.trim().trim_end_matches('/').to_string())
-        .filter(|s| !s.is_empty());
+    let trimmed_url = match validate_custom_base_url(&provider, base_url) {
+        Ok(url) => url,
+        Err(reason) => return Ok(json!({ "ok": false, "reason": reason })),
+    };
     let is_local = provider != "gemini" && is_loopback_url(effective_base_url(&provider, trimmed_url.as_deref()));
 
     let effective_key = if !trimmed_key.is_empty() {
@@ -790,33 +900,17 @@ async fn set_llm_config(
     key: Option<String>,
     use_saved_key: Option<bool>,
 ) -> Result<(), String> {
-    let provider = normalize_provider(&provider)?;
-    let trimmed_key = key.unwrap_or_default().trim().to_string();
-    let trimmed_model = model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let trimmed_url = base_url
-        .map(|s| s.trim().trim_end_matches('/').to_string())
-        .filter(|s| !s.is_empty());
-    let is_local = provider != "gemini" && is_loopback_url(effective_base_url(&provider, trimmed_url.as_deref()));
-
     let core = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || {
-        if !trimmed_key.is_empty() {
-            save_provider_key(&OsKeyringStore, &provider, &trimmed_key)?;
-        } else if use_saved_key.unwrap_or(false) {
-            let saved = read_provider_key(&OsKeyringStore, &provider)?;
-            if saved.is_none() && !is_local {
-                return Err("Nenhuma chave salva para este provedor. Informe a chave de API.".into());
-            }
-        } else if !is_local {
-            return Err("Informe a chave de API.".into());
-        }
-
-        let cfg = LlmConfigFile {
-            provider,
-            model: trimmed_model,
-            base_url: trimmed_url,
-        };
-        save_llm_config(&core.data_dir, &cfg)?;
+        apply_llm_config(
+            &core.data_dir,
+            &OsKeyringStore,
+            &provider,
+            model,
+            base_url,
+            key,
+            use_saved_key.unwrap_or(false),
+        )?;
         core.restart()
     })
     .await
@@ -834,17 +928,12 @@ async fn set_llm_key(state: CoreState<'_>, key: String) -> Result<(), String> {
 }
 
 /// Remove apenas a chave do provedor selecionado (sem afetar chaves de outros provedores).
+/// Quando o provedor removido era o ativo, limpa `llm_config.json` e reinicia o núcleo.
 #[tauri::command]
 async fn clear_llm_key(state: CoreState<'_>, provider: Option<String>) -> Result<(), String> {
     let core = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || {
-        let (active_cfg, _) = load_llm_config(&core.data_dir);
-        let target = match provider {
-            Some(p) if !p.trim().is_empty() => normalize_provider(&p)?,
-            _ => active_cfg.provider.clone(),
-        };
-        delete_provider_key(&OsKeyringStore, &target)?;
-        if target == active_cfg.provider {
+        if clear_provider_key_and_config(&core.data_dir, &OsKeyringStore, provider)? {
             core.restart()
         } else {
             Ok(())
@@ -1207,6 +1296,47 @@ mod testes_migracao {
         assert_eq!(status.provider, "ollama");
         assert!(status.configured);
         assert_eq!(status.has_key_by_provider.get("ollama"), Some(&false));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn base_url_exige_https_remoto_e_respeita_allow_custom_base_url() {
+        assert!(validate_custom_base_url("openai", Some("https://evil.example/v1".into())).is_err());
+        assert!(validate_custom_base_url("zai", Some("http://api.z.ai/api/paas/v4".into())).is_err());
+        assert_eq!(
+            validate_custom_base_url("zai", Some("https://open.bigmodel.cn/api/paas/v4/".into())).unwrap(),
+            Some("https://open.bigmodel.cn/api/paas/v4".into())
+        );
+        assert_eq!(
+            validate_custom_base_url("ollama", Some("http://localhost:11434/v1".into())).unwrap(),
+            Some("http://localhost:11434/v1".into())
+        );
+    }
+
+    #[test]
+    fn clear_provedor_ativo_remove_llm_config_json_e_falha_no_cofre_reverte_json() {
+        let dir = base("llm-clear-rollback");
+        let store = MemStore::new();
+        apply_llm_config(&dir, &store, "mistral", Some("ministral-8b-latest".into()), None, Some("mis-k".into()), false)
+            .unwrap();
+        assert!(llm_config_path(&dir).exists());
+
+        // Remover provedor ativo limpa llm_config.json e sinaliza reinício.
+        assert!(clear_provider_key_and_config(&dir, &store, Some("mistral".into())).unwrap());
+        assert!(!llm_config_path(&dir).exists());
+        assert_eq!(read_provider_key(&store, "mistral").unwrap(), None);
+
+        // Falha ao gravar no cofre reverte llm_config.json para o estado anterior.
+        struct FailingStore;
+        impl SecretStore for FailingStore {
+            fn get(&self, _user: &str) -> Result<Option<String>, String> { Ok(None) }
+            fn set(&self, _user: &str, _value: &str) -> Result<(), String> { Err("cofre bloqueado".into()) }
+            fn delete(&self, _user: &str) -> Result<(), String> { Ok(()) }
+        }
+        let err = apply_llm_config(&dir, &FailingStore, "openai", Some("gpt-4o-mini".into()), None, Some("sk-1".into()), false);
+        assert!(err.is_err());
+        assert!(!llm_config_path(&dir).exists());
 
         let _ = fs::remove_dir_all(&dir);
     }
