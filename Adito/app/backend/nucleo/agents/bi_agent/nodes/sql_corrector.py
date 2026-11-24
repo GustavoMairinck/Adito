@@ -1,6 +1,7 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agents.config import bind_structured_output
 from core.rich_logging import log_node_end, log_node_start, log_panel
 
 from ..config import SQLResponse
@@ -34,7 +35,7 @@ def sql_corrector(
         f"with lowercase columns, no schema prefix, and {dialect.upper()} syntax. "
         f"Keep the meaning of the question. Maintain the same structured output format."
     )
-    structured_llm = llm_model.with_structured_output(SQLResponse)
+    structured_llm = bind_structured_output(llm_model, SQLResponse)
     response = structured_llm.invoke([SystemMessage(content=system_content), HumanMessage(content=prompt)])
     corrected_sql = response.sql.strip()
     log_panel("bi", f"SQL corrigido tentativa {attempt}", corrected_sql)

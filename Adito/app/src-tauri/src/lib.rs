@@ -18,7 +18,7 @@
 pub mod dados;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
@@ -35,7 +35,21 @@ use tokio::sync::oneshot;
 const START_TIMEOUT: Duration = Duration::from_secs(90);
 const STOP_GRACE: Duration = Duration::from_secs(3);
 const KEYRING_SERVICE: &str = "br.edu.ifes.leds.adito";
+/// Entrada legada da v0.1.0 para a chave do Gemini; mantida para retrocompatibilidade.
 const KEYRING_USER: &str = "gemini-api-key";
+const LLM_CONFIG_FILENAME: &str = "llm_config.json";
+const KNOWN_PROVIDERS: &[&str] = &[
+    "gemini",
+    "openai",
+    "openrouter",
+    "mistral",
+    "zai",
+    "together",
+    "fireworks",
+    "ollama",
+];
+/// IDs altos (acima de 2^53 do JS) para chamadas internas Rust → núcleo, sem colidir com IDs do front.
+static INTERNAL_RPC_ID: AtomicU64 = AtomicU64::new(1u64 << 62);
 /// Chave institucional que abre o `dados.db.enc` (ADR-0007).
 const KEYRING_DADOS: &str = "dados-chave";
 /// Identifiers antigos (o mais recente primeiro): Muninn e, antes dele, Oraculo-ESX.
@@ -105,7 +119,7 @@ struct Core {
     status_changed: Condvar,
 }
 
-// ── Cofre do SO ──────────────────────────────────────────────────────────────
+// ── Cofre do SO e configuração multi-provedor ────────────────────────────────
 
 #[derive(Serialize)]
 struct KeyStatus {
@@ -115,16 +129,379 @@ struct KeyStatus {
     error: Option<String>,
 }
 
-fn key_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|e| e.to_string())
+/// Metadados não-sensíveis salvos em `data_dir/llm_config.json`. Nunca armazena chave de API.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct LlmConfigFile {
+    provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
 }
 
-fn read_key() -> Result<Option<String>, String> {
-    match key_entry()?.get_password() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
+impl Default for LlmConfigFile {
+    fn default() -> Self {
+        Self {
+            provider: "gemini".to_string(),
+            model: None,
+            base_url: None,
+        }
     }
+}
+
+#[derive(Serialize)]
+struct LlmConfigStatus {
+    provider: String,
+    model: Option<String>,
+    base_url: Option<String>,
+    configured: bool,
+    store_available: bool,
+    has_key_by_provider: HashMap<String, bool>,
+    error: Option<String>,
+}
+
+trait SecretStore {
+    fn get(&self, user: &str) -> Result<Option<String>, String>;
+    fn set(&self, user: &str, value: &str) -> Result<(), String>;
+    fn delete(&self, user: &str) -> Result<(), String>;
+}
+
+struct OsKeyringStore;
+
+impl SecretStore for OsKeyringStore {
+    fn get(&self, user: &str) -> Result<Option<String>, String> {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, user).map_err(|e| e.to_string())?;
+        match entry.get_password() {
+            Ok(key) => Ok(Some(key)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn set(&self, user: &str, value: &str) -> Result<(), String> {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, user).map_err(|e| e.to_string())?;
+        entry.set_password(value).map_err(|e| e.to_string())
+    }
+
+    fn delete(&self, user: &str) -> Result<(), String> {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, user).map_err(|e| e.to_string())?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
+fn normalize_provider(raw: &str) -> Result<String, String> {
+    let clean = raw.trim().to_ascii_lowercase();
+    if KNOWN_PROVIDERS.contains(&clean.as_str()) {
+        Ok(clean)
+    } else {
+        Err(format!("Provedor desconhecido: '{raw}'."))
+    }
+}
+
+fn provider_key_user(provider: &str) -> String {
+    format!("llm-key-{provider}")
+}
+
+fn default_base_url_for(provider: &str) -> &'static str {
+    match provider {
+        "gemini" => "https://generativelanguage.googleapis.com/v1beta",
+        "openai" => "https://api.openai.com/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        "mistral" => "https://api.mistral.ai/v1",
+        "zai" => "https://api.z.ai/api/paas/v4",
+        "together" => "https://api.together.xyz/v1",
+        "fireworks" => "https://api.fireworks.ai/inference/v1",
+        "ollama" => "http://localhost:11434/v1",
+        _ => "",
+    }
+}
+
+fn allow_custom_base_url_for(provider: &str) -> bool {
+    matches!(provider, "zai" | "ollama")
+}
+
+/// Aceita chave vazia apenas quando o endpoint aponta explicitamente para loopback (http/https).
+fn is_loopback_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    let rest = if let Some(r) = trimmed.strip_prefix("http://") {
+        r
+    } else if let Some(r) = trimmed.strip_prefix("https://") {
+        r
+    } else {
+        return false;
+    };
+    let authority = rest.split(&['/', '?', '#'][..]).next().unwrap_or("");
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host = if let Some(bracketed) = host_port.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or("")
+    } else {
+        host_port.split(':').next().unwrap_or("")
+    };
+    matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1")
+}
+
+fn validate_custom_base_url(provider: &str, raw: Option<String>) -> Result<Option<String>, String> {
+    let cleaned = raw
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty());
+    let Some(url) = cleaned else {
+        return Ok(None);
+    };
+    let default_url = default_base_url_for(provider).trim_end_matches('/');
+    if !allow_custom_base_url_for(provider) {
+        if url == default_url {
+            return Ok(None);
+        }
+        return Err(format!("O provedor '{provider}' não permite alterar a Base URL."));
+    }
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Base URL inválida. Use https:// (ou http:// apenas para servidor local).".into());
+    }
+    if url.starts_with("http://") && !is_loopback_url(&url) {
+        return Err("Use https:// para servidores que não sejam locais.".into());
+    }
+    Ok(Some(url))
+}
+
+fn effective_base_url<'a>(provider: &str, base_url: Option<&'a str>) -> &'a str {
+    match base_url.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(url) => url,
+        None => default_base_url_for(provider),
+    }
+}
+
+fn llm_config_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(LLM_CONFIG_FILENAME)
+}
+
+fn load_llm_config(data_dir: &Path) -> (LlmConfigFile, bool) {
+    let path = llm_config_path(data_dir);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return (LlmConfigFile::default(), false);
+    };
+    match serde_json::from_str::<LlmConfigFile>(&raw) {
+        Ok(mut cfg) => {
+            if let Ok(valid) = normalize_provider(&cfg.provider) {
+                cfg.provider = valid;
+            } else {
+                cfg.provider = "gemini".to_string();
+            }
+            cfg.model = cfg.model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+            cfg.base_url = cfg.base_url.map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty());
+            (cfg, true)
+        }
+        Err(_) => (LlmConfigFile::default(), false),
+    }
+}
+
+fn save_llm_config(data_dir: &Path, cfg: &LlmConfigFile) -> Result<(), String> {
+    fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    fs::write(llm_config_path(data_dir), json).map_err(|e| e.to_string())
+}
+
+fn remove_llm_config(data_dir: &Path) -> Result<(), String> {
+    let path = llm_config_path(data_dir);
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Aplica `llm_config.json` antes de gravar no cofre e desfaz o JSON se a gravação no cofre falhar.
+fn apply_llm_config(
+    data_dir: &Path,
+    store: &dyn SecretStore,
+    provider: &str,
+    model: Option<String>,
+    base_url: Option<String>,
+    key: Option<String>,
+    use_saved_key: bool,
+) -> Result<(), String> {
+    let provider = normalize_provider(provider)?;
+    let trimmed_key = key.unwrap_or_default().trim().to_string();
+    let trimmed_model = model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let trimmed_url = validate_custom_base_url(&provider, base_url)?;
+    let is_local = provider != "gemini" && is_loopback_url(effective_base_url(&provider, trimmed_url.as_deref()));
+
+    if trimmed_key.is_empty() {
+        if use_saved_key {
+            let saved = read_provider_key(store, &provider)?;
+            if saved.is_none() && !is_local {
+                return Err("Nenhuma chave salva para este provedor. Informe a chave de API.".into());
+            }
+        } else if !is_local {
+            return Err("Informe a chave de API.".into());
+        }
+    }
+
+    let path = llm_config_path(data_dir);
+    let previous = fs::read(&path).ok();
+    let cfg = LlmConfigFile {
+        provider: provider.clone(),
+        model: trimmed_model,
+        base_url: trimmed_url,
+    };
+    save_llm_config(data_dir, &cfg)?;
+
+    if !trimmed_key.is_empty() {
+        if let Err(err) = save_provider_key(store, &provider, &trimmed_key) {
+            // Reverte llm_config.json para manter cofre e arquivo sincronizados em caso de falha.
+            match previous {
+                Some(bytes) => {
+                    let _ = fs::write(&path, bytes);
+                }
+                None => {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
+/// Remove a chave do provedor e limpa `llm_config.json` se ele era o provedor ativo.
+/// Retorna `true` quando o provedor removido era o ativo e o núcleo precisa reiniciar.
+fn clear_provider_key_and_config(
+    data_dir: &Path,
+    store: &dyn SecretStore,
+    provider: Option<String>,
+) -> Result<bool, String> {
+    let (active_cfg, _) = load_llm_config(data_dir);
+    let target = match provider {
+        Some(p) if !p.trim().is_empty() => normalize_provider(&p)?,
+        _ => active_cfg.provider.clone(),
+    };
+    delete_provider_key(store, &target)?;
+    if target == active_cfg.provider {
+        remove_llm_config(data_dir)?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn read_provider_key(store: &dyn SecretStore, provider: &str) -> Result<Option<String>, String> {
+    let primary = provider_key_user(provider);
+    if let Some(key) = store.get(&primary)? {
+        if !key.trim().is_empty() {
+            return Ok(Some(key));
+        }
+    }
+    // Retrocompatibilidade v0.1.0: instalações anteriores guardavam a chave Gemini em `gemini-api-key`.
+    if provider == "gemini" {
+        if let Some(legacy) = store.get(KEYRING_USER)? {
+            if !legacy.trim().is_empty() {
+                return Ok(Some(legacy));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn save_provider_key(store: &dyn SecretStore, provider: &str, key: &str) -> Result<(), String> {
+    store.set(&provider_key_user(provider), key)
+}
+
+fn delete_provider_key(store: &dyn SecretStore, provider: &str) -> Result<(), String> {
+    store.delete(&provider_key_user(provider))?;
+    if provider == "gemini" {
+        store.delete(KEYRING_USER)?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq)]
+struct ResolvedLlmEnv {
+    set: Vec<(String, String)>,
+    remove: Vec<String>,
+}
+
+fn resolve_llm_env(data_dir: &Path, store: &dyn SecretStore, debug_mode: bool) -> ResolvedLlmEnv {
+    let (cfg, has_config_file) = load_llm_config(data_dir);
+    let key = read_provider_key(store, &cfg.provider).ok().flatten();
+
+    // Em desenvolvimento sem llm_config.json nem chave no cofre, preserva variáveis de ambiente manuais.
+    if debug_mode && !has_config_file && key.is_none() {
+        return ResolvedLlmEnv { set: vec![], remove: vec![] };
+    }
+
+    let mut set = vec![("ADITO_LLM_PROVIDER".to_string(), cfg.provider.clone())];
+    let mut remove = vec![];
+
+    match cfg.model {
+        Some(model) => set.push(("ADITO_LLM_MODEL".to_string(), model)),
+        None => remove.push("ADITO_LLM_MODEL".to_string()),
+    }
+    match cfg.base_url {
+        Some(url) => set.push(("ADITO_LLM_BASE_URL".to_string(), url)),
+        None => remove.push("ADITO_LLM_BASE_URL".to_string()),
+    }
+    match key {
+        Some(secret) => {
+            set.push(("ADITO_LLM_API_KEY".to_string(), secret.clone()));
+            if cfg.provider == "gemini" {
+                set.push(("GEMINI_API_KEY".to_string(), secret));
+            } else {
+                remove.push("GEMINI_API_KEY".to_string());
+                remove.push("GOOGLE_API_KEY".to_string());
+            }
+        }
+        None => {
+            remove.push("ADITO_LLM_API_KEY".to_string());
+            if cfg.provider != "gemini" || !debug_mode {
+                remove.push("GEMINI_API_KEY".to_string());
+                remove.push("GOOGLE_API_KEY".to_string());
+            }
+        }
+    }
+
+    ResolvedLlmEnv { set, remove }
+}
+
+fn build_llm_config_status(data_dir: &Path, store: &dyn SecretStore) -> LlmConfigStatus {
+    let (cfg, _) = load_llm_config(data_dir);
+    let mut has_key_by_provider = HashMap::new();
+    let mut store_available = true;
+    let mut error = None;
+
+    for &prov in KNOWN_PROVIDERS {
+        match read_provider_key(store, prov) {
+            Ok(found) => {
+                has_key_by_provider.insert(prov.to_string(), found.is_some());
+            }
+            Err(err) => {
+                store_available = false;
+                if error.is_none() {
+                    error = Some(err);
+                }
+                has_key_by_provider.insert(prov.to_string(), false);
+            }
+        }
+    }
+
+    let active_has_key = has_key_by_provider.get(&cfg.provider).copied().unwrap_or(false);
+    let active_is_local = cfg.provider != "gemini"
+        && is_loopback_url(effective_base_url(&cfg.provider, cfg.base_url.as_deref()));
+    let configured = active_has_key || active_is_local;
+
+    LlmConfigStatus {
+        provider: cfg.provider,
+        model: cfg.model,
+        base_url: cfg.base_url,
+        configured,
+        store_available,
+        has_key_by_provider,
+        error,
+    }
+}
+
+fn key_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|e| e.to_string())
 }
 
 /// Copia a chave do cofre do SO do serviço antigo para o do Adito (uma vez) e remove a antiga.
@@ -246,16 +623,13 @@ impl Core {
             const CREATE_NO_WINDOW: u32 = 0x0800_0000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
-        // Chave do cofre; sem ela o núcleo sobe e o chat avisa que falta configurar.
-        // Em desenvolvimento, uma GEMINI_API_KEY no ambiente vale se o cofre estiver vazio.
-        match read_key() {
-            Ok(Some(key)) => {
-                cmd.env("GEMINI_API_KEY", key);
-            }
-            _ if cfg!(debug_assertions) => {}
-            _ => {
-                cmd.env_remove("GEMINI_API_KEY");
-            }
+        // Configuração e segredo do provedor ativo resolvidos de llm_config.json + cofre do SO.
+        let resolved = resolve_llm_env(&self.data_dir, &OsKeyringStore, cfg!(debug_assertions));
+        for key in resolved.remove {
+            cmd.env_remove(key);
+        }
+        for (key, value) in resolved.set {
+            cmd.env(key, value);
         }
         let mut child = cmd.spawn().map_err(|e| {
             let msg = format!("Não foi possível iniciar o núcleo: {e}");
@@ -441,37 +815,129 @@ fn core_cancel(state: CoreState<'_>, id: u64) {
 }
 
 #[tauri::command]
-fn llm_key_status() -> KeyStatus {
-    match read_key() {
-        Ok(found) => KeyStatus { configured: found.is_some(), store_available: true, error: None },
-        Err(e) => KeyStatus { configured: false, store_available: false, error: Some(e) },
+fn llm_key_status(state: CoreState<'_>) -> KeyStatus {
+    let status = build_llm_config_status(&state.data_dir, &OsKeyringStore);
+    KeyStatus {
+        configured: status.configured,
+        store_available: status.store_available,
+        error: status.error,
     }
 }
 
-/// Guarda a chave no cofre e reinicia o núcleo para ele passar a usá-la.
-/// O front testa a chave antes (`config.test_llm_key`) e depois espera `core_ready`.
-/// Assíncronos para o reinício (até alguns segundos) não travar a janela.
 #[tauri::command]
-async fn set_llm_key(state: CoreState<'_>, key: String) -> Result<(), String> {
-    let key = key.trim().to_string();
-    if key.is_empty() {
-        return Err("Chave vazia.".into());
+fn llm_config_status(state: CoreState<'_>) -> LlmConfigStatus {
+    build_llm_config_status(&state.data_dir, &OsKeyringStore)
+}
+
+/// Valida credencial/modelo/URL direto no núcleo Python; quando `use_saved_key=true`,
+/// o Rust busca o segredo no cofre e o envia ao núcleo sem nunca expor a chave ao frontend (A03).
+#[tauri::command]
+async fn test_llm_config(
+    state: CoreState<'_>,
+    provider: String,
+    model: Option<String>,
+    base_url: Option<String>,
+    key: Option<String>,
+    use_saved_key: Option<bool>,
+) -> Result<Value, CoreError> {
+    let provider = normalize_provider(&provider).map_err(|e| CoreError::new(400, e))?;
+    let trimmed_key = key.unwrap_or_default().trim().to_string();
+    let trimmed_model = model.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let trimmed_url = match validate_custom_base_url(&provider, base_url) {
+        Ok(url) => url,
+        Err(reason) => return Ok(json!({ "ok": false, "reason": reason })),
+    };
+    let is_local = provider != "gemini" && is_loopback_url(effective_base_url(&provider, trimmed_url.as_deref()));
+
+    let effective_key = if !trimmed_key.is_empty() {
+        trimmed_key
+    } else if use_saved_key.unwrap_or(false) {
+        let prov = provider.clone();
+        let saved = tauri::async_runtime::spawn_blocking(move || read_provider_key(&OsKeyringStore, &prov))
+            .await
+            .map_err(|e| CoreError::new(500, e.to_string()))?
+            .map_err(|e| CoreError::new(500, e))?;
+        match saved {
+            Some(secret) => secret,
+            None if is_local => String::new(),
+            None => {
+                return Ok(json!({
+                    "ok": false,
+                    "reason": "Nenhuma chave salva para este provedor. Informe a chave de API.",
+                }));
+            }
+        }
+    } else {
+        String::new()
+    };
+
+    let mut params = json!({
+        "provider": provider,
+        "key": effective_key,
+    });
+    if let Some(m) = trimmed_model {
+        params["model"] = json!(m);
     }
+    if let Some(u) = trimmed_url {
+        params["base_url"] = json!(u);
+    }
+
+    let id = INTERNAL_RPC_ID.fetch_add(1, Ordering::Relaxed);
+    let (tx, rx) = oneshot::channel();
+    Arc::clone(&state)
+        .request(id, "config.test_llm_key".to_string(), params, Pending::Call(tx), rx)
+        .await
+}
+
+/// Persiste o provedor/modelo/URL em `llm_config.json`, guarda a chave isolada no cofre (quando informada)
+/// e reinicia o núcleo para aplicar a configuração.
+#[tauri::command]
+async fn set_llm_config(
+    state: CoreState<'_>,
+    provider: String,
+    model: Option<String>,
+    base_url: Option<String>,
+    key: Option<String>,
+    use_saved_key: Option<bool>,
+) -> Result<(), String> {
     let core = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || {
-        key_entry()?.set_password(&key).map_err(|e| e.to_string())?;
+        apply_llm_config(
+            &core.data_dir,
+            &OsKeyringStore,
+            &provider,
+            model,
+            base_url,
+            key,
+            use_saved_key.unwrap_or(false),
+        )?;
         core.restart()
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
+/// Compatibilidade com chamadas legadas (`set_llm_key(key)` → salva chave do Gemini).
 #[tauri::command]
-async fn clear_llm_key(state: CoreState<'_>) -> Result<(), String> {
+async fn set_llm_key(state: CoreState<'_>, key: String) -> Result<(), String> {
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Chave vazia.".into());
+    }
+    set_llm_config(state, "gemini".to_string(), None, None, Some(key), Some(false)).await
+}
+
+/// Remove apenas a chave do provedor selecionado (sem afetar chaves de outros provedores).
+/// Quando o provedor removido era o ativo, limpa `llm_config.json` e reinicia o núcleo.
+#[tauri::command]
+async fn clear_llm_key(state: CoreState<'_>, provider: Option<String>) -> Result<(), String> {
     let core = Arc::clone(&state);
-    tauri::async_runtime::spawn_blocking(move || match key_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => core.restart(),
-        Err(e) => Err(e.to_string()),
+    tauri::async_runtime::spawn_blocking(move || {
+        if clear_provider_key_and_config(&core.data_dir, &OsKeyringStore, provider)? {
+            core.restart()
+        } else {
+            Ok(())
+        }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -657,6 +1123,9 @@ pub fn run() {
             core_stream,
             core_cancel,
             llm_key_status,
+            llm_config_status,
+            test_llm_config,
+            set_llm_config,
             set_llm_key,
             clear_llm_key,
             dados_status,
@@ -725,5 +1194,150 @@ mod testes_migracao {
         assert!(!migrate_legacy_dir(&novo).unwrap());
         assert!(b.join(LEGACY_IDENTIFIERS[0]).exists());
         let _ = fs::remove_dir_all(&b);
+    }
+
+    struct MemStore(Mutex<HashMap<String, String>>);
+
+    impl MemStore {
+        fn new() -> Self {
+            Self(Mutex::new(HashMap::new()))
+        }
+    }
+
+    impl SecretStore for MemStore {
+        fn get(&self, user: &str) -> Result<Option<String>, String> {
+            Ok(self.0.lock().unwrap().get(user).cloned())
+        }
+        fn set(&self, user: &str, value: &str) -> Result<(), String> {
+            self.0.lock().unwrap().insert(user.to_string(), value.to_string());
+            Ok(())
+        }
+        fn delete(&self, user: &str) -> Result<(), String> {
+            self.0.lock().unwrap().remove(user);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn retrocompatibilidade_v010_ativa_gemini_a_partir_de_chave_legada() {
+        let dir = base("llm-legacy");
+        let store = MemStore::new();
+        store.set(KEYRING_USER, "AIza-legada").unwrap();
+
+        let status = build_llm_config_status(&dir, &store);
+        assert_eq!(status.provider, "gemini");
+        assert!(status.configured);
+        assert_eq!(status.has_key_by_provider.get("gemini"), Some(&true));
+        assert_eq!(status.has_key_by_provider.get("openai"), Some(&false));
+
+        let env = resolve_llm_env(&dir, &store, false);
+        assert!(env.set.contains(&("ADITO_LLM_PROVIDER".into(), "gemini".into())));
+        assert!(env.set.contains(&("ADITO_LLM_API_KEY".into(), "AIza-legada".into())));
+        assert!(env.set.contains(&("GEMINI_API_KEY".into(), "AIza-legada".into())));
+
+        // Remover Gemini limpa tanto llm-key-gemini quanto gemini-api-key legado
+        save_provider_key(&store, "gemini", "AIza-nova").unwrap();
+        save_provider_key(&store, "openai", "sk-openai").unwrap();
+        delete_provider_key(&store, "gemini").unwrap();
+        assert_eq!(read_provider_key(&store, "gemini").unwrap(), None);
+        assert_eq!(read_provider_key(&store, "openai").unwrap(), Some("sk-openai".into()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn llm_config_json_nao_grava_segredo_e_limpa_gemini_env_ao_trocar_provedor() {
+        let dir = base("llm-config-json");
+        let store = MemStore::new();
+        save_provider_key(&store, "gemini", "AIza-secret").unwrap();
+        save_provider_key(&store, "openai", "sk-secret").unwrap();
+
+        let cfg = LlmConfigFile {
+            provider: "openai".into(),
+            model: Some("gpt-4o-mini".into()),
+            base_url: None,
+        };
+        save_llm_config(&dir, &cfg).unwrap();
+        let raw = fs::read_to_string(llm_config_path(&dir)).unwrap();
+        assert!(!raw.contains("sk-secret"));
+        assert!(!raw.contains("AIza-secret"));
+
+        let env = resolve_llm_env(&dir, &store, true);
+        assert!(env.set.contains(&("ADITO_LLM_PROVIDER".into(), "openai".into())));
+        assert!(env.set.contains(&("ADITO_LLM_MODEL".into(), "gpt-4o-mini".into())));
+        assert!(env.set.contains(&("ADITO_LLM_API_KEY".into(), "sk-secret".into())));
+        assert!(env.remove.contains(&"GEMINI_API_KEY".to_string()));
+        assert!(env.remove.contains(&"GOOGLE_API_KEY".to_string()));
+
+        // Chave Gemini continua preservada no cofre ao trocar para OpenAI
+        assert_eq!(read_provider_key(&store, "gemini").unwrap(), Some("AIza-secret".into()));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn loopback_permite_ollama_sem_chave_e_rejeita_hosts_remotos() {
+        assert!(is_loopback_url("http://localhost:11434/v1"));
+        assert!(is_loopback_url("http://127.0.0.1:8080/v1"));
+        assert!(is_loopback_url("http://[::1]:11434/v1"));
+        assert!(!is_loopback_url("https://localhost.evil.com/v1"));
+        assert!(!is_loopback_url("ftp://localhost:11434/v1"));
+        assert!(!is_loopback_url("https://api.openai.com/v1"));
+
+        let dir = base("llm-ollama");
+        let store = MemStore::new();
+        save_llm_config(&dir, &LlmConfigFile {
+            provider: "ollama".into(),
+            model: Some("qwen2.5:7b".into()),
+            base_url: None,
+        }).unwrap();
+
+        let status = build_llm_config_status(&dir, &store);
+        assert_eq!(status.provider, "ollama");
+        assert!(status.configured);
+        assert_eq!(status.has_key_by_provider.get("ollama"), Some(&false));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn base_url_exige_https_remoto_e_respeita_allow_custom_base_url() {
+        assert!(validate_custom_base_url("openai", Some("https://evil.example/v1".into())).is_err());
+        assert!(validate_custom_base_url("zai", Some("http://api.z.ai/api/paas/v4".into())).is_err());
+        assert_eq!(
+            validate_custom_base_url("zai", Some("https://open.bigmodel.cn/api/paas/v4/".into())).unwrap(),
+            Some("https://open.bigmodel.cn/api/paas/v4".into())
+        );
+        assert_eq!(
+            validate_custom_base_url("ollama", Some("http://localhost:11434/v1".into())).unwrap(),
+            Some("http://localhost:11434/v1".into())
+        );
+    }
+
+    #[test]
+    fn clear_provedor_ativo_remove_llm_config_json_e_falha_no_cofre_reverte_json() {
+        let dir = base("llm-clear-rollback");
+        let store = MemStore::new();
+        apply_llm_config(&dir, &store, "mistral", Some("ministral-8b-latest".into()), None, Some("mis-k".into()), false)
+            .unwrap();
+        assert!(llm_config_path(&dir).exists());
+
+        // Remover provedor ativo limpa llm_config.json e sinaliza reinício.
+        assert!(clear_provider_key_and_config(&dir, &store, Some("mistral".into())).unwrap());
+        assert!(!llm_config_path(&dir).exists());
+        assert_eq!(read_provider_key(&store, "mistral").unwrap(), None);
+
+        // Falha ao gravar no cofre reverte llm_config.json para o estado anterior.
+        struct FailingStore;
+        impl SecretStore for FailingStore {
+            fn get(&self, _user: &str) -> Result<Option<String>, String> { Ok(None) }
+            fn set(&self, _user: &str, _value: &str) -> Result<(), String> { Err("cofre bloqueado".into()) }
+            fn delete(&self, _user: &str) -> Result<(), String> { Ok(()) }
+        }
+        let err = apply_llm_config(&dir, &FailingStore, "openai", Some("gpt-4o-mini".into()), None, Some("sk-1".into()), false);
+        assert!(err.is_err());
+        assert!(!llm_config_path(&dir).exists());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

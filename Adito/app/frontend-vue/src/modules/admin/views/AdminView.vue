@@ -25,17 +25,41 @@ import {
   Search,
   Calendar,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  Info
 } from 'lucide-vue-next'
 
 import { call } from '@/common/api/core'
+import { useAuth } from '@/modules/auth/composables/useAuth'
 import TrainingItemCard from '@/modules/admin/components/TrainingItemCard.vue'
 import AddTrainingModal from '@/modules/admin/components/AddTrainingModal.vue'
 import type { TrainingSubmit } from '@/modules/admin/components/AddTrainingModal.vue'
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import type { TrainingItem } from '@/modules/admin/components/TrainingItemCard.vue'
 // ─── Active Tab ───
+const { user } = useAuth()
 const activeTab = ref<'governance' | 'etl' | 'audit' | 'system'>('governance')
+
+interface EmbeddingsDiagnostics {
+  supports_embeddings: boolean
+  provider: string
+  provider_label: string
+  embedding_model: string | null
+  expected_dim: number | null
+  stored_dims: number[]
+  needs_retrain: boolean
+  incompatible_vectors: number
+}
+
+const embeddingsStatus = ref<EmbeddingsDiagnostics | null>(null)
+const activeLlmLabel = computed(
+  () => embeddingsStatus.value?.provider_label || user.value?.llm_provider_label || 'Gemini'
+)
+const activeLlmModel = computed(() => user.value?.llm_model || '')
+const supportsEmbeddings = computed(
+  () => embeddingsStatus.value?.supports_embeddings ?? (user.value?.llm_supports_embeddings !== false)
+)
 
 const tabs = [
   { key: 'governance' as const, label: 'Base de conhecimento', icon: Brain },
@@ -198,7 +222,7 @@ const wipeMessage = computed(() => {
   const gerados = itens.filter(i => i.origem === 'contexto').length
   const manuais = itens.filter(i => i.origem === 'manual').length
   const onde = alvo ? `do contexto "${alvo.nome}"` : 'de todos os contextos ativos'
-  return `Os ${gerados} itens gerados dos arquivos ${onde} serão apagados e refeitos a partir do esquema das views, do rules.md e do examples.json (usa a chave do Gemini). `
+  return `Os ${gerados} itens gerados dos arquivos ${onde} serão apagados e refeitos a partir do esquema das views, do rules.md e do examples.json (usa o provedor ativo: ${activeLlmLabel.value}). `
     + (manuais
       ? `Os ${manuais} itens adicionados à mão (Novo Treinamento ou Auditoria SQL) serão mantidos. `
       : '')
@@ -228,7 +252,7 @@ async function handleWipeRetrain() {
     wipeResult.value = { ok: false, text: error?.data?.detail || error?.message || 'O reindex falhou.' }
   } finally {
     wipingInProgress.value = false
-    await Promise.all([fetchTrainings(), fetchContextos()])
+    await Promise.all([fetchTrainings(), fetchContextos(), fetchSystemStatus()])
   }
 }
 
@@ -381,7 +405,9 @@ async function handleSync() {
         ? (ctx.erros || []).join(' ')
         : ctx.indexado
           ? `${ctx.rag_itens} itens de RAG, ${ctx.valores} valores`
-          : 'válido; sem indexação (falta a chave do Gemini)',
+          : supportsEmbeddings.value
+            ? `válido; sem indexação (configure ${activeLlmLabel.value} em Configurações)`
+            : `válido; modo fallback textual (${activeLlmLabel.value} não gera embeddings)`,
       state: ctx.erros?.length || !ctx.ativo ? 'failed' : ctx.indexado ? 'success' : 'pending',
       triggeredAt
     }))
@@ -393,8 +419,10 @@ async function handleSync() {
       id: Date.now(),
       timestamp: triggeredAt,
       message: data.chave_configurada
-        ? `${validos} de ${contextos.length} contexto(s) válidos; ${indexados} indexado(s).`
-        : `${validos} de ${contextos.length} contexto(s) válidos. Configure a chave do Gemini para indexar o RAG.`,
+        ? supportsEmbeddings.value
+          ? `${validos} de ${contextos.length} contexto(s) válidos; ${indexados} indexado(s).`
+          : `${validos} de ${contextos.length} contexto(s) válidos. ${activeLlmLabel.value} opera em modo fallback textual (sem embeddings).`
+        : `${validos} de ${contextos.length} contexto(s) válidos. Configure um provedor de IA em Configurações para indexar o RAG.`,
       status: falhou ? 'error' : 'success',
       totalRecords: contextos.length,
       changedRecords: validos,
@@ -444,6 +472,9 @@ async function fetchSystemStatus() {
         latency: s.latency_ms ? `${s.latency_ms}ms` : '-'
       }))
       systemStats.value = res.systemStats || systemStats.value
+      if (res.embeddings && typeof res.embeddings.supports_embeddings === 'boolean') {
+        embeddingsStatus.value = res.embeddings
+      }
     }
   } catch (error) {
     console.error('Erro ao buscar status do sistema:', error)
@@ -564,6 +595,7 @@ watch(activeTab, (val) => {
   if (val === 'governance') {
     fetchTrainings()
     fetchContextos()
+    fetchSystemStatus()
   }
 }, { immediate: true })
 
@@ -713,22 +745,58 @@ onBeforeUnmount(() => {
 
           <div class="flex flex-wrap items-center gap-3">
             <button
-              class="btn-primary flex items-center gap-2"
+              :disabled="!supportsEmbeddings"
+              :title="supportsEmbeddings ? 'Adicionar item manual ao RAG' : `Indisponível: ${activeLlmLabel} não gera embeddings`"
+              class="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="openAddModal"
             >
               <Plus class="h-4 w-4" stroke-width="2.5" />
               Novo Treinamento
             </button>
             <button
-              :disabled="wipingInProgress"
-              class="btn-secondary flex items-center gap-2 text-[#C50707] border-[#C50707]/30 hover:border-[#C50707]/60 hover:bg-[#C50707]/8 dark:text-red-300 dark:border-red-400/40 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:hover:border-red-400/60"
-              :title="wipeAlvo ? `Refazer o índice de ${wipeAlvo.nome}` : 'Refazer o índice de todos os contextos ativos'"
+              :disabled="wipingInProgress || !supportsEmbeddings"
+              class="btn-secondary flex items-center gap-2 text-[#C50707] border-[#C50707]/30 hover:border-[#C50707]/60 hover:bg-[#C50707]/8 disabled:opacity-50 disabled:cursor-not-allowed dark:text-red-300 dark:border-red-400/40 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:hover:border-red-400/60"
+              :title="!supportsEmbeddings ? `Indisponível: ${activeLlmLabel} não gera embeddings` : (wipeAlvo ? `Refazer o índice de ${wipeAlvo.nome}` : 'Refazer o índice de todos os contextos ativos')"
               @click="confirmWipe = true"
             >
               <Loader2 v-if="wipingInProgress" class="h-4 w-4 animate-spin" />
               <Zap v-else class="h-4 w-4" />
               {{ wipingInProgress ? 'Reindexando...' : 'Wipe & Retrain' }}
             </button>
+          </div>
+        </div>
+
+        <div
+          v-if="!supportsEmbeddings"
+          role="status"
+          class="flex items-start gap-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200"
+        >
+          <Info class="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p class="font-semibold">Provedor ativo ({{ activeLlmLabel }}) não gera embeddings</p>
+            <p class="mt-0.5 text-xs opacity-90">
+              O chat funciona normalmente em modo fallback textual (usando esquema das views, regras, exemplos e busca local).
+              Para criar treinamentos vetoriais ou rodar Wipe &amp; Retrain, selecione um provedor com embeddings em Configurações
+              (Gemini, OpenAI, Z.AI ou Ollama).
+            </p>
+          </div>
+        </div>
+
+        <div
+          v-else-if="embeddingsStatus?.needs_retrain"
+          role="alert"
+          class="flex items-start gap-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200"
+        >
+          <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p class="font-semibold">Reindexação recomendada (Wipe &amp; Retrain)</p>
+            <p class="mt-0.5 text-xs opacity-90">
+              Existem {{ embeddingsStatus.incompatible_vectors }} vetor(es) na base gerados por outro provedor ou dimensão
+              diferente do provedor ativo ({{ embeddingsStatus.provider_label }}
+              <span v-if="embeddingsStatus.embedding_model"> · {{ embeddingsStatus.embedding_model }}</span>).
+              O chat segue funcionando em modo seguro, mas recomendamos executar <strong>Wipe &amp; Retrain</strong> para
+              reativar a busca vetorial completa.
+            </p>
           </div>
         </div>
 
@@ -1035,7 +1103,7 @@ onBeforeUnmount(() => {
                 <h2 class="text-xl font-semibold text-text-primary">Contextos de dados</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
                   Lê os contextos do app e da sua pasta de dados, confere se as tabelas existem no dados.db e,
-                  com a chave do Gemini configurada, gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
+                  com um provedor com suporte a embeddings configurado, gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
                 </p>
               </div>
             </div>
@@ -1053,7 +1121,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p v-if="hasRunningEtl" class="mt-4 text-sm text-text-muted">
-            Pode levar alguns minutos: o Gemini limita os pedidos por minuto e o Adito espera quando precisa.
+            Pode levar alguns minutos: alguns provedores limitam os pedidos por minuto e o Adito espera quando precisa.
             Se parar no meio, o que já foi indexado fica salvo e a próxima carga continua de onde parou.
           </p>
         </div>
@@ -1103,7 +1171,7 @@ onBeforeUnmount(() => {
                 <span v-if="ctx.atualizado_em">Atualizado em {{ new Date(ctx.atualizado_em).toLocaleString('pt-BR') }}</span>
               </div>
               <p v-if="ctx.ativo && ctx.erros.length === 0 && ctx.rag_itens === 0" class="text-xs text-amber-700 dark:text-amber-400">
-                Ainda sem RAG: o chat funciona, mas com menos exemplos. Configure a chave do Gemini e use "Carregar e indexar contextos".
+                Ainda sem RAG vetorial: o chat funciona em modo fallback textual. Para indexação vetorial, configure um provedor com embeddings em Configurações e use "Carregar e indexar contextos".
               </p>
               <ul v-if="ctx.erros.length" class="space-y-1 rounded-lg border border-red-100 bg-red-50/60 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 <li v-for="erro in ctx.erros" :key="erro">{{ erro }}</li>
@@ -1374,7 +1442,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex items-center justify-between text-xs">
                 <span class="text-text-secondary">Motor LLM</span>
-                <span class="text-text-primary">Gemini AI</span>
+                <span class="text-text-primary">{{ activeLlmLabel }}{{ activeLlmModel ? ` (${activeLlmModel})` : '' }}</span>
               </div>
               <div class="flex items-center justify-between text-xs">
                 <span class="text-text-secondary">Vector Store</span>

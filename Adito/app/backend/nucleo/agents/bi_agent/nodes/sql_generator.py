@@ -1,6 +1,7 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agents.config import bind_structured_output
 from core.rich_logging import log_node_end, log_node_start, log_panel
 
 from ..config import SQLResponse
@@ -35,7 +36,7 @@ def sql_generator(
     messages = [SystemMessage(content=system_content)]
     messages.extend(_messages_with_current_question(state["messages"], user_input))
 
-    structured_llm = llm_model.with_structured_output(SQLResponse)
+    structured_llm = bind_structured_output(llm_model, SQLResponse)
     response = structured_llm.invoke(messages)
     sql = response.sql.strip()
     log_panel("bi", "SQL gerado", sql)

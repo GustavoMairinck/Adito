@@ -1,7 +1,7 @@
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import MultiAgentState
 from .models import RouterDecision
-from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, get_chat_llm
+from agents.config import ORCHESTRATOR_SYSTEM_PROMPT, bind_structured_output, get_chat_llm
 from .guard import INTENT_BLOCKED, detect_injection
 from .conversational_agent import history_for_llm
 
@@ -22,7 +22,7 @@ async def orchestrator_node(state: MultiAgentState):
         return {"calls": [{"intent": INTENT_BLOCKED, "delegation_instruction": ""}]}
 
     llm = get_chat_llm(temperature=0.0)
-    structured_llm = llm.with_structured_output(RouterDecision, method="function_calling")
+    structured_llm = bind_structured_output(llm, RouterDecision, prefer_function_calling=True)
 
     # Envia o histórico recente como contexto + a última mensagem como pergunta atual.
     # O orquestrador recebe contexto para resolver follow-ups ("E em 2025?", "E por campus?"),

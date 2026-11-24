@@ -3,6 +3,7 @@ sqlglot
 langchain
 langchain-core
 langchain-google-genai
+langchain-openai
 langchain-community
 langgraph
 langfuse
@@ -15,5 +16,5 @@ rich
 
 # O núcleo fala com o Tauri por stdin/stdout (rpc/server.py): sem servidor HTTP nem Django.
 # O bi_agent roda no mesmo processo (agents/bi_agent/tool.py); sem servidor MCP.
-# httpx: só para validar a chave do Gemini (rpc/core_methods.py).
+# httpx: validação de chave/conexão dos provedores de IA (rpc/core_methods.py).
 httpx

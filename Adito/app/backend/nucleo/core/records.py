@@ -204,6 +204,8 @@ class AnalyticsTextEmbedding(Record):
     payload_json: dict = field(default_factory=dict)
     value_hash: str = ""
     embedding: Any = None
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

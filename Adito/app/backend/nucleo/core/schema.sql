@@ -1,4 +1,4 @@
--- Esquema do app.db (versão 2). Bancos antigos chegam aqui pela migração em core/schema.py.
+-- Esquema do app.db (versão 3). Bancos antigos chegam aqui pela migração em core/schema.py.
 
 CREATE TABLE IF NOT EXISTS "core_tenant" ("id" char(32) NOT NULL PRIMARY KEY, "name" varchar(255) NOT NULL, "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL);
 
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS "core_contexto" ("id" char(32) NOT NULL PRIMARY KEY, 
 CREATE INDEX IF NOT EXISTS "core_contexto_slug_353583bb" ON "core_contexto" ("slug");
 CREATE INDEX IF NOT EXISTS "core_contexto_tenant_id_36446296" ON "core_contexto" ("tenant_id");
 
-CREATE TABLE IF NOT EXISTS "analytics_text_embedding" ("id" char(32) NOT NULL PRIMARY KEY, "source_table" varchar(128) NOT NULL, "embedding_text" text NOT NULL, "payload_json" text NOT NULL CHECK ((JSON_VALID("payload_json") OR "payload_json" IS NULL)), "value_hash" varchar(64) NOT NULL, "embedding" BLOB NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "contexto_id" char(32) NOT NULL REFERENCES "core_contexto" ("id") DEFERRABLE INITIALLY DEFERRED, "tenant_id" char(32) NOT NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED, CONSTRAINT "uniq_analytics_text_embedding_value" UNIQUE ("contexto_id", "source_table", "value_hash"));
+CREATE TABLE IF NOT EXISTS "analytics_text_embedding" ("id" char(32) NOT NULL PRIMARY KEY, "source_table" varchar(128) NOT NULL, "embedding_text" text NOT NULL, "payload_json" text NOT NULL CHECK ((JSON_VALID("payload_json") OR "payload_json" IS NULL)), "value_hash" varchar(64) NOT NULL, "embedding" BLOB NULL, "embedding_provider" varchar(50) NULL, "embedding_model" varchar(120) NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "contexto_id" char(32) NOT NULL REFERENCES "core_contexto" ("id") DEFERRABLE INITIALLY DEFERRED, "tenant_id" char(32) NOT NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED, CONSTRAINT "uniq_analytics_text_embedding_value" UNIQUE ("contexto_id", "source_table", "value_hash"));
 CREATE INDEX IF NOT EXISTS "analytics_text_embedding_contexto_id_e815e2a7" ON "analytics_text_embedding" ("contexto_id");
 CREATE INDEX IF NOT EXISTS "analytics_text_embedding_tenant_id_3cbc327b" ON "analytics_text_embedding" ("tenant_id");
 CREATE INDEX IF NOT EXISTS "ate_contexto_table_idx" ON "analytics_text_embedding" ("contexto_id", "source_table");

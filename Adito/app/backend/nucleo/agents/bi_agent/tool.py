@@ -10,7 +10,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
 
-from agents.config import get_chat_llm, get_embeddings, get_gemini_api_key, langfuse_callbacks
+from agents.config import get_active_llm_config, get_chat_llm, get_embeddings, langfuse_callbacks
 from core.contexts import row_limit_for
 
 from .agent import BIAgent
@@ -39,7 +39,7 @@ _bi_agent_key = None
 
 def get_bi_agent() -> BIAgent:
     global _bi_agent, _bi_agent_key
-    current_key = get_gemini_api_key()
+    current_key = get_active_llm_config().cache_key()
     if _bi_agent is None or _bi_agent_key != current_key:
         _bi_agent = BIAgent(
             llm_model=get_chat_llm(temperature=0.0),

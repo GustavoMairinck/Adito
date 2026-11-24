@@ -3,11 +3,12 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
+from agents.providers import resolve_active_llm_config
 from core import db
 from core.datastore import connect_dados
 from core.db import to_db_id
 from core.records import AnalyticsTextEmbedding
-from core.vectors import nearest
+from core.vectors import nearest, vector_matches_provider
 
 from .config import TEXT_EMBEDDING_BATCH_SIZE, TEXT_EMBEDDING_TOP_K
 
@@ -204,6 +205,7 @@ def sync_text_embeddings(
         if dry_run or not missing:
             continue
 
+        cfg = resolve_active_llm_config()
         for batch in iter_batches(missing, batch_size):
             texts = [candidate.embedding_text for candidate in batch]
             embeddings = embed_texts(embedder, texts)
@@ -217,6 +219,8 @@ def sync_text_embeddings(
                     payload_json=candidate.payload_json,
                     value_hash=candidate.value_hash,
                     embedding=embedding,
+                    embedding_provider=cfg.provider,
+                    embedding_model=cfg.embedding_model,
                 )
                 for candidate, embedding in zip(batch, embeddings)
             ]
@@ -274,7 +278,12 @@ def search_text_embeddings(contexto, query_embedding, table: str | None = None, 
     where, params = "contexto_id = ? AND embedding IS NOT NULL", [to_db_id(contexto.id)]
     if table:
         where, params = where + " AND source_table = ?", [*params, table]
-    qs = AnalyticsTextEmbedding.select(where, params)
+    cfg = resolve_active_llm_config()
+    qs = [
+        row
+        for row in AnalyticsTextEmbedding.select(where, params)
+        if vector_matches_provider(row.embedding_provider, row.embedding_model, cfg)
+    ]
 
     return [
         {

@@ -14,7 +14,7 @@ test.describe('Navegação principal e layout', () => {
 
     await page.getByRole('link', { name: 'Administração' }).click()
     await expect(page).toHaveURL(/#\/admin/)
-    await expect(page.getByText('Base de conhecimento')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Base de conhecimento' })).toBeVisible()
 
     await page.getByRole('link', { name: 'Configurações' }).click()
     await expect(page).toHaveURL(/#\/configuracoes/)
