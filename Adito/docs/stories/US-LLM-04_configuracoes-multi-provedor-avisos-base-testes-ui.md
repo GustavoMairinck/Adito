@@ -33,19 +33,12 @@ Nenhum ponto pendente.
 
 ## Criterios de Aceitacao
 
-- [ ] **Criterio 1 (Cliente IPC/RPC em `llmKey.ts` — FR06, FR09):** `src/common/api/llmKey.ts` expõe funções tipadas (sem `any`) para consultar o catálogo de provedores, ler o status ativo + mapa de provedores com chave salva, testar/salvar configuração (com chave nova ou reutilizando a chave salva no cofre via Tauri) e remover apenas a chave do provedor selecionado.
-- [ ] **Criterio 2 (Tela Configurações simples com opção avançada — FR06, FR10, BR02, BR03):** `ConfiguracoesView.vue` apresenta:
-  - seletor de **Provedor** (Gemini, OpenAI, Z.AI/GLM, OpenRouter, Groq, DeepSeek, Ollama local, Outro OpenAI-compatível);
-  - campo **Modelo** pré-preenchido com o modelo padrão do provedor escolhido e editável pelo usuário;
-  - campo **Base URL** exibido automaticamente em "Outro (OpenAI-compatível)" e acessível via opção avançada para presets como Ollama/Z.AI;
-  - campo **Chave API** (`type="password"`) exibindo indicador visual quando já existe chave salva para o provedor selecionado (permitindo ativar o provedor ou trocar o modelo sem redigitar a chave) e permitindo campo vazio exclusivamente quando a URL for host loopback (ex.: Ollama);
-  - botões **Testar e salvar** (valida antes de gravar/reiniciar) e **Remover** (remove apenas a chave do provedor selecionado).
-- [ ] **Criterio 3 (Privacidade dinâmica — FR07, BR06):** A seção **"O que sai do seu computador"** em `ConfiguracoesView.vue` atualiza dinamicamente conforme o provedor selecionado/ativo (removendo referências fixas a "Gemini"), informando explicitamente quando os dados permanecem **100% locais** (endpoint em `localhost` / `127.0.0.1` / `::1`) e preservando o aviso sobre proteção de colunas sensíveis.
-- [ ] **Criterio 4 (Avisos na Base de conhecimento — FR08, BR04):** Na aba **Admin → Base de conhecimento** (`AdminView.vue`):
-  - quando o provedor ativo **não** suporta embeddings, exibe banner claro explicando que o chat funciona em modo fallback textual e desabilita (com explicação acessível) ações vetoriais como "Wipe & Retrain";
-  - quando o provedor suporta embeddings mas existem vetores no `app.db` gerados por dimensão/provedor diferente, exibe banner orientando o usuário a executar "Wipe & Retrain".
-- [ ] **Criterio 5 (Acessibilidade e validação redundante — Coding Standards):** Todos os controles interativos possuem `label`/roles acessíveis (`getByRole`/`getByLabel`), validação client-side impede submissão vazia em provedor remoto sem chave salva e mensagens de erro/sucesso são exibidas de forma clara em português.
-- [ ] **Criterio 6 (Testes Vitest + `tauriMock.ts` / E2E offline — NFR05):** `tests/unit/llmKey.spec.ts`, novos testes unitários de `ConfiguracoesView.vue` e `AdminView.vue` (Vitest) e `tests/e2e/helpers/tauriMock.ts` (+ cenários E2E relevantes) cobrem troca de provedor, reuso de chave salva, Ollama sem chave, privacidade dinâmica e banners da Base de conhecimento, passando 100% offline.
+- [x] **Criterio 1 (Cliente IPC/RPC em `llmKey.ts` — FR06, FR09):** `src/common/api/llmKey.ts` expõe funções tipadas (sem `any`) para catálogo, status multi-provedor, teste/salvamento e remoção seletiva.
+- [x] **Criterio 2 (Tela Configurações com dropdown customizado `ProviderSelect.vue` — FR06, FR10, BR02, BR03):** Seletor customizado com identidade visual do Adito para os 8 provedores com embeddings, selo **"Em uso"** (lido do núcleo via `me`) e **"Chave salva"** nos demais, campo **Modelo** editável, **Base URL** em opções avançadas para `Z.AI`/`Ollama`, campo **Chave API** (`password`, opcional apenas em loopback), ações **Testar e salvar** e **Remover**.
+- [x] **Criterio 3 (Privacidade dinâmica — FR07, BR06):** Seção **"O que sai do seu computador"** dinâmica conforme o provedor selecionado, destacando **100% local** para Ollama/loopback.
+- [x] **Criterio 4 (Avisos na Base de conhecimento — FR08, BR04):** `AdminView.vue` exibe banner recomendando **Wipe & Retrain** quando há vetores incompatíveis (dimensão ou provedor/modelo divergente) e mantém guarda defensiva caso `supports_embeddings === false`.
+- [x] **Criterio 5 (Acessibilidade e validação redundante — Coding Standards):** Controles com `role`/`label` acessíveis e navegação por teclado no dropdown.
+- [x] **Criterio 6 (Testes Vitest + `tauriMock.ts` / E2E offline — NFR05):** `llmKey.spec.ts`, `ConfiguracoesView.spec.ts`, `AdminView.spec.ts`, `tauriMock.ts` e `settings-admin.spec.ts` passando 100% offline.
 
 ---
 

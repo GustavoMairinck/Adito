@@ -95,6 +95,7 @@ Qualquer usuário consegue abrir **Configurações**, escolher seu provedor de I
 
 ### User adjustments
 - Proposta aprovada integralmente pelo usuario sem alteracoes adicionais (2026-11-24).
+- **Refinamento posterior de escopo durante a implementacao/revisao do PR:** o catalogo de provedores foi ajustado para incluir apenas provedores com suporte nativo a embeddings (`gemini`, `openai`, `openrouter`, `mistral` com padrao `ministral-8b-latest`, `zai`, `together`, `fireworks`, `ollama`), removendo `groq`, `deepseek` e o preset `custom` sem embeddings (ver requisitos atualizados em `Adito/docs/requirements/suporte-multi-provedor-llm.md`).
 
 ## Gate G0 — PROBLEM READY
 
