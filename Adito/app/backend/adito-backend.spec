@@ -25,6 +25,8 @@ for pacote in ("agents", "analytics_index", "core", "rpc"):
 # Bibliotecas que carregam partes por import dinâmico.
 externos = (
     collect_submodules("langchain_google_genai")
+    + collect_submodules("langchain_openai")
+    + collect_submodules("openai")
     + collect_submodules("langgraph")
     + collect_submodules("langgraph.checkpoint.sqlite")
     + collect_submodules("langfuse")
@@ -38,7 +40,7 @@ dados = [
     # contextos padrão (views, regras e exemplos do agente); REPO_APP_DIR aponta para cá empacotado
     (str(APP / "contexts"), "contexts"),
 ]
-for pacote in ("langchain_core", "langchain_google_genai", "langgraph", "google.genai", "certifi"):
+for pacote in ("langchain_core", "langchain_google_genai", "langchain_openai", "openai", "tiktoken", "langgraph", "google.genai", "certifi"):
     try:
         dados += collect_data_files(pacote)
     except Exception:
