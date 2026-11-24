@@ -20,6 +20,10 @@ Criação de ponto de entrada único via Makefile na raiz do monorepo para unifi
 Estruturação da suíte completa de qualidade do Adito: testes unitários no frontend Vue (Vitest + Vue Test Utils), testes E2E híbridos com Playwright (mock de `__TAURI_INTERNALS__` + bridge live com `desktop_server.py`), benchmark de performance/latência do núcleo local sobre o `dados.db` real com SLOs e avaliação híbrida de acurácia da IA (SQL gabarito executada + LLM-as-a-Judge) com dataset independente. Origem: `Adito/docs/discovery/testes-automatizados-qualidade.md` e `Adito/docs/requirements/testes-automatizados-qualidade.md`.
 - **Stories**: US-QA-01 a US-QA-04.
 
+### EPIC-11: Suporte Multi-Provedor de IA (BYOK)
+Habilitação de múltiplos provedores de IA com suporte completo a Chat + Embeddings no Adito (Gemini, OpenAI, OpenRouter, Mistral AI, Z.AI/GLM, Together AI, Fireworks AI e Ollama local) usando apenas `langchain-openai` como nova dependência, com proteção de dimensão vetorial, fallback defensivo, cofre do SO isolado por provedor com retrocompatibilidade v0.1.0, empacotamento PyInstaller, dropdown customizado com indicador "Em uso" e avisos na Base de conhecimento. Origem: `Adito/docs/discovery/suporte-multi-provedor-llm.md` e `Adito/docs/requirements/suporte-multi-provedor-llm.md`.
+- **Stories**: US-LLM-01 a US-LLM-04.
+
 ---
 
 ## User Stories Priorizadas
@@ -82,6 +86,21 @@ Estruturação da suíte completa de qualidade do Adito: testes unitários no fr
 > Total EPIC-10: 16 pts (100% Concluído em 19/11/2026).  
 > - **Vertical Slice 1 (6 pts):** `US-QA-01` + `US-QA-03` (Testes unitários Vitest no frontend + Benchmark determinístico de performance do backend sobre `dados.db`). Concluído.  
 > - **Vertical Slice 2 (10 pts):** `US-QA-02` + `US-QA-04` (Playwright E2E híbrido + Avaliação híbrida de acurácia com LLM Judge + Docs e evidências da Issue #71). Concluído.
+
+---
+
+### 🗂️ EPIC-11 — Suporte Multi-Provedor de IA (BYOK) (Concluído em 24/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-LLM-01](stories/US-LLM-01_catalogo-provedores-fabrica-validacao-rpc.md) | Catálogo de provedores, fábrica multi-provedor e validação RPC | EPIC-11 | 5 | 🔴 Alta (slice 1) | — | FR01, FR02, FR04, FR07, FR09, FR10, BR01, BR02, BR06, NFR01, NFR03–NFR06, A01, A02, A04 | ✅ Concluída |
+| [US-LLM-02](stories/US-LLM-02_embeddings-hibridos-protecao-dimensao-fallback.md) | Embeddings híbridos, proteção de dimensão vetorial e fallback textual automático | EPIC-11 | 5 | 🔴 Alta (slice 1) | US-LLM-01 | FR05, FR07, FR08, BR04, BR05, NFR04, NFR05, A02 | ✅ Concluída |
+| [US-LLM-03](stories/US-LLM-03_cofre-so-por-provedor-retrocompatibilidade-pyinstaller.md) | Cofre do SO por provedor, persistência local, retrocompatibilidade v0.1.0 e PyInstaller | EPIC-11 | 5 | 🟠 Alta (slice 2) | US-LLM-01 | FR03, FR10, BR01–BR03, BR06, NFR02, NFR05, A03 | ✅ Concluída |
+| [US-LLM-04](stories/US-LLM-04_configuracoes-multi-provedor-avisos-base-testes-ui.md) | Tela de Configurações multi-provedor, avisos na Base de conhecimento e testes Frontend/E2E | EPIC-11 | 5 | 🟠 Alta (slice 2) | US-LLM-01, US-LLM-02, US-LLM-03 | FR06–FR08, FR10, BR02–BR04, BR06, NFR05 | ✅ Concluída |
+
+> Total EPIC-11: 20 pts (100% Concluído em 24/11/2026 na branch `feat/multi-provedor-llm`).  
+> - **Vertical Slice 1 (10 pts):** `US-LLM-01` + `US-LLM-02` (Núcleo multi-provedor com `langchain-openai`, validação RPC, contrato executável, embeddings híbridos, proteção de dimensão e fallback textual). Concluído.  
+> - **Vertical Slice 2 (10 pts):** `US-LLM-03` + `US-LLM-04` (Cofre do SO por provedor no Tauri, retrocompatibilidade v0.1.0, empacotamento PyInstaller, tela Configurações multi-provedor, avisos na Base de conhecimento e testes Rust + Vitest + Playwright mock). Concluído.
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
