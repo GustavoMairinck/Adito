@@ -35,6 +35,17 @@ def test_popular_banco_sqlite_execution(tmp_path):
     fk_errors = list(conn.execute("PRAGMA foreign_key_check;"))
     assert len(fk_errors) == 0, f"Erros de Foreign Key: {fk_errors}"
 
+    # 1b. Contrato de tabelas da ADR-0003 revisada: 82 tabelas 3FN, sem tabelas PII vazias
+    tables = [
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+        )
+    ]
+    assert len(tables) == 82, f"Esperadas 82 tabelas 3FN (ADR-0003), encontradas {len(tables)}"
+    for pii_table in ("email", "fax", "telefone"):
+        assert pii_table not in tables, f"Tabela PII '{pii_table}' não deve existir em dados.db"
+
     # 2. As 6 views analíticas dinâmicas
     views = [
         "vfact_extensao_acao_resolved",

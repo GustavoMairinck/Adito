@@ -171,7 +171,6 @@ CREATE INDEX IF NOT EXISTS idx_area_atuacao_pessoa ON area_atuacao(id_pessoa_lat
 CREATE INDEX IF NOT EXISTS idx_pesquisador_titulacao ON pesquisador(id_titulacao);
 CREATE INDEX IF NOT EXISTS idx_estudante_curso ON estudante(id_curso);
 CREATE INDEX IF NOT EXISTS idx_grupo_pesquisa_org ON grupo_pesquisa(id_organizacao);
-CREATE INDEX IF NOT EXISTS idx_email_grupo ON email(id_grupo_pesquisa_cnpq);
 CREATE INDEX IF NOT EXISTS idx_acao_coordenador ON acao(id_coordenador);
 CREATE INDEX IF NOT EXISTS idx_atividade_acao ON atividade(id_acao);
 CREATE INDEX IF NOT EXISTS idx_projeto_pesquisa_coord ON projeto_pesquisa(id_coordenador);
