@@ -16,8 +16,13 @@ export interface User {
   email?: string
   avatar?: string
   tenant?: string | null
-  // A chave do Gemini está no cofre do SO e chegou ao backend.
+  // Estado e metadados do provedor de IA ativo (BYOK).
   llm_configured?: boolean
+  llm_provider?: string
+  llm_provider_label?: string
+  llm_model?: string
+  llm_supports_embeddings?: boolean
+  llm_is_local?: boolean
 }
 
 // Estado global em memória (compartilhado entre instâncias do composable)

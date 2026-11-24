@@ -1,38 +1,142 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, KeyRound, ShieldAlert, Trash2 } from 'lucide-vue-next'
-import { clearKey, keyStatus, testAndSaveKey, type KeyStatus } from '@/common/api/llmKey'
+import { CheckCircle2, ChevronDown, ChevronUp, Info, KeyRound, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import {
+  clearKey,
+  DEFAULT_LLM_PROVIDERS,
+  isLoopbackUrl,
+  listProviders,
+  llmConfigStatus,
+  testAndSaveConfig,
+  type LlmConfigStatus,
+  type LlmProviderSpec,
+} from '@/common/api/llmKey'
 import { useAuth } from '@/modules/auth/composables/useAuth'
+import ProviderSelect from '@/modules/settings/components/ProviderSelect.vue'
 
 const { user, loadLocalUser } = useAuth()
 
-const status = ref<KeyStatus | null>(null)
-const key = ref('')
+const providers = ref<LlmProviderSpec[]>([...DEFAULT_LLM_PROVIDERS])
+const status = ref<LlmConfigStatus | null>(null)
+const selectedProviderId = ref<string>('gemini')
+const model = ref<string>(DEFAULT_LLM_PROVIDERS[0].default_model)
+const baseUrl = ref<string>('')
+const key = ref<string>('')
+const showAdvanced = ref(false)
 const busy = ref(false)
 const message = ref<{ type: 'ok' | 'error'; text: string } | null>(null)
 
-const configured = computed(() => status.value?.configured ?? !!user.value?.llm_configured)
+const selectedProvider = computed<LlmProviderSpec>(
+  () => providers.value.find((p) => p.id === selectedProviderId.value) ?? providers.value[0]
+)
+
+// Prioriza `user` (retornado pelo núcleo Python em execução via RPC `me`) para refletir
+// exatamente qual provedor e modelo estão respondendo no chat neste momento.
+const activeProviderId = computed(() => user.value?.llm_provider || status.value?.provider || 'gemini')
+const activeProviderLabel = computed(
+  () =>
+    user.value?.llm_provider_label ||
+    providers.value.find((p) => p.id === activeProviderId.value)?.label ||
+    'Gemini'
+)
+const activeModel = computed(() => user.value?.llm_model || status.value?.model || '')
+const configured = computed(() => {
+  if (typeof user.value?.llm_configured === 'boolean') return user.value.llm_configured
+  return Boolean(status.value?.configured)
+})
+const inUseProviderId = computed(() => (configured.value ? activeProviderId.value : undefined))
+
+const selectedHasSavedKey = computed(() => Boolean(status.value?.has_key_by_provider?.[selectedProviderId.value]))
+
+const effectiveBaseUrl = computed(() => {
+  const typed = baseUrl.value.trim()
+  if (typed) return typed
+  return selectedProvider.value.base_url
+})
+
+const selectedIsLocal = computed(
+  () => selectedProvider.value.protocol === 'openai_compatible' && isLoopbackUrl(effectiveBaseUrl.value)
+)
+
+const showBaseUrlField = computed(
+  () => selectedProviderId.value === 'custom' || (selectedProvider.value.allow_custom_base_url && showAdvanced.value)
+)
+
+const canSubmit = computed(() => {
+  if (busy.value) return false
+  if (!model.value.trim()) return false
+  if (selectedProviderId.value === 'custom' && !baseUrl.value.trim()) return false
+  if (selectedIsLocal.value) return true
+  return Boolean(key.value.trim() || selectedHasSavedKey.value)
+})
+
+const keyPlaceholder = computed(() => {
+  if (selectedIsLocal.value) return 'Opcional para servidor local (localhost)'
+  if (selectedHasSavedKey.value) return 'Chave já salva no cofre (deixe vazio para reutilizar ou cole nova)'
+  return `Cole a sua chave de API (${selectedProvider.value.label})`
+})
+
+function applyProviderDefaults(providerId: string, savedStatus?: LlmConfigStatus | null) {
+  const spec = providers.value.find((p) => p.id === providerId) ?? providers.value[0]
+  const isActive = savedStatus && savedStatus.provider === spec.id
+  model.value = (isActive && savedStatus.model) || spec.default_model
+  baseUrl.value = (isActive && savedStatus.base_url) || (spec.id === 'custom' ? '' : spec.base_url)
+  showAdvanced.value = spec.id === 'custom' || Boolean(isActive && savedStatus.base_url && savedStatus.base_url !== spec.base_url)
+  key.value = ''
+}
+
+function handleProviderChange() {
+  message.value = null
+  applyProviderDefaults(selectedProviderId.value, status.value)
+}
 
 async function refresh() {
-  status.value = await keyStatus()
-  await loadLocalUser()
+  const [loadedProviders, loadedStatus] = await Promise.all([
+    listProviders(),
+    llmConfigStatus(),
+    loadLocalUser(),
+  ])
+  providers.value = loadedProviders
+  status.value = loadedStatus
+  selectedProviderId.value = loadedStatus.provider || 'gemini'
+  applyProviderDefaults(selectedProviderId.value, loadedStatus)
 }
 
 async function save() {
-  if (!key.value.trim()) return
+  if (!canSubmit.value) return
   busy.value = true
   message.value = null
+  const typedKey = key.value.trim()
+  const useSavedKey = !typedKey && selectedHasSavedKey.value
+  const spec = selectedProvider.value
+  const customUrl =
+    spec.id === 'custom' || (spec.allow_custom_base_url && baseUrl.value.trim() && baseUrl.value.trim() !== spec.base_url)
+      ? baseUrl.value.trim()
+      : undefined
+
   try {
-    const result = await testAndSaveKey(key.value.trim())
+    const result = await testAndSaveConfig({
+      provider: spec.id,
+      model: model.value.trim(),
+      baseUrl: customUrl,
+      key: typedKey || undefined,
+      useSavedKey,
+    })
     if (result.ok) {
       key.value = ''
-      message.value = { type: 'ok', text: 'Chave válida e guardada no cofre do sistema. O chat já pode ser usado.' }
+      message.value = {
+        type: 'ok',
+        text: selectedIsLocal.value
+          ? `Conexão validada e provedor local (${spec.label}) ativado. O chat já pode ser usado.`
+          : `Chave válida e guardada no cofre do sistema para ${spec.label}. O chat já pode ser usado.`,
+      }
       await refresh()
     } else {
-      message.value = { type: 'error', text: result.reason || 'Não foi possível validar a chave.' }
+      message.value = { type: 'error', text: result.reason || 'Não foi possível validar a configuração.' }
     }
-  } catch (err: any) {
-    message.value = { type: 'error', text: String(err?.message || err) }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    message.value = { type: 'error', text: errMsg }
   } finally {
     busy.value = false
   }
@@ -41,12 +145,14 @@ async function save() {
 async function remove() {
   busy.value = true
   message.value = null
+  const label = selectedProvider.value.label
   try {
-    await clearKey()
-    message.value = { type: 'ok', text: 'Chave removida do cofre do sistema.' }
+    await clearKey(selectedProviderId.value)
+    message.value = { type: 'ok', text: `Chave de ${label} removida do cofre do sistema.` }
     await refresh()
-  } catch (err: any) {
-    message.value = { type: 'error', text: String(err?.message || err) }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    message.value = { type: 'error', text: errMsg }
   } finally {
     busy.value = false
   }
@@ -62,15 +168,15 @@ onMounted(() => {
     <h1 class="text-xl font-semibold text-text-primary">Configurações</h1>
 
     <section class="rounded-xl border border-border-subtle bg-surface p-5 shadow-premium">
-      <div class="mb-3 flex items-center gap-2">
+      <div class="mb-3 flex flex-wrap items-center gap-2">
         <KeyRound class="h-5 w-5 text-[var(--brand-primary)] dark:text-[#68d388]" />
-        <h2 class="font-semibold text-text-primary">Chave do Gemini</h2>
+        <h2 class="font-semibold text-text-primary">Provedor de IA</h2>
         <span
           :class="[
             'ml-auto rounded-full border px-2.5 py-0.5 text-xs font-semibold',
             configured
               ? 'border-emerald-300/70 bg-emerald-100 text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-950/70 dark:text-emerald-300'
-              : 'border-amber-300/80 bg-amber-100 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/80 dark:text-amber-300'
+              : 'border-amber-300/80 bg-amber-100 text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/80 dark:text-amber-300',
           ]"
         >
           {{ configured ? 'Configurada' : 'Não configurada' }}
@@ -78,45 +184,150 @@ onMounted(() => {
       </div>
 
       <p class="mb-4 text-sm text-text-secondary">
-        O chat usa a API do Gemini com a sua chave. Ela fica no cofre do sistema operacional
-        (Secret Service no Linux, Gerenciador de Credenciais no Windows), nunca em arquivo do app.
+        Escolha o provedor de IA que deseja usar no chat (BYOK). As chaves ficam isoladas por provedor no cofre do
+        sistema operacional (Secret Service no Linux, Gerenciador de Credenciais no Windows), nunca em arquivo de texto.
       </p>
+
+      <div
+        v-if="configured"
+        class="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--brand-primary)]/25 bg-[var(--accent-light)] px-3.5 py-2.5 text-xs dark:border-[#68d388]/30"
+      >
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-primary)] px-2.5 py-0.5 text-[10px] font-semibold text-white">
+          <span class="h-1.5 w-1.5 rounded-full bg-[#8ef0aa]" aria-hidden="true" />
+          Em uso
+        </span>
+        <span class="font-semibold text-[var(--brand-dark)] dark:text-[#F0F4F1]">
+          {{ activeProviderLabel }}
+        </span>
+        <span v-if="activeModel" class="text-text-muted">·</span>
+        <code v-if="activeModel" class="font-mono text-text-secondary">{{ activeModel }}</code>
+      </div>
 
       <p v-if="status && !status.store_available" class="flex items-start gap-2 text-sm text-[#C50707] dark:text-red-300">
         <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
         Cofre do sistema indisponível: {{ status.error }}
       </p>
 
-      <form v-else class="flex flex-col gap-3 sm:flex-row" @submit.prevent="save">
-        <input
-          v-model="key"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          :placeholder="configured ? 'Nova chave (substitui a atual)' : 'Cole a sua chave do Gemini'"
-          class="min-w-0 flex-1 rounded-md border border-border-subtle bg-surface-elevated/60 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20"
-        />
-        <button
-          type="submit"
-          :disabled="busy || !key.trim()"
-          class="btn-primary disabled:opacity-50"
+      <form v-else class="flex flex-col gap-4" @submit.prevent="save">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label id="llm-provider-label" for="llm-provider" class="eyebrow px-0.5">
+              Provedor
+            </label>
+            <ProviderSelect
+              id="llm-provider"
+              v-model="selectedProviderId"
+              labelled-by="llm-provider-label"
+              :providers="providers"
+              :active-provider-id="inUseProviderId"
+              :has-key-by-provider="status?.has_key_by_provider"
+              :disabled="busy"
+              @change="handleProviderChange"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="llm-model" class="eyebrow px-0.5">
+              Modelo
+            </label>
+            <input
+              id="llm-model"
+              v-model="model"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              :disabled="busy"
+              :placeholder="selectedProvider.default_model || 'Ex.: gpt-4o-mini ou qwen2.5:7b'"
+              class="min-h-[42px] rounded-lg border border-border-subtle bg-surface px-3 py-2 font-mono text-sm text-text-primary shadow-card placeholder:font-sans placeholder:text-text-muted transition-colors hover:border-[var(--brand-primary)]/50 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 dark:hover:border-[#68d388]/50 dark:focus:border-[#68d388]"
+            />
+          </div>
+        </div>
+
+        <div v-if="selectedProvider.allow_custom_base_url && selectedProviderId !== 'custom'">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-primary)] hover:underline dark:text-[#68d388]"
+            @click="showAdvanced = !showAdvanced"
+          >
+            <ChevronUp v-if="showAdvanced" class="h-3.5 w-3.5" />
+            <ChevronDown v-else class="h-3.5 w-3.5" />
+            Opções avançadas (Base URL)
+          </button>
+        </div>
+
+        <div v-if="showBaseUrlField" class="flex flex-col gap-1.5">
+          <label for="llm-base-url" class="eyebrow px-0.5">
+            Base URL (OpenAI-compatível)
+          </label>
+          <input
+            id="llm-base-url"
+            v-model="baseUrl"
+            type="url"
+            autocomplete="off"
+            spellcheck="false"
+            :disabled="busy"
+            :placeholder="selectedProvider.base_url || 'https://api.exemplo.com/v1'"
+            class="min-h-[42px] rounded-lg border border-border-subtle bg-surface px-3 py-2 font-mono text-sm text-text-primary shadow-card placeholder:font-sans placeholder:text-text-muted transition-colors hover:border-[var(--brand-primary)]/50 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 dark:hover:border-[#68d388]/50 dark:focus:border-[#68d388]"
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="llm-api-key" class="eyebrow px-0.5">
+            Chave API {{ selectedIsLocal ? '(opcional para servidor local)' : '' }}
+          </label>
+          <input
+            id="llm-api-key"
+            v-model="key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            :disabled="busy"
+            :placeholder="keyPlaceholder"
+            class="min-h-[42px] min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm text-text-primary shadow-card placeholder:text-text-muted transition-colors hover:border-[var(--brand-primary)]/50 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 dark:hover:border-[#68d388]/50 dark:focus:border-[#68d388]"
+          />
+          <p v-if="selectedHasSavedKey && !selectedIsLocal" class="text-xs text-[var(--brand-primary)] dark:text-[#68d388]">
+            Já existe uma chave salva no cofre para {{ selectedProvider.label }}. Você pode trocar de provedor ou modelo
+            sem precisar digitá-la novamente.
+          </p>
+          <p v-else-if="selectedIsLocal" class="text-xs text-text-muted">
+            Endpoint local (<code class="font-mono">{{ effectiveBaseUrl }}</code>): a chave pode ficar vazia.
+          </p>
+        </div>
+
+        <p
+          v-if="!selectedProvider.supports_embeddings"
+          class="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200"
         >
-          {{ busy ? 'Testando…' : 'Testar e salvar' }}
-        </button>
-        <button
-          v-if="configured"
-          type="button"
-          :disabled="busy"
-          class="flex items-center justify-center gap-1.5 rounded-md border border-[#C50707]/30 px-3 py-2 text-sm text-[#C50707] hover:bg-[#C50707]/8 disabled:opacity-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/15"
-          @click="remove"
-        >
-          <Trash2 class="h-4 w-4" /> Remover
-        </button>
+          <Info class="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {{ selectedProvider.label }} funciona em modo só-chat: o Adito usa fallback textual automático (regras, views,
+            exemplos e busca local) sem precisar gerar embeddings.
+          </span>
+        </p>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button type="submit" :disabled="!canSubmit" class="btn-primary disabled:opacity-50">
+            {{ busy ? 'Testando…' : 'Testar e salvar' }}
+          </button>
+          <button
+            v-if="selectedHasSavedKey"
+            type="button"
+            :disabled="busy"
+            class="flex items-center justify-center gap-1.5 rounded-md border border-[#C50707]/30 px-3 py-2 text-sm text-[#C50707] hover:bg-[#C50707]/8 disabled:opacity-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/15"
+            @click="remove"
+          >
+            <Trash2 class="h-4 w-4" /> Remover
+          </button>
+        </div>
       </form>
 
       <p
         v-if="message"
-        :class="['mt-3 flex items-start gap-2 text-sm', message.type === 'ok' ? 'text-emerald-600 dark:text-emerald-300' : 'text-[#C50707] dark:text-red-300']"
+        role="status"
+        :class="[
+          'mt-3 flex items-start gap-2 text-sm',
+          message.type === 'ok' ? 'text-emerald-600 dark:text-emerald-300' : 'text-[#C50707] dark:text-red-300',
+        ]"
       >
         <CheckCircle2 v-if="message.type === 'ok'" class="mt-0.5 h-4 w-4 shrink-0" />
         <ShieldAlert v-else class="mt-0.5 h-4 w-4 shrink-0" />
@@ -126,13 +337,32 @@ onMounted(() => {
 
     <section class="rounded-xl border border-border-subtle bg-surface p-5 text-sm shadow-premium">
       <h2 class="mb-2 font-semibold text-text-primary">O que sai do seu computador</h2>
-      <p class="mb-2 text-text-secondary">Para responder, o app envia ao Gemini:</p>
-      <ul class="mb-3 list-disc space-y-1 pl-5 text-text-secondary">
-        <li>a pergunta que você digita (nomes escritos na pergunta também vão);</li>
-        <li>o esquema das views do contexto, as regras e os exemplos, sem as colunas sensíveis;</li>
-        <li>os valores únicos das colunas marcadas para busca semântica, ao carregar os dados;</li>
-        <li>uma prévia de até 5 linhas do resultado de cada consulta, que entra no histórico da conversa.</li>
-      </ul>
+
+      <template v-if="selectedIsLocal">
+        <p class="mb-2 flex items-start gap-2 text-emerald-700 dark:text-emerald-300">
+          <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>100% local — nenhum dado sai do seu computador.</strong>
+            Com {{ selectedProvider.label }} em <code class="font-mono">{{ effectiveBaseUrl }}</code>, as perguntas,
+            o esquema das views e os resumos de consulta permanecem na sua máquina.
+          </span>
+        </p>
+      </template>
+
+      <template v-else>
+        <p class="mb-2 text-text-secondary">
+          Para responder, o app envia para <strong>{{ selectedProvider.label }}</strong>:
+        </p>
+        <ul class="mb-3 list-disc space-y-1 pl-5 text-text-secondary">
+          <li>a pergunta que você digita (nomes escritos na pergunta também vão);</li>
+          <li>o esquema das views do contexto, as regras e os exemplos, sem as colunas sensíveis;</li>
+          <li v-if="selectedProvider.supports_embeddings">
+            os valores únicos das colunas marcadas para busca semântica, ao carregar ou reindexar os dados;
+          </li>
+          <li>uma prévia de até 5 linhas do resultado de cada consulta, que entra no histórico da conversa.</li>
+        </ul>
+      </template>
+
       <p class="text-text-secondary">
         Não saem: o arquivo de dados inteiro, as colunas declaradas como sensíveis e as tabelas fora das views do contexto.
         Os dados ficam neste computador; a proteção deles é a sua conta do sistema e a criptografia de disco (BitLocker ou LUKS).
