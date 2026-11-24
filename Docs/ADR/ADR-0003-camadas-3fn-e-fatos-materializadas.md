@@ -19,11 +19,11 @@ Adotaremos uma **arquitetura relacional estrita (OLTP)** dentro do arquivo `dado
    - **2 tabelas** mantidas como dependências de chave estrangeira de `organizacao` (`endereco`, `tipo_organizacao`);
    - **38 tabelas** já populadas pelo ETL e preservadas para futuras views/fatos e auditoria (ex.: `projeto_lattes`, `orientacao_lattes`, `banca_examinadora`, `membro_banca_examinadora`, `evento_cientifico`, `participacao_evento`, `formacao_academica`, `atuacao_profissional`, `linha_pesquisa`, `grupo_pesquisa_linha_pesquisa`, `pesquisador_linha_pesquisa`, `membro_equipe_execucao_src`, `fomento_projeto`, `participacao_estudante_projeto`, `participacao_pesquisador_projeto`, entre outras).
    O DDL é segmentado em `01_tipos_e_dominios.sql` (14 tabelas), `02_tabelas.sql` (48 tabelas) e `03_relacionamentos_e_juncoes.sql` (20 tabelas), preservando tipagem, integridade de herança (chaves primárias com `REFERENCES superclasse(id) ON DELETE CASCADE`) e constraints `CHECK`.
-2. **Camada de Fatos como VIEWs Dinâmicas (6 VIEWs):** As 6 fatos são definidas no script dedicado `04_fatos_views.sql` como **`CREATE VIEW vfact_*_resolved AS SELECT ...`** diretamente sobre as tabelas base, incorporando as correções de negócio P1 a P12 da especificação [Docs/Fatos/PropostaFatos.md](file:///home/andre/test_adito/Docs/Fatos/PropostaFatos.md). Nenhuma tabela fato física é duplicada em disco. Em runtime, o `set_authorizer` e a `ReadPolicy` continuam restringindo o acesso do agente de BI e do Explorador **exclusivamente às 6 views**.
+2. **Camada de Fatos como VIEWs Dinâmicas (6 VIEWs):** As 6 fatos são definidas no script dedicado `04_fatos_views.sql` como **`CREATE VIEW vfact_*_resolved AS SELECT ...`** diretamente sobre as tabelas base, incorporando as correções de negócio P1 a P12 da especificação [Docs/Fatos/PropostaFatos.md](../Fatos/PropostaFatos.md). Nenhuma tabela fato física é duplicada em disco. Em runtime, o `set_authorizer` e a `ReadPolicy` continuam restringindo o acesso do agente de BI e do Explorador **exclusivamente às 6 views**.
 
 ## Justificativa  
 1. **Verdade Única Transacional (Single Source of Truth):** Como as fatos são `VIEW`s dinâmicas, qualquer `INSERT`, `UPDATE` ou `DELETE` realizado transacionalmente (OLTP) nas tabelas base é refletido instantaneamente nas fatos em tempo de execução, sem necessidade de rotinas de recarga ou materialização em lote.
-2. **Prontidão para Futuras Views sem Retrabalho de ETL:** Preservar as 38 tabelas acadêmicas já alimentadas pelo ETL (Lattes, bancas, eventos, formação, linhas de pesquisa, participações) permite criar novas views analíticas diretamente em SQL sobre `dados.db` sem reescrever DDL ou carga, mantendo o arquivo enxuto (~3 MB, inteiramente no cache do SO).
+2. **Prontidão para Futuras Views sem Retrabalho de ETL:** Preservar as 38 tabelas acadêmicas já alimentadas pelo ETL (Lattes, bancas, eventos, formação, linhas de pesquisa, participações) permite criar novas views analíticas diretamente em SQL sobre `dados.db` sem reescrever DDL ou carga, mantendo o arquivo enxuto (~6–9 MB dependendo do recorte, inteiramente no cache do SO).
 3. **Higiene LGPD no Schema:** Remover fisicamente `email`, `fax` e `telefone` elimina tabelas de dados de contato/PII que o ETL já descarta por política de privacidade e que nunca devem existir no banco distribuído.
 4. **Desempenho Instantâneo e Zero Redundância:** Mesmo com 82 tabelas base (~40 mil registros no total), não há duplicação física de fatos e o query planner do SQLite resolve as queries sobre as 6 `VIEW`s em menos de 5 milissegundos com os índices B-Tree nas chaves estrangeiras.
 
@@ -39,7 +39,7 @@ Adotaremos uma **arquitetura relacional estrita (OLTP)** dentro do arquivo `dado
 * **Riscos:** Criação de queries pelo LLM que gerem planos de execução não indexados sobre as VIEWs (mitigado pelos índices nas chaves de junção) ou reintrodução acidental de tabelas PII (mitigado por assert explícito nos testes do ETL).
 
 ## Referências  
-* [Docs/ModelosClasses/ModeloClassesUnificado.asta](file:///home/andre/test_adito/Docs/ModelosClasses/ModeloClassesUnificado.asta)
-* [Docs/Fatos/PropostaFatos.md](file:///home/andre/test_adito/Docs/Fatos/PropostaFatos.md)
-* [Adito/docs/specs/especificacao_resolucoes_fatos_v2.md](file:///home/andre/test_adito/Adito/docs/specs/especificacao_resolucoes_fatos_v2.md)
-* [ADR 0001: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)](file:///home/andre/test_adito/docs/adr/ADR-0001-migracao-dados-100-sqlite.md)
+* [Docs/ModelosClasses/ModeloClassesUnificado.asta](../ModelosClasses/ModeloClassesUnificado.asta)
+* [Docs/Fatos/PropostaFatos.md](../Fatos/PropostaFatos.md)
+* [Adito/docs/specs/especificacao_resolucoes_fatos_v2.md](../../Adito/docs/specs/especificacao_resolucoes_fatos_v2.md)
+* [ADR 0001: Migração da Arquitetura de Dados Acadêmicos para 100% SQLite (dados.db)](ADR-0001-migracao-dados-100-sqlite.md)

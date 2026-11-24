@@ -10,7 +10,7 @@
 
 ## 1. Conceito, Funcionamento e Modelo Dimensional (100% SQLite)
 
-O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expor ~85 tabelas normalizadas (3FN) ou misturar tudo em uma única tabela esparsa, o sistema materializa **6 visões/tabelas analíticas desnormalizadas**, cada uma representando um **evento de negócio** e um **grão** (o que significa exatamente **1 linha**):
+O Adito adota uma **Constelação de Fatos Conformes (Kimball)**: em vez de expor 82 tabelas normalizadas (3FN) ou misturar tudo em uma única tabela esparsa, o sistema materializa **6 visões/tabelas analíticas desnormalizadas**, cada uma representando um **evento de negócio** e um **grão** (o que significa exatamente **1 linha**):
 
 | Tabela Fato (`vfact_*_resolved`) | Fonte Principal | Grão (1 linha =) | Papel Analítico |
 | :--- | :--- | :--- | :--- |
