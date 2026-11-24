@@ -33,6 +33,8 @@ os.environ["ADITO_DATA_DIR"] = str(DATA_DIR)
 os.environ["ADITO_LOCAL_TOKEN"] = "token-contrato"
 os.environ["GEMINI_API_KEY"] = "chave-falsa"
 os.environ.pop("GOOGLE_API_KEY", None)
+for _var in ("ADITO_LLM_PROVIDER", "ADITO_LLM_MODEL", "ADITO_LLM_BASE_URL", "ADITO_LLM_API_KEY", "ADITO_LLM_EMBEDDING_MODEL"):
+    os.environ.pop(_var, None)
 os.environ.pop("ADITO_DADOS_DB", None)
 os.environ.pop("ADITO_APP_DB", None)
 os.environ.pop("ADITO_CHECKPOINT_DB", None)
@@ -139,6 +141,7 @@ async def roteiro(api) -> list[dict]:
 
     await call("health", "health")
     await call("me", "me")
+    await call("llm_providers", "config.llm_providers")
     ctxs = await call("contextos", "contextos.list")
     cid = ctxs[0]["id"] if isinstance(ctxs, list) and ctxs else None
 

@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from analytics_index.config import TEXT_EMBEDDING_TOP_K
 from analytics_index.services import configured_tables, search_text_embeddings
 from core.records import Contexto
-from core.rich_logging import log_info, log_success
+from core.rich_logging import log_info, log_success, log_warning
 
 
 @dataclass
@@ -79,7 +79,13 @@ def search_analytics_values(
         "rewrite",
         f"tool search_analytics_values query={clean_query!r} table={clean_table!r} limit={clean_limit}",
     )
-    query_embedding = busca.embedder.embed_query(clean_query)
+    if busca.embedder is None:
+        return json.dumps({"query": clean_query, "source_table": clean_table, "results": []}, ensure_ascii=False)
+    try:
+        query_embedding = busca.embedder.embed_query(clean_query)
+    except Exception as exc:
+        log_warning("rewrite", f"Embedder indisponível em search_analytics_values ({exc}); retornando sem candidatos.")
+        return json.dumps({"query": clean_query, "source_table": clean_table, "results": []}, ensure_ascii=False)
     candidates = search_text_embeddings(
         contexto=busca.contexto,
         query_embedding=query_embedding,

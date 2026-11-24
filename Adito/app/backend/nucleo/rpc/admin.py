@@ -3,7 +3,8 @@ import logging
 import os
 import time
 
-from analytics_index.embedder import CotaEsgotada, get_embedder
+from agents.providers import resolve_active_llm_config
+from analytics_index.embedder import CotaEsgotada, EmbedderIndisponivel, get_embedder
 from core import db
 from core.contexts import (
     ORIGEM_MANUAL,
@@ -17,9 +18,10 @@ from core.datastore import REPO_APP_DIR, app_db_path, connect_dados, dados_db_pa
 from core.db import api_dt, to_db_id
 from core.records import Contexto, KnowledgeItem, QueryExecution, User
 from core.rich_logging import log_error, log_success
+from core.vectors import embedding_diagnostics
 
-from .core_methods import llm_configured
-from .errors import COTA_ESGOTADA, bad_request, forbidden, llm_error_message, not_found
+from .core_methods import llm_configured, llm_missing_message
+from .errors import bad_request, forbidden, is_cota_message, llm_error_message, not_found
 from .params import Choice, Str, Uuid, validate
 from .registry import rpc
 from .session import current
@@ -116,6 +118,7 @@ def system_status(params):
     except Exception as exc:
         logger.warning("Erro ao buscar stats do knowledge: %s", exc)
 
+    cfg = resolve_active_llm_config()
     return {
         "services": services,
         "systemStats": {
@@ -127,6 +130,7 @@ def system_status(params):
             "trainedExamples": counts["query_example"],
             "lastTraining": last_training,
         },
+        "embeddings": embedding_diagnostics(cfg),
     }
 
 
@@ -154,7 +158,8 @@ def bootstrap(params):
             loaded.append({"pasta": folder.name, "ativo": False, "erros": [str(exc)]})
             continue
         item = {"pasta": folder.name, "slug": contexto.slug, "nome": contexto.name, "ativo": contexto.is_active, "erros": errors}
-        if contexto.is_active and not errors and llm_configured():
+        cfg = resolve_active_llm_config()
+        if contexto.is_active and not errors and llm_configured() and cfg.supports_embeddings:
             try:
                 summary = index_contexto(contexto, get_embedder(), examples)
                 item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=summary["values"]["created"] + summary["values"]["skipped"])
@@ -271,6 +276,14 @@ def trainings_list(params):
     return [training_json(item, contextos.get(item.contexto_id)) for item in items]
 
 
+def _embeddings_unsupported_message(label: str) -> str:
+    return (
+        f"O provedor ativo ({label}) não gera embeddings. "
+        "O chat funciona normalmente em modo fallback textual; para indexação vetorial e Wipe & Retrain, "
+        "configure um provedor com suporte a embeddings (ex.: Gemini, OpenAI, Z.AI ou Ollama)."
+    )
+
+
 @rpc("admin.trainings.create")
 def trainings_create(params):
     _, tenant = _staff()
@@ -280,8 +293,11 @@ def trainings_create(params):
     if data["type"] == "sql" and not data.get("question"):
         raise bad_request({"question": ["Pergunta é obrigatória para training SQL."]})
     ctx = _contexto_do_tenant(tenant, data["contexto"]) if data.get("contexto") else None
+    cfg = resolve_active_llm_config()
     if not llm_configured():
-        raise bad_request({"detail": "Configure a chave do Gemini em Configurações para adicionar treinamentos."})
+        raise bad_request({"detail": llm_missing_message("adicionar treinamentos")})
+    if not cfg.supports_embeddings:
+        raise bad_request({"detail": _embeddings_unsupported_message(cfg.label)})
 
     item_type = TYPE_TO_ITEM_TYPE[data["type"]]
     question = data.get("question", "")
@@ -290,18 +306,22 @@ def trainings_create(params):
     metadata = {
         "name": question[:60] if item_type == "query_example" else raw_content[:60],
         "source": ORIGEM_MANUAL,
+        "embedding_provider": cfg.provider,
+        "embedding_model": cfg.embedding_model,
     }
     if item_type == "query_example":
         metadata.update({"question": question, "sql": raw_content})
 
     try:
         embedding = get_embedder().embed_query(question if item_type == "query_example" else raw_content)
-    except CotaEsgotada as exc:
+    except (CotaEsgotada, EmbedderIndisponivel) as exc:
         raise bad_request({"detail": str(exc)}) from None
     except Exception as exc:
         log_error("trainings_create", f"Falha ao gerar embedding: {exc}")
-        raise bad_request({"detail": llm_error_message(exc)
-                           or "Não foi possível gerar o embedding do treinamento. Verifique a chave do Gemini e a conexão e tente de novo."}) from None
+        raise bad_request({
+            "detail": llm_error_message(exc)
+            or f"Não foi possível gerar o embedding do treinamento com {cfg.label}. Verifique a configuração e a conexão e tente de novo."
+        }) from None
 
     item = KnowledgeItem(
         tenant_id=tenant.id, contexto_id=ctx.id if ctx else None,
@@ -331,8 +351,11 @@ def trainings_retrain(params):
     if tenant is None:
         raise bad_request({"message": "Usuário sem tenant."})
     data = validate(RETRAIN, params)
+    cfg = resolve_active_llm_config()
     if not llm_configured():
-        raise bad_request({"detail": "Configure a chave do Gemini em Configurações para refazer o índice."})
+        raise bad_request({"detail": llm_missing_message("refazer o índice")})
+    if not cfg.supports_embeddings:
+        raise bad_request({"detail": _embeddings_unsupported_message(cfg.label)})
     tid = to_db_id(tenant.id)
     if data.get("contexto"):
         alvos = [_contexto_do_tenant(tenant, data["contexto"])]
@@ -342,13 +365,17 @@ def trainings_retrain(params):
     for folder in context_folders():
         pastas.setdefault(slug_da_pasta(folder), folder)
 
-    embedder = get_embedder()
+    try:
+        embedder = get_embedder()
+    except EmbedderIndisponivel as exc:
+        raise bad_request({"detail": str(exc)}) from None
+
     out = []
     cota_acabou = None
     for ctx in alvos:
         item = {"contexto": ctx.id, "slug": ctx.slug, "nome": ctx.name, "indexado": False, "erros": []}
         if cota_acabou:
-            # A cota do Gemini acabou num contexto anterior: insistir só gastaria tentativas à toa.
+            # A cota acabou num contexto anterior: insistir só gastaria tentativas à toa.
             item["erros"] = [f"Não processado: {cota_acabou}"]
             out.append(item)
             continue
@@ -368,7 +395,7 @@ def trainings_retrain(params):
             log_error("trainings_retrain", f"Falha ao reindexar {ctx.slug}: {exc}")
             amigavel = str(exc) if isinstance(exc, CotaEsgotada) else llm_error_message(exc)
             item["erros"] = [f"Indexação falhou: {amigavel or exc}"]
-            if isinstance(exc, CotaEsgotada) or amigavel == COTA_ESGOTADA:
+            if isinstance(exc, CotaEsgotada) or is_cota_message(amigavel):
                 cota_acabou = amigavel
         item["manuais_mantidos"] = KnowledgeItem.count(
             "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",

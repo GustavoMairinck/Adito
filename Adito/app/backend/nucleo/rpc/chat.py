@@ -19,7 +19,7 @@ from core.db import api_dt, to_db_id
 from core.records import Conversation, Message, QueryExecution, delete_conversation
 from core.rich_logging import log_info, log_section, log_success
 
-from .core_methods import LLM_KEY_MISSING, llm_configured
+from .core_methods import LLM_KEY_MISSING, llm_configured, llm_missing_message
 from .errors import ApiError, llm_error_message, not_found
 from .registry import rpc
 from .session import current
@@ -200,7 +200,7 @@ async def chat_stream(params, emit):
     if not question:
         raise ApiError(400, {"error": "Pergunta obrigatória"})
     if not llm_configured():
-        raise ApiError(503, {"error": LLM_KEY_MISSING})
+        raise ApiError(503, {"error": llm_missing_message("usar o chat")})
 
     user, tenant = current()
     try:

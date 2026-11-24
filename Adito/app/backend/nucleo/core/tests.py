@@ -1684,5 +1684,258 @@ class SemanticValueResolverTests(AppDbTestCase):
         self.assertEqual(out["rewrite_candidates"], [])
 
 
+class MultiProvedorLLMTests(AppDbTestCase):
+    """US-LLM-01 e US-LLM-02: catálogo multi-provedor, validação RPC, embeddings híbridos e fallback."""
+
+    def _clean_llm_env(self, overrides: dict[str, str]):
+        base = {
+            "ADITO_LLM_PROVIDER": "",
+            "ADITO_LLM_MODEL": "",
+            "ADITO_LLM_BASE_URL": "",
+            "ADITO_LLM_API_KEY": "",
+            "ADITO_LLM_EMBEDDING_MODEL": "",
+            "GEMINI_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+        }
+        base.update(overrides)
+        return patch.dict(os.environ, base)
+
+    def test_catalogo_expoe_8_provedores_via_rpc(self) -> None:
+        status, providers = call("config.llm_providers")
+        self.assertEqual(status, 200, providers)
+        ids = [p["id"] for p in providers]
+        self.assertEqual(ids, ["gemini", "openai", "openrouter", "mistral", "zai", "together", "fireworks", "ollama"])
+        by_id = {p["id"]: p for p in providers}
+        self.assertTrue(all(p["supports_embeddings"] and p["default_embedding_model"] for p in providers))
+        self.assertEqual(by_id["openrouter"]["default_embedding_model"], "openai/text-embedding-3-small")
+        self.assertEqual(by_id["mistral"]["default_embedding_model"], "mistral-embed")
+        self.assertEqual(by_id["together"]["default_embedding_model"], "intfloat/multilingual-e5-large-instruct")
+        self.assertEqual(by_id["fireworks"]["default_embedding_model"], "nomic-ai/nomic-embed-text-v1.5")
+        self.assertFalse(by_id["ollama"]["requires_key"])
+
+    def test_retrocompatibilidade_gemini_e_metadados_no_me(self) -> None:
+        with self._clean_llm_env({"GEMINI_API_KEY": "chave-legada"}):
+            status, body = call("me")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["llm_configured"])
+        self.assertEqual(body["llm_provider"], "gemini")
+        self.assertEqual(body["llm_provider_label"], "Gemini")
+        self.assertTrue(body["llm_supports_embeddings"])
+        self.assertFalse(body["llm_is_local"])
+
+    def test_ollama_local_configurado_sem_chave_e_fabrica_openai(self) -> None:
+        from agents.config import get_chat_llm, get_embeddings
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "ollama"}):
+            status, body = call("me")
+            llm = get_chat_llm(temperature=0.0)
+            emb = get_embeddings()
+        self.assertEqual(status, 200)
+        self.assertTrue(body["llm_configured"])
+        self.assertTrue(body["llm_is_local"])
+        self.assertEqual(type(llm).__name__, "ChatOpenAI")
+        self.assertEqual(type(emb).__name__, "OpenAIEmbeddings")
+        self.assertFalse(emb.check_embedding_ctx_length)
+
+    def test_mistral_e_openrouter_instanciam_chat_e_embeddings(self) -> None:
+        from agents.config import get_chat_llm, get_embeddings
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "mistral", "ADITO_LLM_API_KEY": "mis-fake"}):
+            llm = get_chat_llm(temperature=0.0)
+            emb = get_embeddings()
+        self.assertEqual(type(llm).__name__, "ChatOpenAI")
+        self.assertEqual(type(emb).__name__, "OpenAIEmbeddings")
+        self.assertEqual(emb.model, "mistral-embed")
+        self.assertEqual(emb.model_kwargs.get("encoding_format"), "float")
+        self.assertFalse(emb.check_embedding_ctx_length)
+
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "openrouter", "ADITO_LLM_API_KEY": "or-fake"}):
+            emb_or = get_embeddings()
+        self.assertEqual(emb_or.model, "openai/text-embedding-3-small")
+
+    def test_guarda_defensiva_quando_provedor_sem_embeddings_bloqueia_retrain(self) -> None:
+        from agents.config import get_embeddings
+        from agents.providers import ActiveLLMConfig
+
+        sem_emb = ActiveLLMConfig(
+            provider="mock",
+            label="Mock",
+            protocol="openai_compatible",
+            model="m",
+            base_url="https://api.exemplo.com/v1",
+            api_key="k",
+            supports_embeddings=False,
+            embedding_model=None,
+            embedding_dim=None,
+            is_local=False,
+            configured=True,
+        )
+        with patch("agents.config.resolve_active_llm_config", return_value=sem_emb), \
+                patch("rpc.admin.resolve_active_llm_config", return_value=sem_emb), \
+                patch("rpc.core_methods.resolve_active_llm_config", return_value=sem_emb):
+            self.assertIsNone(get_embeddings())
+            retrain_status, retrain_body = call("admin.trainings.retrain", {})
+            create_status, create_body = call("admin.trainings.create", {"type": "documentation", "content": "Regra"})
+        self.assertEqual(retrain_status, 400)
+        self.assertIn("não gera embeddings", retrain_body["detail"])
+        self.assertEqual(create_status, 400)
+        self.assertIn("não gera embeddings", create_body["detail"])
+
+    def test_validacao_test_llm_key_openai_compativel_e_loopback(self) -> None:
+        import httpx
+
+        with patch("rpc.core_methods.httpx.post") as post:
+            post.return_value.status_code = 200
+            status, body = call("config.test_llm_key", {
+                "provider": "openai",
+                "key": "sk-test",
+                "model": "gpt-4o-mini",
+            })
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(post.call_args.args[0], "https://api.openai.com/v1/chat/completions")
+        self.assertEqual(post.call_args.kwargs["headers"], {"Authorization": "Bearer sk-test"})
+
+        # Ollama local sem chave é permitido
+        with patch("rpc.core_methods.httpx.post") as post:
+            post.return_value.status_code = 200
+            status, body = call("config.test_llm_key", {
+                "provider": "ollama",
+                "key": "",
+                "model": "qwen2.5:7b",
+                "base_url": "http://localhost:11434/v1",
+            })
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(post.call_args.kwargs["headers"], {})
+
+        # Ollama desligado retorna aviso amigável com URL local
+        with patch("rpc.core_methods.httpx.post", side_effect=httpx.ConnectError("refused")):
+            status, body = call("config.test_llm_key", {"provider": "ollama", "key": ""})
+        self.assertEqual(status, 200)
+        self.assertFalse(body["ok"])
+        self.assertIn("localhost:11434", body["reason"])
+
+        # Endpoint remoto sem chave é rejeitado antes da rede
+        with patch("rpc.core_methods.httpx.post") as post:
+            status, body = call("config.test_llm_key", {
+                "provider": "mistral",
+                "key": "",
+                "model": "mistral-small-latest",
+            })
+        self.assertEqual(status, 400)
+        self.assertFalse(body["ok"])
+        post.assert_not_called()
+
+        # Erro 429 da Mistral com "Service tier capacity exceeded" explica capacidade do plano em vez de cota genérica
+        with patch("rpc.core_methods.httpx.post") as post:
+            post.return_value.status_code = 429
+            post.return_value.json.return_value = {"message": "Service tier capacity exceeded for this model."}
+            status, body = call("config.test_llm_key", {
+                "provider": "mistral",
+                "key": "mis-valida",
+                "model": "mistral-small-latest",
+            })
+        self.assertEqual(status, 200)
+        self.assertFalse(body["ok"])
+        self.assertIn("capacidade", body["reason"])
+        self.assertIn("Service tier capacity exceeded", body["reason"])
+
+    def test_is_loopback_rejeita_host_malicioso(self) -> None:
+        from agents.providers import is_loopback_url
+        self.assertTrue(is_loopback_url("http://localhost:11434/v1"))
+        self.assertTrue(is_loopback_url("http://127.0.0.1:8080/v1"))
+        self.assertTrue(is_loopback_url("http://[::1]:11434/v1"))
+        self.assertFalse(is_loopback_url("https://localhost.evil.com/v1"))
+        self.assertFalse(is_loopback_url("ftp://localhost:11434/v1"))
+        self.assertFalse(is_loopback_url("https://api.openai.com/v1"))
+
+    def test_llm_error_message_reflete_provedor_ativo_e_structured_output(self) -> None:
+        import httpx
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "mistral", "ADITO_LLM_API_KEY": "mis-x"}):
+            msg_chave = llm_error_message(Exception("401 invalid_api_key"))
+            msg_tool = llm_error_message(Exception("model does not support tools"))
+            self.assertIn("Mistral AI", msg_chave)
+            self.assertNotIn("Gemini", msg_chave)
+            self.assertIn("saída estruturada", msg_tool)
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "ollama"}):
+            msg_rede = llm_error_message(httpx.ConnectError("connection refused"))
+            self.assertIn("servidor local", msg_rede)
+            self.assertIn("Ollama", msg_rede)
+
+    def test_vectors_filtra_dimensoes_incompativeis_sem_crash(self) -> None:
+        from types import SimpleNamespace
+        from core.vectors import nearest_with_stats
+
+        items = [
+            SimpleNamespace(id="ok1", embedding=[1.0, 0.0, 0.0]),
+            SimpleNamespace(id="wrong_dim", embedding=[1.0, 0.0]),
+            SimpleNamespace(id="ok2", embedding=[0.0, 1.0, 0.0]),
+        ]
+        matches, incompatible = nearest_with_stats(items, [1.0, 0.0, 0.0], k=2)
+        self.assertEqual(incompatible, 1)
+        self.assertEqual([m[0].id for m in matches], ["ok1", "ok2"])
+
+        matches_empty, inc_all = nearest_with_stats([SimpleNamespace(id="a", embedding=[1.0, 2.0])], [1.0, 2.0, 3.0], k=2)
+        self.assertEqual(matches_empty, [])
+        self.assertEqual(inc_all, 1)
+
+    def test_query_extractor_fallback_sem_embeddings_inclui_manuais_e_respeita_teto(self) -> None:
+        import importlib
+        from core.records import KnowledgeItem
+        qe = importlib.import_module("agents.bi_agent.nodes.query_extractor")
+        _, tenant = session.current()
+        ctx = Contexto(tenant_id=tenant.id, slug="ctx-fallback", name="Fallback", views=[{"name": "t"}]).insert()
+        for idx in range(12):
+            KnowledgeItem(
+                tenant_id=tenant.id,
+                contexto_id=ctx.id,
+                item_type="doc",
+                content=f"Regra manual {idx}",
+                metadata={"source": "admin_panel", "name": f"Regra {idx}"},
+                embedding=None,
+            ).insert()
+
+        out = qe.query_extractor(
+            {"user_input": "Total?", "tenant_id": tenant.id, "contexto_id": ctx.id, "system_prompt": ""},
+            embedder=None,
+        )
+        schema = out["retrieved_schema"]
+        self.assertIn("Regra manual 11", schema)
+        self.assertEqual(schema.count("Regra manual "), qe.FALLBACK_MANUAL_LIMIT)
+
+    def test_semantic_value_resolver_pula_quando_embedder_none(self) -> None:
+        import importlib
+        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
+        out = svr.semantic_value_resolver(
+            {"user_input": "PIBIC", "contexto_id": None},
+            llm_model=object(),
+            embedder=None,
+        )
+        self.assertEqual(out["rewrite_candidates"], [])
+
+    def test_diagnostico_embeddings_detecta_dimensao_divergente(self) -> None:
+        from agents.providers import resolve_active_llm_config
+        from core.records import KnowledgeItem
+        from core.vectors import embedding_diagnostics
+
+        _, tenant = session.current()
+        ctx = Contexto(tenant_id=tenant.id, slug="ctx-diag", name="Diag", views=[{"name": "t"}]).insert()
+        KnowledgeItem(
+            tenant_id=tenant.id,
+            contexto_id=ctx.id,
+            item_type="doc",
+            content="Regra",
+            metadata={"embedding_provider": "gemini"},
+            embedding=[0.1] * 1024,
+        ).insert()
+
+        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "openai", "ADITO_LLM_API_KEY": "sk-x"}):
+            diag = embedding_diagnostics(resolve_active_llm_config())
+        self.assertTrue(diag["supports_embeddings"])
+        self.assertTrue(diag["needs_retrain"])
+        self.assertEqual(diag["stored_dims"], [1024])
+        self.assertEqual(diag["expected_dim"], 1536)
+        self.assertEqual(diag["incompatible_vectors"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

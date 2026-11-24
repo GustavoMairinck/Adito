@@ -1,6 +1,7 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from agents.config import bind_structured_output
 from core.rich_logging import log_error, log_info, log_node_end, log_node_start, log_success
 
 from ..config import BI_REWRITE_SYSTEM_PROMPT, QuestionRewriteResponse
@@ -40,7 +41,7 @@ def question_rewriter(
     )
 
     try:
-        structured_llm = llm_model.with_structured_output(QuestionRewriteResponse)
+        structured_llm = bind_structured_output(llm_model, QuestionRewriteResponse)
         response = structured_llm.invoke(
             [
                 SystemMessage(content=BI_REWRITE_SYSTEM_PROMPT),

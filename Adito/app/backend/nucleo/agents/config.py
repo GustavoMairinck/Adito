@@ -2,37 +2,96 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# ─── Gemini (LLM de chat, SQL e embeddings) ──────────────────────────────────
-GEMINI_MODEL           = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+from agents.providers import (
+    DEFAULT_GEMINI_EMBEDDING_MODEL,
+    DEFAULT_GEMINI_MODEL,
+    ActiveLLMConfig,
+    resolve_active_llm_config,
+)
+
+# ─── LLM (Gemini legado + múltiplos provedores via ADITO_LLM_*) ──────────────
+GEMINI_MODEL           = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 GEMINI_API_KEY         = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
+GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", DEFAULT_GEMINI_EMBEDDING_MODEL)
+
+
+def get_active_llm_config() -> ActiveLLMConfig:
+    """Retorna a configuração efetiva do provedor de IA ativo no ambiente."""
+    return resolve_active_llm_config()
 
 
 def get_gemini_api_key() -> str | None:
-    """Retorna a chave da API do Gemini ativa no ambiente."""
-    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or GEMINI_API_KEY
+    """Retorna a chave da API do Gemini ativa no ambiente (retrocompatibilidade)."""
+    cfg = resolve_active_llm_config()
+    if cfg.provider == "gemini":
+        return cfg.api_key
+    return (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip() or None
 
 
 def get_chat_llm(temperature: float = 0.0):
-    """Instancia o ChatGoogleGenerativeAI sob demanda com a chave ativa do Gemini."""
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    """Instancia sob demanda o cliente de chat do provedor ativo (Gemini ou OpenAI-compatível)."""
+    cfg = resolve_active_llm_config()
+    if cfg.protocol == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-    model = os.environ.get("GEMINI_MODEL") or GEMINI_MODEL
-    api_key = get_gemini_api_key()
-    return ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=temperature)
+        return ChatGoogleGenerativeAI(
+            model=cfg.model,
+            google_api_key=cfg.api_key,
+            temperature=temperature,
+        )
+
+    from langchain_openai import ChatOpenAI
+
+    api_key = cfg.api_key or ("ollama" if cfg.is_local else "")
+    kwargs: dict[str, object] = {
+        "model": cfg.model,
+        "api_key": api_key,
+        "temperature": temperature,
+    }
+    if cfg.base_url:
+        kwargs["base_url"] = cfg.base_url
+    return ChatOpenAI(**kwargs)
+
+
+def bind_structured_output(llm_model, schema, *, prefer_function_calling: bool = False):
+    """Configura structured output de forma compatível entre Gemini e provedores OpenAI-compatíveis."""
+    is_openai_compat = type(llm_model).__name__ == "ChatOpenAI"
+    if prefer_function_calling or is_openai_compat:
+        return llm_model.with_structured_output(schema, method="function_calling")
+    return llm_model.with_structured_output(schema)
 
 
 def get_embeddings():
-    """Instancia o GoogleGenerativeAIEmbeddings sob demanda com a chave ativa do Gemini."""
-    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    """Instancia o embedder do provedor ativo sob demanda, ou None quando o provedor é só-chat."""
+    cfg = resolve_active_llm_config()
+    if not cfg.supports_embeddings or not cfg.embedding_model:
+        return None
 
-    model = os.environ.get("GEMINI_EMBEDDING_MODEL") or GEMINI_EMBEDDING_MODEL
-    api_key = get_gemini_api_key()
-    return GoogleGenerativeAIEmbeddings(
-        output_dimensionality=1024,
-        model=model,
-        google_api_key=api_key,
-    )
+    if cfg.protocol == "gemini":
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+        return GoogleGenerativeAIEmbeddings(
+            output_dimensionality=cfg.embedding_dim or 1024,
+            model=cfg.embedding_model,
+            google_api_key=cfg.api_key,
+        )
+
+    from langchain_openai import OpenAIEmbeddings
+
+    api_key = cfg.api_key or ("ollama" if cfg.is_local else "")
+    kwargs: dict[str, object] = {
+        "model": cfg.embedding_model,
+        "api_key": api_key,
+    }
+    if cfg.base_url:
+        kwargs["base_url"] = cfg.base_url
+    # Servidores OpenAI-compatíveis fora da OpenAI (ex.: Ollama, Z.AI, Mistral, Together, Fireworks, OpenRouter)
+    # esperam texto puro, não arrays de token IDs produzidos pelo check_embedding_ctx_length do tiktoken.
+    if cfg.provider != "openai":
+        kwargs["check_embedding_ctx_length"] = False
+    if cfg.provider == "mistral":
+        kwargs["model_kwargs"] = {"encoding_format": "float"}
+    return OpenAIEmbeddings(**kwargs)
 # ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
 # Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
 from core.datastore import app_db_path

@@ -80,11 +80,16 @@ def _has_indexed_values(contexto) -> bool:
 def semantic_value_resolver(
     state: BiAgentState,
     llm_model: BaseChatModel,
-    embedder: Embeddings,
+    embedder: Embeddings | None,
     top_k: int = TEXT_EMBEDDING_TOP_K,
 ) -> dict[str, object]:
     user_input = state["user_input"]
     log_node_start("semantic_value_resolver", f"pergunta={user_input[:120]!r}")
+
+    if embedder is None:
+        log_info("rewrite", "Provedor ativo sem embeddings; pulando resolução semântica de valores.")
+        log_node_end("semantic_value_resolver", "sem embeddings")
+        return _empty_resolution()
 
     contexto = get_contexto(state.get("contexto_id"))
     if contexto is None or not configured_tables(contexto):

@@ -274,27 +274,49 @@ ORIGEM_MANUAL = "admin_panel"
 
 
 def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
-    """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa a chave do usuário."""
+    """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa o provedor ativo."""
+    from agents.providers import resolve_active_llm_config
     from analytics_index.services import update_text_embeddings
 
-    items = [("ddl", describe_views(contexto, dados_path), {})]
+    cfg = resolve_active_llm_config()
+    emb_meta = {"embedding_provider": cfg.provider, "embedding_model": cfg.embedding_model}
+
+    items = [("ddl", describe_views(contexto, dados_path), dict(emb_meta))]
     if contexto.rules:
-        items.append(("doc", contexto.rules, {}))
+        items.append(("doc", contexto.rules, dict(emb_meta)))
     for example in examples:
         items.append((
             "query_example",
             f"Pergunta: {example['question']}\nSQL: {example['sql']}",
-            {"question": example["question"]},
+            {"question": example["question"], **emb_meta},
         ))
 
     # Os embeddings (rede) saem antes da transação para não segurar o app.db travado.
     rows = [(item_type, content, metadata, embedder.embed_query(content)) for item_type, content, metadata in items]
+    new_dim_bytes = len(rows[0][3]) * 4 if rows and rows[0][3] is not None else None
+
+    # Re-embedar itens manuais com dimensão incompatível para não ficarem órfãos no novo espaço vetorial.
+    cid = to_db_id(contexto.id)
+    manual_updates: list[tuple[KnowledgeItem, object]] = []
+    if new_dim_bytes:
+        manuais = KnowledgeItem.select(
+            "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
+            [cid, ORIGEM_MANUAL],
+        )
+        for manual in manuais:
+            same_dim = manual.embedding is not None and (len(manual.embedding) * 4 == new_dim_bytes)
+            same_provider = (manual.metadata or {}).get("embedding_provider") == cfg.provider
+            if not same_dim or (manual.metadata or {}).get("embedding_provider") and not same_provider:
+                text_to_embed = (manual.metadata or {}).get("question") if manual.item_type == "query_example" else manual.content
+                new_vec = embedder.embed_query(text_to_embed or manual.content)
+                manual_updates.append((manual, new_vec))
+
     with db.transaction():
         # Os itens que o admin pôs à mão (Novo treinamento, promover consulta) não vêm dos arquivos e ficam.
         db.execute(
             "DELETE FROM knowledge_knowledgeitem WHERE contexto_id = ?"
             " AND COALESCE(json_extract(metadata, '$.source'), '') <> ?",
-            [to_db_id(contexto.id), ORIGEM_MANUAL],
+            [cid, ORIGEM_MANUAL],
         )
         for item_type, content, metadata, embedding in rows:
             KnowledgeItem(
@@ -305,6 +327,19 @@ def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_pat
                 metadata=metadata,
                 embedding=embedding,
             ).insert()
+        for manual, new_vec in manual_updates:
+            meta = dict(manual.metadata or {})
+            meta.update(emb_meta)
+            manual.metadata = meta
+            manual.embedding = new_vec
+            manual.update("metadata", "embedding")
+        if new_dim_bytes:
+            # Apaga vetores de valores de outro espaço/dimensão para que update_text_embeddings reindexe todos.
+            db.execute(
+                "DELETE FROM analytics_text_embedding WHERE contexto_id = ? "
+                "AND (embedding IS NULL OR LENGTH(embedding) <> ?)",
+                [cid, new_dim_bytes],
+            )
 
     values = update_text_embeddings(contexto, embedder)
     return {"knowledge_items": len(items), "values": values}

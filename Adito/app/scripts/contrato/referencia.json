@@ -17,8 +17,107 @@
    "role": "admin",
    "avatar": "",
    "tenant": "padrao",
-   "llm_configured": true
+   "llm_configured": true,
+   "llm_provider": "gemini",
+   "llm_provider_label": "Gemini",
+   "llm_model": "gemini-3.5-flash-lite",
+   "llm_supports_embeddings": true,
+   "llm_is_local": false
   }
+ },
+ {
+  "nome": "llm_providers",
+  "status": "2xx",
+  "body": [
+   {
+    "id": "gemini",
+    "label": "Gemini",
+    "protocol": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "default_model": "gemini-3.5-flash-lite",
+    "supports_embeddings": true,
+    "default_embedding_model": "gemini-embedding-2",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "openai",
+    "label": "OpenAI",
+    "protocol": "openai_compatible",
+    "base_url": "https://api.openai.com/v1",
+    "default_model": "gpt-4o-mini",
+    "supports_embeddings": true,
+    "default_embedding_model": "text-embedding-3-small",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "openrouter",
+    "label": "OpenRouter",
+    "protocol": "openai_compatible",
+    "base_url": "https://openrouter.ai/api/v1",
+    "default_model": "google/gemini-2.5-flash",
+    "supports_embeddings": true,
+    "default_embedding_model": "openai/text-embedding-3-small",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "mistral",
+    "label": "Mistral AI",
+    "protocol": "openai_compatible",
+    "base_url": "https://api.mistral.ai/v1",
+    "default_model": "ministral-8b-latest",
+    "supports_embeddings": true,
+    "default_embedding_model": "mistral-embed",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "zai",
+    "label": "Z.AI (GLM)",
+    "protocol": "openai_compatible",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "default_model": "glm-4.5-flash",
+    "supports_embeddings": true,
+    "default_embedding_model": "embedding-3",
+    "requires_key": true,
+    "allow_custom_base_url": true
+   },
+   {
+    "id": "together",
+    "label": "Together AI",
+    "protocol": "openai_compatible",
+    "base_url": "https://api.together.xyz/v1",
+    "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "supports_embeddings": true,
+    "default_embedding_model": "intfloat/multilingual-e5-large-instruct",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "fireworks",
+    "label": "Fireworks AI",
+    "protocol": "openai_compatible",
+    "base_url": "https://api.fireworks.ai/inference/v1",
+    "default_model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    "supports_embeddings": true,
+    "default_embedding_model": "nomic-ai/nomic-embed-text-v1.5",
+    "requires_key": true,
+    "allow_custom_base_url": false
+   },
+   {
+    "id": "ollama",
+    "label": "Ollama (Local)",
+    "protocol": "openai_compatible",
+    "base_url": "http://localhost:11434/v1",
+    "default_model": "qwen2.5:7b",
+    "supports_embeddings": true,
+    "default_embedding_model": "nomic-embed-text",
+    "requires_key": false,
+    "allow_custom_base_url": true
+   }
+  ]
  },
  {
   "nome": "contextos",
@@ -639,7 +738,12 @@
    "role": "admin",
    "avatar": "",
    "tenant": "padrao",
-   "llm_configured": false
+   "llm_configured": false,
+   "llm_provider": "gemini",
+   "llm_provider_label": "Gemini",
+   "llm_model": "gemini-3.5-flash-lite",
+   "llm_supports_embeddings": true,
+   "llm_is_local": false
   }
  },
  {
@@ -992,6 +1096,16 @@
     "trainedDoc": 0,
     "trainedExamples": 0,
     "lastTraining": null
+   },
+   "embeddings": {
+    "supports_embeddings": true,
+    "provider": "gemini",
+    "provider_label": "Gemini",
+    "embedding_model": "gemini-embedding-2",
+    "expected_dim": 1024,
+    "stored_dims": [],
+    "needs_retrain": false,
+    "incompatible_vectors": 0
    }
   }
  },
@@ -1007,6 +1121,8 @@
    "metadata": {
     "name": "Quantas orientações?",
     "source": "admin_panel",
+    "embedding_provider": "gemini",
+    "embedding_model": "gemini-embedding-2",
     "question": "Quantas orientações?",
     "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
    },
@@ -1054,6 +1170,18 @@
     "trainedDoc": 0,
     "trainedExamples": 1,
     "lastTraining": "<data>"
+   },
+   "embeddings": {
+    "supports_embeddings": true,
+    "provider": "gemini",
+    "provider_label": "Gemini",
+    "embedding_model": "gemini-embedding-2",
+    "expected_dim": 1024,
+    "stored_dims": [
+     1024
+    ],
+    "needs_retrain": false,
+    "incompatible_vectors": 0
    }
   }
  },
@@ -1070,6 +1198,8 @@
     "metadata": {
      "name": "Quantas orientações?",
      "source": "admin_panel",
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2",
      "question": "Quantas orientações?",
      "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
     },
@@ -1094,7 +1224,9 @@
    "content": "Bolsista é aluno com bolsa.",
    "metadata": {
     "name": "Bolsista é aluno com bolsa.",
-    "source": "admin_panel"
+    "source": "admin_panel",
+    "embedding_provider": "gemini",
+    "embedding_model": "gemini-embedding-2"
    },
    "contexto": "<id2>",
    "contexto_slug": "ctx-contrato",
@@ -1142,7 +1274,9 @@
     "question": "Investimento por ano?",
     "content": "SELECT ano, SUM(investimento_total_estimado) FROM vfact_orientacao_bolsa_resolved GROUP BY ano",
     "metadata": {
-     "question": "Investimento por ano?"
+     "question": "Investimento por ano?",
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2"
     },
     "contexto": "<id2>",
     "contexto_slug": "ctx-contrato",
@@ -1158,7 +1292,10 @@
     "name": "Regras do contexto — Contrato",
     "question": "",
     "content": "Investimento: SUM(investimento_total_estimado)\n",
-    "metadata": {},
+    "metadata": {
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2"
+    },
     "contexto": "<id2>",
     "contexto_slug": "ctx-contrato",
     "contexto_nome": "Contrato",
@@ -1173,7 +1310,10 @@
     "name": "Esquema das views — Contrato",
     "question": "",
     "content": "- vfact_orientacao_bolsa_resolved(id_orientacao INTEGER, ano INTEGER, grande_area TEXT, programa_fomento TEXT, modalidade TEXT, titulo_projeto TEXT, titulo_edital TEXT, investimento_total_estimado REAL, nome_orientador TEXT, agencia_financiadora TEXT, data_inicio TEXT)\n  Uma linha por orientação.\n- dim_area(nome TEXT)\n  Áreas.",
-    "metadata": {},
+    "metadata": {
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2"
+    },
     "contexto": "<id2>",
     "contexto_slug": "ctx-contrato",
     "contexto_nome": "Contrato",
@@ -1190,7 +1330,9 @@
     "content": "Bolsista é aluno com bolsa.",
     "metadata": {
      "name": "Bolsista é aluno com bolsa.",
-     "source": "admin_panel"
+     "source": "admin_panel",
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2"
     },
     "contexto": "<id2>",
     "contexto_slug": "ctx-contrato",
@@ -1209,6 +1351,8 @@
     "metadata": {
      "name": "Quantas orientações?",
      "source": "admin_panel",
+     "embedding_provider": "gemini",
+     "embedding_model": "gemini-embedding-2",
      "question": "Quantas orientações?",
      "sql": "SELECT COUNT(*) FROM vfact_orientacao_bolsa_resolved"
     },
@@ -1263,6 +1407,18 @@
     "trainedDoc": 1,
     "trainedExamples": 2,
     "lastTraining": "<data>"
+   },
+   "embeddings": {
+    "supports_embeddings": true,
+    "provider": "gemini",
+    "provider_label": "Gemini",
+    "embedding_model": "gemini-embedding-2",
+    "expected_dim": 1024,
+    "stored_dims": [
+     1024
+    ],
+    "needs_retrain": false,
+    "incompatible_vectors": 0
    }
   }
  },
