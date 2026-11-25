@@ -29,6 +29,10 @@ export interface TauriMockOptions {
   appNovaVersao?: string
   /** Pré-ativa o modo opt-in de atualização automática no localStorage antes do boot. */
   autoUpdateEnabled?: boolean
+  /** Linhas devolvidas na resposta do chat (padrão: projetos por grande área, 2 linhas). */
+  chatData?: Array<Record<string, unknown>>
+  /** Tipo de gráfico sugerido pelo agente de painéis na resposta do chat (padrão: nenhum). */
+  chatChartType?: string
 }
 
 /**
@@ -49,6 +53,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     semDados: options.semDados ?? false,
     appNovaVersao: options.appNovaVersao ?? null,
     autoUpdateEnabled: options.autoUpdateEnabled ?? false,
+    chatData: options.chatData ?? null,
+    chatChartType: options.chatChartType ?? null,
   }
 
   await page.addInitScript((cfg) => {
@@ -120,6 +126,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         grid_h: 8,
       },
     ]
+
+    // Exposto para os testes conferirem o que foi fixado no painel.
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_WIDGETS__ = widgets
 
     const widgetRows: Record<string, Array<Record<string, unknown>>> = {
       'w-1': [
@@ -531,10 +540,11 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
                   type: 'analysis',
                   text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
                   sql: 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area',
-                  data: [
+                  data: cfg.chatData || [
                     { grande_area: 'Engenharias', total: 120 },
                     { grande_area: 'Ciências Exatas', total: 116 },
                   ],
+                  chart_type: cfg.chatChartType,
                 },
               },
               delayMs: finalDelay,

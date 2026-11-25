@@ -65,6 +65,7 @@ describe('modules/chat/composables/useChatApi', () => {
           { grande_area: 'Engenharias', total: 120 },
           { grande_area: 'Exatas', total: 116 },
         ],
+        chart_type: 'pie',
       })
     })
 
@@ -85,6 +86,8 @@ describe('modules/chat/composables/useChatApi', () => {
     expect(tokens).toEqual(['Resumo: '])
     expect(msg.text).toBe('Foram encontrados 236 projetos.')
     expect(msg.chart?.categories).toEqual(['Engenharias', 'Exatas'])
+    // Tipo de gráfico sugerido pelo agente de painéis
+    expect(msg.suggestedChartType).toBe('pie')
     expect(streamMock).toHaveBeenCalledWith(
       'chat.stream',
       expect.objectContaining({
