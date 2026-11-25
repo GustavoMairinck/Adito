@@ -24,6 +24,10 @@ Estruturação da suíte completa de qualidade do Adito: testes unitários no fr
 Habilitação de múltiplos provedores de IA com suporte completo a Chat + Embeddings no Adito (Gemini, OpenAI, OpenRouter, Mistral AI, Z.AI/GLM, Together AI, Fireworks AI e Ollama local) usando apenas `langchain-openai` como nova dependência, com proteção de dimensão vetorial, fallback defensivo, cofre do SO isolado por provedor com retrocompatibilidade v0.1.0, empacotamento PyInstaller, dropdown customizado com indicador "Em uso" e avisos na Base de conhecimento. Origem: `Adito/docs/discovery/suporte-multi-provedor-llm.md` e `Adito/docs/requirements/suporte-multi-provedor-llm.md`.
 - **Stories**: US-LLM-01 a US-LLM-04.
 
+### EPIC-12: Cancelamento de Prompts e Streaming em Segundo Plano no Chat
+Capacidade de abortar respostas em andamento no chat do Adito via botão **"Parar"** ou tecla **`Esc`** sem perder o texto já digitado nem gravar respostas incompletas no `app.db`, com execução em segundo plano independente por conversa/rota, indicador de carregamento na sidebar, filtro pós-abort no IPC (`core.ts`) e cancelamento cooperativo no `BIAgent` para economizar cota de API BYOK. Origem: `Adito/docs/discovery/abortar-prompt-chat.md` e `Adito/docs/requirements/abortar-prompt-chat.md`.
+- **Stories**: US-CHAT-01 e US-CHAT-02.
+
 ---
 
 ## User Stories Priorizadas
@@ -101,6 +105,19 @@ Habilitação de múltiplos provedores de IA com suporte completo a Chat + Embed
 > Total EPIC-11: 20 pts (100% Concluído em 24/11/2026 na branch `feat/multi-provedor-llm`).  
 > - **Vertical Slice 1 (10 pts):** `US-LLM-01` + `US-LLM-02` (Núcleo multi-provedor com `langchain-openai`, validação RPC, contrato executável, embeddings híbridos, proteção de dimensão e fallback textual). Concluído.  
 > - **Vertical Slice 2 (10 pts):** `US-LLM-03` + `US-LLM-04` (Cofre do SO por provedor no Tauri, retrocompatibilidade v0.1.0, empacotamento PyInstaller, tela Configurações multi-provedor, avisos na Base de conhecimento e testes Rust + Vitest + Playwright mock). Concluído.
+
+---
+
+### 🗂️ EPIC-12 — Cancelamento de Prompts e Streaming em Segundo Plano no Chat (Concluído em 25/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-CHAT-01](stories/US-CHAT-01_cancelamento-cooperativo-nucleo-e-ipc.md) | Cancelamento cooperativo no núcleo Python (`BIAgent` + checkpointer) e filtro pós-abort em `core.ts` | EPIC-12 | 3 | 🔴 Alta (slice 1) | — | FR04, FR08, BR01, BR04, BR05, NFR03, NFR04, A01, A02 | ✅ Concluída |
+| [US-CHAT-02](stories/US-CHAT-02_ux-parar-segundo-plano-conversas-e-testes-e2e.md) | UX de "Parar" / `Esc`, segundo plano por conversa/rota e testes Frontend/E2E | EPIC-12 | 5 | 🔴 Alta (slice 2) | US-CHAT-01 | FR01–FR03, FR05–FR07, FR09, BR01–BR03, NFR01–NFR03, NFR05, A03 | ✅ Concluída |
+
+> Total EPIC-12: 8 pts (100% Concluído em 25/11/2026 na branch `feat/abortar-prompt-chat`, Nível ScrumAIDev 1).  
+> - **Vertical Slice 1 (3 pts):** `US-CHAT-01` (filtro pós-abort no `Channel` em `core.ts` + `cancel_event` cooperativo no `BIAgent` + integridade do checkpointer). Concluído.  
+> - **Vertical Slice 2 (5 pts):** `US-CHAT-02` (estado compartilhado por conversa/rota, botão "Parar" + `Esc`, aviso discreto *"Resposta interrompida"*, indicador na sidebar, `tauriMock.ts`, Vitest e Playwright E2E). Concluído.
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
