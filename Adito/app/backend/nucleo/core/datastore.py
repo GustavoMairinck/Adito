@@ -97,33 +97,46 @@ def strip_accents(s: Any) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn").lower()
 
 
-_LIKE_CACHE: dict[str, re.Pattern] = {}
+_LIKE_CACHE: dict[tuple[str, str | None], re.Pattern] = {}
 
 
-def _like_to_regex(pattern: str) -> re.Pattern:
+def _like_to_regex(pattern: str, escape: str | None = None) -> re.Pattern:
+    """Converte um padrão LIKE em regex; com `escape`, o caractere seguinte vale como texto."""
     parts = []
-    for chunk in re.split(r"(%|_)", pattern):
-        if chunk == "%":
+    chars = iter(pattern)
+    for char in chars:
+        if escape is not None and char == escape:
+            # Como no SQLite, um escape no fim do padrão vale como o próprio caractere.
+            parts.append(re.escape(next(chars, char)))
+        elif char == "%":
             parts.append(".*")
-        elif chunk == "_":
+        elif char == "_":
             parts.append(".")
         else:
-            parts.append(re.escape(chunk))
+            parts.append(re.escape(char))
     regex_str = "^" + "".join(parts) + "$"
     return re.compile(regex_str, re.DOTALL)
 
 
-def custom_like(pattern: Any, value: Any) -> int:
-    """Função SQLite customizada LIKE que ignora acentos (Unicode NFD) e maiúsculas/minúsculas."""
+def custom_like(pattern: Any, value: Any, escape: Any = None) -> int:
+    """Função SQLite customizada LIKE que ignora acentos (Unicode NFD) e maiúsculas/minúsculas.
+
+    Registrada com 2 argumentos (`x LIKE y`) e 3 argumentos (`x LIKE y ESCAPE z`).
+    """
     if pattern is None or value is None:
         return 0
+    esc = None
+    if escape is not None:
+        esc = strip_accents(escape)
+        if len(esc) != 1:
+            raise ValueError("ESCAPE expression must be a single character")
     p = strip_accents(pattern)
     v = strip_accents(value)
-    rx = _LIKE_CACHE.get(p)
+    rx = _LIKE_CACHE.get((p, esc))
     if rx is None:
         if len(_LIKE_CACHE) > 1000:
             _LIKE_CACHE.clear()
-        rx = _LIKE_CACHE[p] = _like_to_regex(p)
+        rx = _LIKE_CACHE[(p, esc)] = _like_to_regex(p, esc)
     return 1 if rx.match(v) else 0
 
 
@@ -336,6 +349,7 @@ def connect_dados(
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.execute("PRAGMA query_only = ON;")
     conn.create_function("like", 2, custom_like)
+    conn.create_function("like", 3, custom_like)
     conn.set_authorizer(_authorizer)
 
     return DadosConnection(raw_conn=conn, policy=policy)

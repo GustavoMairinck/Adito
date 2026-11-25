@@ -613,6 +613,14 @@ class ExplorerTests(AppDbTestCase):
         self.assertEqual(self.rows(search="' OR 1=1 --").data['total'], 0)
         self.assertEqual(self.rows(search='restrito').data['total'], 0)
 
+    def test_search_ignores_accents_and_case_with_literal_wildcards(self):
+        # A busca usa LIKE ... ESCAPE (3 argumentos); deve seguir sem acento e sem caixa.
+        self.assertEqual(self.rows(search='educacao').data['total'], 17)
+        self.assertEqual(self.rows(search='COMPUTACAO').data['total'], 16)
+        self.assertEqual(self.rows(search='EDUCAÇÃO').data['total'], 17)
+        self.assertEqual(self.rows(search='100%_ifes').data['total'], 1)
+        self.assertEqual(self.rows(search='100_%').data['total'], 0)
+
     def test_filters_and_distribution_use_all_matching_rows(self):
         response = self.rows(filter_column='ano', filter_value='2026', group_by='area')
         self.assertEqual(response.status_code, 200)
