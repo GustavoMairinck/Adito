@@ -558,7 +558,9 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
-     }
+     },
+     "chart_type": null,
+     "chart_source": null
     }
    }
   ]
@@ -619,7 +621,9 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
-     }
+     },
+     "chart_type": null,
+     "chart_source": null
     }
    }
   ]
@@ -686,7 +690,9 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
-     }
+     },
+     "chart_type": null,
+     "chart_source": null
     }
    }
   ]
@@ -784,7 +790,9 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
-       }
+       },
+       "chart_type": null,
+       "chart_source": null
       },
       "created_at": "<data>"
      }
@@ -824,7 +832,9 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
-       }
+       },
+       "chart_type": null,
+       "chart_source": null
       },
       "created_at": "<data>"
      },
@@ -853,7 +863,9 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
-       }
+       },
+       "chart_type": null,
+       "chart_source": null
       },
       "created_at": "<data>"
      }
@@ -1009,7 +1021,9 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
-       }
+       },
+       "chart_type": null,
+       "chart_source": null
       },
       "created_at": "<data>"
      }

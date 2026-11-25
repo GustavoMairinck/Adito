@@ -11,6 +11,7 @@ pergunta ─► detect_injection ──sim──► guard_node (resposta fixa "b
             roteador (LLM) ─► intents:
                ├─ blocked / out_of_scope ─► guard_node (resposta fixa, sem LLM)
                ├─ bi_agent ─► uma execução por ferramenta (instruções numeradas) ─► resposta escrita com as linhas
+               │                └─► agente de painéis (rpc/chat.py) ─► tipo de gráfico da resposta
                └─ conversational ─► agente de conversa (histórico limitado)
 ```
 
@@ -41,6 +42,16 @@ pergunta ─► detect_injection ──sim──► guard_node (resposta fixa "b
 - A SQL roda primeiro; depois um LLM escreve a resposta (registrada no Langfuse como `bi_answer_from_rows`) com a pergunta e até `llm_row_limit` linhas do contexto (`views.json`: 50 em `pesquisa-extensao-ifes`; 20 se não definido).
 - Erro de execução vira `fallback`, não tabela.
 - O corretor de SQL recebe a pergunta, o esquema e as regras do contexto.
+
+## Gráfico da resposta (agente de painéis)
+
+Código em `agents/dashboard_agent/`, chamado por `rpc/chat.py` antes de gravar a resposta. O tipo vai no evento `result` e nos metadados da mensagem (`chart_type`, `chart_source`), então reabrir a conversa mantém o gráfico. Os tipos são os do Meu painel: `bar`, `horizontal_bar`, `line`, `area` e `pie`.
+
+1. **pedido**: a pergunta diz o tipo ("em pizza", "gráfico de linhas", "barras horizontais"). Regex sem LLM, que ignora "grande área" e "linha de pesquisa".
+2. **regra**: o formato dos dados decide, sem LLM. Série no tempo com 3 linhas ou mais vira linhas; rótulo com mais de 20 caracteres ou mais de 12 categorias deita as barras; o resto vira barras.
+3. **agente**: só quando há uma categoria (que não é tempo) e uma série sem negativos, com 3 a 8 linhas. Nesse caso barras, barras deitadas e pizza fazem sentido e a intenção da pergunta decide. É uma chamada curta ao LLM (Langfuse: `dashboard_chart_type`), com a pergunta e um resumo (nomes das colunas, número de categorias, tamanho do maior rótulo e fatia da maior categoria), nunca as linhas. Se falhar ou devolver um tipo inválido, vale a regra.
+
+No front, a escolha do usuário vence a sugestão, e a sugestão vence a regra do próprio front. A pizza sugerida para dados que não cabem em pizza abre em barras. Ao fixar no Meu painel, o widget nasce com o tipo que está na tela.
 
 ## Removido
 

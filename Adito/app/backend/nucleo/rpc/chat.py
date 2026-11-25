@@ -13,6 +13,8 @@ from langchain_core.messages import HumanMessage
 from agents.bi_agent.agent import BIAgentCancelled, execute_query, reset_cancel_event, set_cancel_event
 from agents.bi_agent.tool import local_tools
 from agents.config import langfuse_callbacks
+from agents.dashboard_agent import choose_chart_with_agent, plan_chart
+from agents.dashboard_agent.agent import is_chat_chart_type
 from agents.orchestrator.graph import get_graph
 from core import db
 from core.contexts import pick_contexto
@@ -157,6 +159,9 @@ def persist_assistant_response(
         "error": result.get("error"),
         "rewrite": _json_safe(result.get("rewrite") or {}),
         "field_formats": _json_safe(result.get("field_formats") or {}),
+        # Tipo de gráfico escolhido pelo agente de painéis; reabrir a conversa mantém a escolha.
+        "chart_type": result.get("chart_type") if is_chat_chart_type(result.get("chart_type")) else None,
+        "chart_source": result.get("chart_source"),
     }
 
     with db.transaction():
@@ -199,7 +204,25 @@ def persist_assistant_response(
         "related_attributes": metadata["related_attributes"],
         "rewrite": metadata["rewrite"],
         "field_formats": metadata["field_formats"],
+        "chart_type": metadata["chart_type"],
+        "chart_source": metadata["chart_source"],
     }
+
+
+async def add_chart_suggestion(result: dict, question: str, emit, cancel_event: threading.Event) -> dict:
+    """Pede ao agente de painéis o tipo de gráfico. O LLM só é chamado nos casos ambíguos."""
+    if result.get("type") == "fallback":
+        return result
+    plan = plan_chart(question, result.get("data") or [])
+    suggestion = plan.suggestion()
+    if plan.needs_agent:
+        await emit("status", {"status": "processing", "step": "dashboard_agent", "message": "Escolhendo o gráfico..."})
+        suggestion = await asyncio.to_thread(choose_chart_with_agent, question, plan)
+        if cancel_event.is_set():
+            raise asyncio.CancelledError()
+    if suggestion.chart_type:
+        log_info("chat", f"gráfico={suggestion.chart_type} fonte={suggestion.source}")
+    return {**result, "chart_type": suggestion.chart_type, "chart_source": suggestion.source}
 
 
 _STATUS = {
@@ -303,6 +326,7 @@ async def chat_stream(params, emit):
                             if res.get("data") or res.get("sql") or (
                                 res.get("answer") and res["answer"] != "Não consegui formular uma resposta."
                             ):
+                                res = await add_chart_suggestion(res, question, emit, cancel_event)
                                 payload = await asyncio.to_thread(
                                     persist_assistant_response, conversation, user_message, question, res, cancel_event,
                                 )
@@ -318,7 +342,7 @@ async def chat_stream(params, emit):
             raise ValueError("Grafo finalizou sem estado.")
 
         if not has_emitted_result:
-            result = build_final_result(final_state)
+            result = await add_chart_suggestion(build_final_result(final_state), question, emit, cancel_event)
             payload = await asyncio.to_thread(
                 persist_assistant_response, conversation, user_message, question, result, cancel_event,
             )

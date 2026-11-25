@@ -1,6 +1,7 @@
 import { call } from "@/common/api/core";
 import { buildChart, cancelChatStream, isChatConversationLoading, isScalarResultData } from "@/modules/chat/composables/useChatApi";
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
+import { isChatChartType } from "@/modules/chat/utils/chartType";
 import { computed, ref } from "vue";
 
 const STORAGE_PREFIX = "adito_chat_history";
@@ -57,6 +58,7 @@ function mapBackendMessage(message: any): ChatMessage {
     suggestions: metadata.suggestions,
     related_attributes: metadata.related_attributes,
     fieldFormats: metadata.field_formats,
+    suggestedChartType: isChatChartType(metadata.chart_type) ? metadata.chart_type : undefined,
   };
 }
 
