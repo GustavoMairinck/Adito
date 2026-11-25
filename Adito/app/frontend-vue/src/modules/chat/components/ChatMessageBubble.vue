@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
-import { ArrowLeftRight, Code, Database, Lightbulb, Pin, Copy, Check, Minimize2, Square } from 'lucide-vue-next'
+import {
+  AreaChart,
+  BarChart2,
+  BarChartHorizontal,
+  Check,
+  Code,
+  Copy,
+  Database,
+  Lightbulb,
+  Minimize2,
+  PieChart,
+  Pin,
+  Square,
+  TrendingUp
+} from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ApexOptions } from 'apexcharts'
 import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
+import { apexChartType, CHAT_CHART_TYPES, canUsePie, defaultChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
 
 const props = defineProps<{
   message: ChatMessage
@@ -178,13 +193,55 @@ const displayedRows = computed(() => {
 })
 
 const showOriginalChart = ref(false)
-const isChartAxisSwapped = ref(false)
 
-const toggleChartAxes = () => {
-  isChartAxisSwapped.value = !isChartAxisSwapped.value
+const chartTypeIcons = {
+  bar: BarChart2,
+  horizontal_bar: BarChartHorizontal,
+  line: TrendingUp,
+  area: AreaChart,
+  pie: PieChart
+} as const
+
+// Tipo escolhido pelo usuário; até ele escolher, o tipo segue o formato dos dados
+// (as linhas de uma conversa antiga só chegam depois de abrir a conversa).
+const selectedChartType = ref<ChatChartType | null>(props.message.chartType ?? null)
+const isPieAvailable = computed(() => canUsePie(props.message.chart?.series))
+const pieUnavailableReason = 'Pizza só funciona com uma única série de valores, sem números negativos'
+
+const chartType = computed<ChatChartType>(() => {
+  const type = selectedChartType.value ?? defaultChartType(props.message.table)
+  return type === 'pie' && !isPieAvailable.value ? 'bar' : type
+})
+
+const isChartAxisSwapped = computed(() => chartType.value === 'horizontal_bar')
+const isPieChart = computed(() => chartType.value === 'pie')
+const isLineLikeChart = computed(() => chartType.value === 'line' || chartType.value === 'area')
+
+const selectChartType = (type: ChatChartType) => {
+  if (type === 'pie' && !isPieAvailable.value) return
+  selectedChartType.value = type
 }
 
-const chartOrientationKey = computed(() => (isChartAxisSwapped.value ? 'horizontal' : 'vertical'))
+const chartTypeTitle = (type: ChatChartType, label: string) => {
+  if (type === 'pie' && !isPieAvailable.value) return pieUnavailableReason
+  return `Mostrar em ${label.toLowerCase()}`
+}
+
+const othersHint = computed(() => {
+  if (isPieChart.value) return 'na fatia'
+  if (isLineLikeChart.value) return 'no ponto'
+  return chartType.value === 'horizontal_bar' ? 'na barra' : 'na coluna'
+})
+
+const pinMessage = () => {
+  emit('pin', { ...props.message, chartType: chartType.value })
+}
+
+const expandOthersIfClicked = (label: unknown) => {
+  if (label === 'Outros') {
+    showOriginalChart.value = true
+  }
+}
 
 const hasOthersOption = computed(() => {
   if (!props.message.chart) return false
@@ -328,42 +385,112 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   scrollObserver?.disconnect()
 })
+const chartColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
+
+const chartTooltipHtml = (label: string, rows: Array<{ name: string; value: number; color: string }>) => {
+  const background = isDark.value ? '#1A221D' : '#ffffff'
+  const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
+  const textColor = isDark.value ? '#F0F4F1' : '#241920'
+  const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+
+  const seriesRows = rows
+    .map(({ name, value, color }) => `
+              <div class="flex items-center justify-between gap-4 mt-1.5">
+                <div class="flex items-center gap-1.5">
+                  <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0;"></span>
+                  <span style="color:${muted};" class="text-xs font-medium">${name}</span>
+                </div>
+                <span class="font-bold text-sm" style="color:${color}">${formatNumber(value)}</span>
+              </div>
+            `)
+    .join('')
+
+  return `
+          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
+            <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">Categoria</div>
+            <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
+            ${seriesRows}
+          </div>
+        `
+}
+
 const chartOptions = computed<ApexOptions>(() => {
   const categories = displayedChart.value?.categories || []
   const isHorizontal = isChartAxisSwapped.value
   const seriesCount = displayedChart.value?.series.length || 0
+  const labelColor = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+  const baseChart = {
+    type: apexChartType(chartType.value),
+    toolbar: { show: false },
+    background: 'transparent',
+    animations: {
+      enabled: true,
+      easing: 'easeinout',
+      speed: 700
+    }
+  }
+
+  // Pizza: série plana, uma fatia por categoria, com legenda para dar nome às fatias.
+  if (isPieChart.value) {
+    const seriesName = chartSeries.value[0]?.name || 'Total'
+    return {
+      chart: {
+        ...baseChart,
+        events: {
+          dataPointSelection: (_event: any, _chartContext: any, config?: any) => {
+            expandOthersIfClicked(categories[config?.dataPointIndex ?? -1])
+          },
+          legendClick: (_chartContext: any, seriesIndex?: number) => {
+            expandOthersIfClicked(categories[seriesIndex ?? -1])
+          }
+        }
+      },
+      labels: categories,
+      dataLabels: {
+        enabled: true,
+        formatter: (value: number) => `${fmt(Number(value), 1)}%`,
+        style: { fontSize: '11px', fontWeight: 600 },
+        dropShadow: { enabled: false }
+      },
+      stroke: {
+        width: 2,
+        colors: [isDark.value ? '#1A221D' : '#ffffff']
+      },
+      tooltip: {
+        enabled: true,
+        theme: isDark.value ? 'dark' : 'light',
+        custom: ({ series, seriesIndex, w }: any) => chartTooltipHtml(w.globals.labels[seriesIndex], [
+          { name: seriesName, value: series[seriesIndex], color: w.globals.colors[seriesIndex] }
+        ])
+      },
+      legend: {
+        show: true,
+        position: 'bottom',
+        horizontalAlign: 'center',
+        fontSize: '12px',
+        labels: { colors: labelColor }
+      },
+      colors: chartColors
+    }
+  }
+
+  const isBar = !isLineLikeChart.value
 
   return {
     chart: {
-      type: 'bar',
-      toolbar: { show: false },
-      background: 'transparent',
-      animations: {
-        enabled: true,
-        easing: 'easeinout',
-        speed: 700
-      },
+      ...baseChart,
       events: {
         dataPointSelection: (_event: any, _chartContext: any, config?: any) => {
-          const label = config?.w?.globals?.labels?.[config.dataPointIndex]
-          if (label === 'Outros') {
-            showOriginalChart.value = true
-          }
+          expandOthersIfClicked(config?.w?.globals?.labels?.[config.dataPointIndex])
         },
         click: (_event: any, _chartContext: any, config?: any) => {
           if (config && config.dataPointIndex !== undefined && config.dataPointIndex !== -1) {
-            const label = config?.w?.globals?.labels?.[config.dataPointIndex]
-            if (label === 'Outros') {
-              showOriginalChart.value = true
-            }
+            expandOthersIfClicked(config?.w?.globals?.labels?.[config.dataPointIndex])
           }
         },
         xAxisLabelClick: (_event: any, _chartContext: any, config?: any) => {
           if (config && config.labelIndex !== undefined) {
-            const label = config?.w?.globals?.labels?.[config.labelIndex] || config?.config?.xaxis?.categories?.[config.labelIndex]
-            if (label === 'Outros') {
-              showOriginalChart.value = true
-            }
+            expandOthersIfClicked(config?.w?.globals?.labels?.[config.labelIndex] || config?.config?.xaxis?.categories?.[config.labelIndex])
           }
         }
       }
@@ -383,7 +510,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '11px',
               fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+              colors: labelColor
             }
           },
           axisBorder: { show: false },
@@ -391,6 +518,10 @@ const chartOptions = computed<ApexOptions>(() => {
         }
       : {
           categories,
+          tooltip: { enabled: false },
+          // Linha e área com os pontos no meio de cada categoria, como as colunas: assim o
+          // rótulo da primeira e da última categoria não fica cortado na borda.
+          tickPlacement: 'between',
           labels: {
             show: categories.length <= 50,
             rotate: -45,
@@ -401,7 +532,7 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '10px',
               fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+              colors: labelColor
             }
           },
           axisBorder: { show: false },
@@ -414,17 +545,21 @@ const chartOptions = computed<ApexOptions>(() => {
             style: {
               fontSize: '10px',
               fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+              colors: labelColor
             }
           }
         }
       : {
+          // Área começa do zero quando não há negativos, para o tamanho da área não enganar.
+          min: chartType.value === 'area' && chartSeries.value.every(serie => serie.data.every(value => Number(value) >= 0))
+            ? 0
+            : undefined,
           labels: {
             formatter: (value: number) => formatNumber(value),
             style: {
               fontSize: '11px',
               fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+              colors: labelColor
             }
           }
         },
@@ -433,48 +568,33 @@ const chartOptions = computed<ApexOptions>(() => {
       shared: true,
       intersect: false,
       theme: isDark.value ? 'dark' : 'light',
-      custom: ({ series, dataPointIndex, w }: any) => {
-        const label = w.globals.labels[dataPointIndex]
-        const background = isDark.value ? '#1A221D' : '#ffffff'
-        const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
-        const textColor = isDark.value ? '#F0F4F1' : '#241920'
-        const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-        const seriesColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
-
-        const seriesRows = series
-          .map((serieData: number[], i: number) => {
-            const value = serieData[dataPointIndex]
-            const name = w.globals.seriesNames[i]
-            const color = seriesColors[i % seriesColors.length]
-            return `
-              <div class="flex items-center justify-between gap-4 mt-1.5">
-                <div class="flex items-center gap-1.5">
-                  <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0;"></span>
-                  <span style="color:${muted};" class="text-xs font-medium">${name}</span>
-                </div>
-                <span class="font-bold text-sm" style="color:${color}">${formatNumber(value)}</span>
-              </div>
-            `
-          })
-          .join('')
-
-        return `
-          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
-            <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">Categoria</div>
-            <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
-            ${seriesRows}
-          </div>
-        `
-      }
+      custom: ({ series, dataPointIndex, w }: any) => chartTooltipHtml(
+        w.globals.labels[dataPointIndex],
+        series.map((serieData: number[], i: number) => ({
+          name: w.globals.seriesNames[i],
+          value: serieData[dataPointIndex],
+          color: chartColors[i % chartColors.length]
+        }))
+      )
     },
+    // Linha e área: traço suave com marcadores nos pontos.
+    ...(isLineLikeChart.value
+      ? {
+          stroke: { curve: 'smooth' as const, width: 3 },
+          markers: { size: 4, strokeWidth: 0, hover: { size: 6 } },
+          fill: chartType.value === 'area'
+            ? { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.55, opacityTo: 0.12, stops: [0, 90, 100] } }
+            : { type: 'solid' }
+        }
+      : {}),
     plotOptions: {
       bar: {
         borderRadius: 6,
         borderRadiusApplication: 'end',
-        columnWidth: isHorizontal ? '58%' : '58%',
+        columnWidth: '58%',
         barHeight: isHorizontal ? '58%' : undefined,
         horizontal: isHorizontal,
-        distributed: seriesCount <= 1
+        distributed: isBar && seriesCount <= 1
       }
     },
     legend: {
@@ -483,10 +603,10 @@ const chartOptions = computed<ApexOptions>(() => {
       horizontalAlign: 'left',
       fontSize: '12px',
       labels: {
-        colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
+        colors: labelColor
       }
     },
-    colors: ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
+    colors: chartColors
   }
 })
 // Filtra séries com escalas incompatíveis para evitar gráficos ilegíveis.
@@ -503,6 +623,12 @@ const chartSeries = computed(() => {
 
   const threshold = overallMax * 0.001
   return series.filter((_, i) => seriesMaxes[i] >= threshold)
+})
+
+// A pizza recebe uma lista plana de números (uma fatia por categoria).
+const apexSeries = computed(() => {
+  if (isPieChart.value) return (chartSeries.value[0]?.data || []).map(value => Number(value) || 0)
+  return chartSeries.value
 })
 </script>
 
@@ -709,7 +835,7 @@ const chartSeries = computed(() => {
           <template v-else>
             <span class="text-text-muted font-medium flex items-center gap-2">
               <span class="text-base leading-none">💡</span>
-              <span>Categorias pequenas agrupadas. Clique na coluna ou na palavra <strong>'Outros'</strong> no gráfico abaixo para expandir.</span>
+              <span>Categorias pequenas agrupadas. Clique {{ othersHint }} ou na palavra <strong>'Outros'</strong> no gráfico abaixo para expandir.</span>
             </span>
           </template>
         </div>
@@ -732,22 +858,39 @@ const chartSeries = computed(() => {
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
           class="mt-4 flex justify-end px-1"
         >
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
-            :title="isChartAxisSwapped ? 'Restaurar o eixo original' : 'Inverter os eixos X e Y'"
-            @click="toggleChartAxes"
+          <div
+            class="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-elevated/45 p-1 dark:border-white/[0.06] dark:bg-white/5"
+            role="group"
+            aria-label="Tipo de gráfico"
           >
-            <ArrowLeftRight class="w-4 h-4" />
-            {{ isChartAxisSwapped ? 'Restaurar eixos' : 'Inverter eixos' }}
-          </button>
+            <button
+              v-for="option in CHAT_CHART_TYPES"
+              :key="option.value"
+              type="button"
+              :class="[
+                'rounded-md p-1.5 transition-all',
+                chartType === option.value
+                  ? 'border border-border-subtle bg-surface text-primary shadow-premium dark:bg-slate-700 dark:text-white'
+                  : 'border border-transparent text-text-secondary hover:bg-surface/60 hover:text-primary dark:hover:text-white',
+                option.value === 'pie' && !isPieAvailable ? 'cursor-not-allowed opacity-40 hover:bg-transparent hover:text-text-secondary' : 'cursor-pointer'
+              ]"
+              :title="chartTypeTitle(option.value, option.label)"
+              :aria-label="option.label"
+              :aria-pressed="chartType === option.value"
+              :aria-disabled="option.value === 'pie' && !isPieAvailable ? 'true' : undefined"
+              :data-chart-type="option.value"
+              @click="selectChartType(option.value)"
+            >
+              <component :is="chartTypeIcons[option.value]" class="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
           class="mt-4 h-[320px] rounded-lg border border-border-subtle bg-surface-elevated/50 p-3 dark:border-white/[0.06] dark:bg-surface-elevated md:h-[360px] md:p-4"
         >
-          <VueApexCharts :key="chartOrientationKey" type="bar" height="100%" :options="chartOptions" :series="chartSeries" />
+          <VueApexCharts :key="`chart-${chartType}`" :type="apexChartType(chartType)" height="100%" :options="chartOptions" :series="apexSeries" />
         </div>
 
         <div
@@ -812,7 +955,7 @@ const chartSeries = computed(() => {
           <button
             v-if="hasRenderableTable"
             class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
-            @click="emit('pin', message)"
+            @click="pinMessage"
           >
             <Pin class="w-4 h-4" />
             Fixar no Dashboard

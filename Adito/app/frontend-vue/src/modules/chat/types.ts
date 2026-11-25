@@ -1,3 +1,5 @@
+import type { ChatChartType } from '@/modules/chat/utils/chartType'
+
 export interface RelatedAttribute {
   coluna: string
   descricao: string
@@ -30,6 +32,8 @@ export interface ChatMessage {
   table?: Array<Record<string, any>>
   fieldFormats?: Record<string, FieldFormat>
   chart?: ChatChart | null
+  // Tipo de gráfico escolhido no chat; vai junto ao fixar a resposta no Meu painel.
+  chartType?: ChatChartType
   isScalarResult?: boolean
   isLoading?: boolean
   loadingStatus?: string
