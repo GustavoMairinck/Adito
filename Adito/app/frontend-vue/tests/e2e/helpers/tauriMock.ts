@@ -25,6 +25,10 @@ export interface TauriMockOptions {
   dadosNovos?: boolean
   /** Primeiro uso: ainda não há dados.db baixado. */
   semDados?: boolean
+  /** Versão nova do executável publicada (ex.: '0.2.0'). */
+  appNovaVersao?: string
+  /** Pré-ativa o modo opt-in de atualização automática no localStorage antes do boot. */
+  autoUpdateEnabled?: boolean
 }
 
 /**
@@ -43,9 +47,14 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     role: options.role ?? 'admin',
     dadosNovos: options.dadosNovos ?? false,
     semDados: options.semDados ?? false,
+    appNovaVersao: options.appNovaVersao ?? null,
+    autoUpdateEnabled: options.autoUpdateEnabled ?? false,
   }
 
   await page.addInitScript((cfg) => {
+    if (cfg.autoUpdateEnabled) {
+      localStorage.setItem('adito:auto_update', 'true')
+    }
     const callbacks = new Map<number, (raw: unknown) => void>()
     let nextCbId = 1
     let llmConfigured = cfg.llmConfigured
@@ -53,6 +62,16 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let activeModel: string | null = null
     let activeBaseUrl: string | null = null
     let dadosInstalados = !cfg.semDados
+    let dadosVersaoAtual = cfg.semDados ? null : '2026-11-01'
+    let dadosNovosPendentes = cfg.dadosNovos
+    const updaterTelemetry = {
+      checks: 0,
+      downloads: 0,
+      installs: 0,
+      relaunches: 0,
+      dadosInstalls: 0,
+    }
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_UPDATER__ = updaterTelemetry
 
     const PROVIDERS = [
       { id: 'gemini', label: 'Gemini', protocol: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', default_model: 'gemini-3.5-flash-lite', supports_embeddings: true, default_embedding_model: 'gemini-embedding-2', requires_key: true, allow_custom_base_url: false },
@@ -210,11 +229,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return CONTEXTOS
         case 'dashboard.kpis': {
           const ano = String(params.ano || '')
+          const atualizado = dadosVersaoAtual === '2026-11-22'
           return {
-            total_investido: ano === '2023' ? 'R$ 84.000,00' : 'R$ 320.000,00',
-            projetos_ativos: ano === '2023' ? 48 : 236,
+            total_investido: ano === '2023' ? 'R$ 84.000,00' : atualizado ? 'R$ 410.000,00' : 'R$ 320.000,00',
+            projetos_ativos: ano === '2023' ? 48 : atualizado ? 310 : 236,
             pagamentos_ano_vigente: 'R$ 95.000,00',
-            equipe_alocada: ano === '2023' ? 24 : 89,
+            equipe_alocada: ano === '2023' ? 24 : atualizado ? 105 : 89,
           }
         }
         case 'dashboard.top_projects':
@@ -412,19 +432,64 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         // Distribuição: por padrão os dados já estão instalados e nada novo foi publicado.
         if (cmd === 'dados_status') {
           return dadosInstalados
-            ? { instalado: true, versao: '2026-11-01', desenvolvimento: false, chave_configurada: true }
+            ? { instalado: true, versao: dadosVersaoAtual || '2026-11-01', desenvolvimento: false, chave_configurada: true }
             : { instalado: false, versao: null, desenvolvimento: false, chave_configurada: false }
         }
         if (cmd === 'dados_verificar') {
-          const novos = cfg.dadosNovos || !dadosInstalados
-          return { versao: novos ? '2026-11-22' : '2026-11-01', tamanho: 8000000, atualizacao: novos, precisa_chave: !dadosInstalados }
+          const novos = dadosNovosPendentes || !dadosInstalados
+          return { versao: novos ? '2026-11-22' : (dadosVersaoAtual || '2026-11-01'), tamanho: 8000000, atualizacao: novos, precisa_chave: !dadosInstalados }
         }
         if (cmd === 'dados_instalar') {
           if (!dadosInstalados && args.chave !== 'a'.repeat(64)) {
             throw 'Essa chave não abre esta versão dos dados.'
           }
           dadosInstalados = true
+          dadosVersaoAtual = '2026-11-22'
+          dadosNovosPendentes = false
+          updaterTelemetry.dadosInstalls += 1
           return '2026-11-22'
+        }
+        // Plugins oficiais de atualização (tauri-plugin-updater e tauri-plugin-process).
+        if (cmd === 'plugin:updater|check') {
+          updaterTelemetry.checks += 1
+          if (!cfg.appNovaVersao) return null
+          return {
+            rid: 1001,
+            currentVersion: '0.1.0',
+            version: cfg.appNovaVersao,
+            date: '2026-11-25T15:00:00Z',
+            body: 'Nova versão do Adito',
+            rawJson: {},
+          }
+        }
+        if (cmd === 'plugin:updater|download') {
+          updaterTelemetry.downloads += 1
+          sendChannel(args.onEvent, [
+            { msg: { event: 'Started', data: { contentLength: 100 } }, delayMs: 0 },
+            { msg: { event: 'Progress', data: { chunkLength: 100 } }, delayMs: 5 },
+            { msg: { event: 'Finished' }, delayMs: 10 },
+          ])
+          return 2001
+        }
+        if (cmd === 'plugin:updater|install') {
+          updaterTelemetry.installs += 1
+          return undefined
+        }
+        if (cmd === 'plugin:updater|download_and_install') {
+          updaterTelemetry.downloads += 1
+          updaterTelemetry.installs += 1
+          sendChannel(args.onEvent, [
+            { msg: { event: 'Started', data: { contentLength: 100 } }, delayMs: 0 },
+            { msg: { event: 'Finished' }, delayMs: 5 },
+          ])
+          return undefined
+        }
+        if (cmd === 'plugin:resources|close') {
+          return undefined
+        }
+        if (cmd === 'plugin:process|restart') {
+          updaterTelemetry.relaunches += 1
+          return undefined
         }
         if (cmd === 'core_call') {
           return handleRpc(String(args.method), (args.params as Record<string, unknown>) || {})

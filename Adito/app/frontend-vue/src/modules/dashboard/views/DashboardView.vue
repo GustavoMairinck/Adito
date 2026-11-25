@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   DollarSign,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next'
 import VueApexCharts from 'vue3-apexcharts'
 
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import { useDashboardData } from '../composables/useDashboardData'
 import AISearchBar from '../components/AISearchBar.vue'
 import FilterBar from '../components/FilterBar.vue'
@@ -26,6 +27,11 @@ const {
   updateFilters,
   toggleFilter
 } = useDashboardData()
+
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq > 0) fetchData()
+})
 
 const isDark = ref(false)
 onMounted(() => {
