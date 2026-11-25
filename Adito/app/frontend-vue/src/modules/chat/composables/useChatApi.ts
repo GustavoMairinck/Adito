@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { call, stream } from '@/common/api/core'
 import type { ChatMessage } from '@/modules/chat/types'
 import { chartKeys } from '@/common/utils/chartKeys'
@@ -79,8 +79,52 @@ function mapResponseToMessage(data: any): ChatMessage {
   }
 }
 
+const activeControllers = shallowRef<Record<string, AbortController>>({})
+let ephemeralStreamSeq = 0
+
+function isCanceledError(error: any, signal: AbortSignal): boolean {
+  return (
+    signal.aborted
+    || error?.name === 'CanceledError'
+    || error?.status === 499
+  )
+}
+
+export function migrateChatStreamKey(oldId: string, newId: string): void {
+  if (!oldId || !newId || oldId === newId) return
+  const current = activeControllers.value[oldId]
+  if (!current) return
+  const next = { ...activeControllers.value }
+  delete next[oldId]
+  next[newId] = current
+  activeControllers.value = next
+}
+
+export function cancelChatStream(conversationId?: string | null): boolean {
+  if (!conversationId) return false
+  const controller = activeControllers.value[conversationId]
+  if (!controller) return false
+  const next = { ...activeControllers.value }
+  delete next[conversationId]
+  activeControllers.value = next
+  controller.abort()
+  return true
+}
+
+export function isChatConversationLoading(conversationId?: string | null): boolean {
+  return !!(conversationId && activeControllers.value[conversationId])
+}
+
+export function resetChatApiForTests(): void {
+  activeControllers.value = {}
+  ephemeralStreamSeq = 0
+}
+
 export function useChatApi() {
-  const isLoading = ref(false)
+  const activeConversationIds = computed(() => Object.keys(activeControllers.value))
+  const isLoading = computed(() => activeConversationIds.value.length > 0)
+
+  const isConversationLoading = isChatConversationLoading
 
   const checkHealth = async (): Promise<boolean> => {
     try {
@@ -97,7 +141,10 @@ export function useChatApi() {
     handlers: StreamHandlers = {},
     contextoId?: string | null
   ): Promise<ChatMessage> => {
-    isLoading.value = true
+    let streamKey = conversationId || `__ephemeral_${++ephemeralStreamSeq}`
+    const controller = new AbortController()
+    activeControllers.value = { ...activeControllers.value, [streamKey]: controller }
+
     try {
       const payload: Record<string, any> = { question: questionText }
       if (conversationId) {
@@ -111,25 +158,49 @@ export function useChatApi() {
       let lastResult: ChatMessage | null = null
       let streamError: string | null = null
 
-      await stream('chat.stream', payload, (event, data) => {
-        // Depois de um erro, o resto do stream é ignorado (como no SSE).
-        if (streamError) return
-        if (event === 'token') {
-          handlers.onToken?.(data.text || '')
-        } else if (event === 'status') {
-          handlers.onStatus?.(data.message || 'Processando...', data)
-        } else if (event === 'error') {
-          streamError = data.message || 'erro desconhecido'
-        } else if (event === 'result') {
-          lastResult = mapResponseToMessage(data)
-          handlers.onResult?.(lastResult)
+      const maybeMigrateKey = (rawConversationId: unknown) => {
+        if (streamKey.startsWith('local-') && rawConversationId) {
+          const serverId = String(rawConversationId)
+          migrateChatStreamKey(streamKey, serverId)
+          streamKey = serverId
         }
-      })
+      }
+
+      await stream(
+        'chat.stream',
+        payload,
+        (event, data) => {
+          // Depois de um erro ou cancelamento, o resto do stream é ignorado.
+          if (streamError || controller.signal.aborted) return
+          if (event === 'token') {
+            handlers.onToken?.(data.text || '')
+          } else if (event === 'status') {
+            maybeMigrateKey(data?.conversation_id)
+            handlers.onStatus?.(data.message || 'Processando...', data)
+          } else if (event === 'error') {
+            streamError = data.message || 'erro desconhecido'
+          } else if (event === 'result') {
+            maybeMigrateKey(data?.conversation_id)
+            lastResult = mapResponseToMessage(data)
+            handlers.onResult?.(lastResult)
+          }
+        },
+        { signal: controller.signal },
+      )
       if (streamError) throw new Error(streamError)
 
       if (lastResult) return lastResult
       throw new Error('stream finalizado sem resultado')
     } catch (error: any) {
+      if (isCanceledError(error, controller.signal)) {
+        return {
+          id: `${Date.now() + 1}`,
+          type: 'ai',
+          text: '',
+          timestamp: new Date().toISOString(),
+          interrupted: true,
+        }
+      }
       return {
         id: `${Date.now() + 1}`,
         type: 'ai',
@@ -138,9 +209,21 @@ export function useChatApi() {
         error: true
       }
     } finally {
-      isLoading.value = false
+      if (activeControllers.value[streamKey] === controller) {
+        const next = { ...activeControllers.value }
+        delete next[streamKey]
+        activeControllers.value = next
+      }
     }
   }
 
-  return { askQuestionStream, checkHealth, isLoading }
+  return {
+    askQuestionStream,
+    cancelStream: cancelChatStream,
+    migrateStreamKey: migrateChatStreamKey,
+    checkHealth,
+    isLoading,
+    isConversationLoading,
+    activeConversationIds,
+  }
 }

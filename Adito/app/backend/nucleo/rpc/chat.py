@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 from langchain_core.messages import HumanMessage
 
-from agents.bi_agent.agent import execute_query
+from agents.bi_agent.agent import BIAgentCancelled, execute_query, reset_cancel_event, set_cancel_event
 from agents.bi_agent.tool import local_tools
 from agents.config import langfuse_callbacks
 from agents.orchestrator.graph import get_graph
@@ -128,7 +129,16 @@ def prepare_conversation(question: str, raw_conversation_id, contexto_id):
     return conversation, user_message
 
 
-def persist_assistant_response(conversation: Conversation, user_message: Message, question: str, result: dict) -> dict:
+def persist_assistant_response(
+    conversation: Conversation,
+    user_message: Message,
+    question: str,
+    result: dict,
+    cancel_event: threading.Event | None = None,
+) -> dict:
+    if cancel_event is not None and cancel_event.is_set():
+        raise BIAgentCancelled("Resposta cancelada antes de persistir.")
+
     answer = result.get("answer") or "Não consegui formular uma resposta."
     sql = result.get("sql")
     data = _json_safe(result.get("data") or [])
@@ -150,6 +160,10 @@ def persist_assistant_response(conversation: Conversation, user_message: Message
     }
 
     with db.transaction():
+        if cancel_event is not None and cancel_event.is_set():
+            raise BIAgentCancelled("Resposta cancelada antes da gravação.")
+        if Conversation.first("id = ?", [to_db_id(conversation.id)]) is None:
+            raise BIAgentCancelled("Conversa excluída antes da gravação.")
         assistant_msg = Message(
             conversation_id=conversation.id, role="assistant", content=answer, metadata=metadata,
         ).insert()
@@ -166,6 +180,9 @@ def persist_assistant_response(conversation: Conversation, user_message: Message
                 is_valid=valid,
                 error_message=metadata["error"] or (metadata["message"] if not valid else None),
             ).insert()
+        if cancel_event is not None and cancel_event.is_set():
+            # Força rollback da transação se $cancel chegou durante a gravação (BR01).
+            raise BIAgentCancelled("Resposta cancelada durante a gravação.")
 
     return {
         "conversation_id": conversation.id,
@@ -219,6 +236,9 @@ async def chat_stream(params, emit):
     from agents.orchestrator import graph as graph_module
     from agents.orchestrator import router
 
+    cancel_event = threading.Event()
+    cancel_token = set_cancel_event(cancel_event)
+
     try:
         await emit("status", {
             "status": "processing",
@@ -252,6 +272,8 @@ async def chat_stream(params, emit):
             async for mode, chunk in orchestrator_graph.astream(
                 initial_state, config=config, stream_mode=["updates", "messages"]
             ):
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError()
                 if mode == "messages":
                     message_chunk, metadata = chunk
                     if metadata.get("langgraph_node") == "conversational_agent" and message_chunk.text:
@@ -259,6 +281,8 @@ async def chat_stream(params, emit):
                     continue
 
                 for node_name, update in chunk.items():
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError()
                     updates_list = update if isinstance(update, list) else [update]
                     for upd in updates_list:
                         if isinstance(upd, dict):
@@ -272,23 +296,34 @@ async def chat_stream(params, emit):
                         for upd in updates_list:
                             if not isinstance(upd, dict) or has_emitted_result:
                                 continue
+                            if cancel_event.is_set():
+                                raise asyncio.CancelledError()
                             res = build_final_result(upd)
                             # Emite se houver algo útil para apresentar
                             if res.get("data") or res.get("sql") or (
                                 res.get("answer") and res["answer"] != "Não consegui formular uma resposta."
                             ):
                                 payload = await asyncio.to_thread(
-                                    persist_assistant_response, conversation, user_message, question, res,
+                                    persist_assistant_response, conversation, user_message, question, res, cancel_event,
                                 )
+                                if cancel_event.is_set():
+                                    raise asyncio.CancelledError()
                                 await emit("result", payload)
                                 has_emitted_result = True
+
+        if cancel_event.is_set():
+            raise asyncio.CancelledError()
 
         if not final_state:
             raise ValueError("Grafo finalizou sem estado.")
 
         if not has_emitted_result:
             result = build_final_result(final_state)
-            payload = await asyncio.to_thread(persist_assistant_response, conversation, user_message, question, result)
+            payload = await asyncio.to_thread(
+                persist_assistant_response, conversation, user_message, question, result, cancel_event,
+            )
+            if cancel_event.is_set():
+                raise asyncio.CancelledError()
             log_success(
                 "chat",
                 f"estado final fallback type={payload.get('type')!r} rows={len(payload.get('data') or [])} "
@@ -296,12 +331,16 @@ async def chat_stream(params, emit):
             )
             await emit("result", payload)
 
-    except asyncio.CancelledError:
-        raise
+    except (asyncio.CancelledError, BIAgentCancelled):
+        cancel_event.set()
+        log_info("chat", f"stream cancelado pelo usuário thread={thread_id}")
+        raise asyncio.CancelledError()
     except Exception as e:
         logger.exception("Erro no processamento do stream de chat")
         err_msg = str(e) or e.__class__.__name__
         await emit("error", {"message": llm_error_message(e) or f"Erro interno ao processar sua pergunta: {err_msg}"})
+    finally:
+        reset_cancel_event(cancel_token)
     return None
 
 

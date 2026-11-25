@@ -2027,5 +2027,353 @@ class MultiProvedorLLMTests(AppDbTestCase):
         self.assertEqual(ts_ids, py_ids)
 
 
+class ChatCancelamentoTests(AppDbTestCase):
+    """Testes de US-CHAT-01: cancelamento cooperativo no BIAgent, $cancel no Server e integridade do checkpointer."""
+
+    def test_bi_agent_interrompe_cooperativamente_antes_do_proximo_no(self) -> None:
+        import threading
+        from agents.bi_agent.agent import BIAgent, BIAgentCancelled
+
+        _, tenant = session.current()
+        ctx = Contexto(
+            tenant_id=tenant.id,
+            slug="ctx-cancel-bi",
+            name="Cancel BI",
+            views=[{"name": "vfact_projeto_pesquisa_resolved", "description": "Projetos"}],
+        ).insert()
+
+        cancel_event = threading.Event()
+        chamadas: list[str] = []
+
+        def fake_extractor(state, embedder=None):
+            chamadas.append("extractor")
+            # Simula o usuário clicando em "Parar" durante o primeiro nó
+            cancel_event.set()
+            return {"extracted_context": "ctx"}
+
+        def fake_resolver(state, llm_model=None, embedder=None):
+            chamadas.append("semantic_value_resolver")
+            return {}
+
+        def fake_generator(state, llm_model=None, dialect="sqlite"):
+            chamadas.append("generator")
+            return {"generated_sql": "SELECT 1"}
+
+        with (
+            patch("agents.bi_agent.graph.query_extractor", side_effect=fake_extractor),
+            patch("agents.bi_agent.graph.semantic_value_resolver", side_effect=fake_resolver),
+            patch("agents.bi_agent.graph.sql_generator", side_effect=fake_generator),
+            patch("agents.bi_agent.agent.build_system_prompt", return_value="sys"),
+        ):
+            agent = BIAgent(llm_model=object(), embedder=object())
+            with self.assertRaises(BIAgentCancelled):
+                agent.ask(
+                    question="Quantos projetos?",
+                    tenant_id=tenant.id,
+                    contexto_id=ctx.id,
+                    thread_id="t-cancel-1",
+                    execute=True,
+                    cancel_event=cancel_event,
+                )
+
+        self.assertEqual(chamadas, ["extractor"])
+
+    def test_chat_stream_cancel_retorna_499_nao_persiste_assistente_e_preserva_checkpointer(self) -> None:
+        import asyncio
+        import io
+        import json
+        from langchain_core.messages import AIMessage
+        from agents.bi_agent.agent import get_cancel_event
+        from agents.orchestrator.graph import close_graph
+        from agents.orchestrator.models import AgentCall, RouterDecision
+        from core.records import Message, QueryExecution
+        from rpc.server import Server
+
+        _, tenant = session.current()
+        ctx = Contexto(
+            tenant_id=tenant.id,
+            slug="ctx-cancel-stream",
+            name="Cancel Stream",
+            views=[{"name": "vfact_projeto_pesquisa_resolved", "description": "Projetos"}],
+        ).insert()
+
+        started = asyncio.Event()
+        release = asyncio.Event()
+        captured_cancel_events: list = []
+
+        class _StructuredFake:
+            async def ainvoke(self, messages):
+                return RouterDecision(calls=[AgentCall(intent="conversational", delegation_instruction="responder")])
+
+        class _ConversationalFake:
+            def __init__(self, should_block: bool):
+                self.should_block = should_block
+
+            async def ainvoke(self, messages):
+                ev = get_cancel_event()
+                captured_cancel_events.append(ev)
+                if self.should_block:
+                    started.set()
+                    await release.wait()
+                return AIMessage(content="Segunda resposta completa.")
+
+        block_flag = {"block": True}
+
+        def fake_get_chat_llm(*args, **kwargs):
+            return _ConversationalFake(block_flag["block"])
+
+        async def scenario():
+            out = io.StringIO()
+            server = Server(out)
+            with (
+                patch("rpc.chat.llm_configured", return_value=True),
+                patch("agents.orchestrator.router.get_chat_llm", side_effect=fake_get_chat_llm),
+                patch("agents.orchestrator.router.bind_structured_output", return_value=_StructuredFake()),
+                patch("agents.orchestrator.conversational_agent.get_chat_llm", side_effect=fake_get_chat_llm),
+            ):
+                # 1ª pergunta: começa e é cancelada via $cancel
+                server.handle({
+                    "id": 101,
+                    "method": "chat.stream",
+                    "params": {"question": "Primeira pergunta", "contexto_id": ctx.id},
+                })
+                await asyncio.wait_for(started.wait(), timeout=3)
+                server.handle({"method": "$cancel", "params": {"id": 101}})
+                await asyncio.gather(*list(server.tasks.values()), return_exceptions=True)
+
+                msgs_1 = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+                conv_id = next(
+                    m["data"]["conversation_id"]
+                    for m in msgs_1
+                    if m.get("id") == 101 and m.get("event") == "status" and "conversation_id" in (m.get("data") or {})
+                )
+                reply_1 = next(m for m in msgs_1 if m.get("id") == 101 and "ok" in m)
+                self.assertFalse(reply_1["ok"])
+                self.assertEqual(reply_1["error"]["status"], 499)
+                self.assertTrue(captured_cancel_events[0].is_set())
+
+                # Nenhuma resposta incompleta da IA nem QueryExecution foi gravada no app.db
+                saved_msgs = Message.select("conversation_id = ?", [db.to_db_id(conv_id)])
+                self.assertEqual([m.role for m in saved_msgs], ["user"])
+                self.assertEqual(QueryExecution.select(), [])
+
+                # 2ª pergunta na mesma conversa: checkpointer segue íntegro e conclui com sucesso
+                out.truncate(0)
+                out.seek(0)
+                block_flag["block"] = False
+                server.handle({
+                    "id": 102,
+                    "method": "chat.stream",
+                    "params": {"question": "Segunda pergunta", "conversation_id": conv_id},
+                })
+                await asyncio.gather(*list(server.tasks.values()), return_exceptions=True)
+
+                msgs_2 = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+                reply_2 = next(m for m in msgs_2 if m.get("id") == 102 and "ok" in m)
+                self.assertTrue(reply_2["ok"])
+                result_ev = next(m for m in msgs_2 if m.get("id") == 102 and m.get("event") == "result")
+                self.assertIn("Segunda resposta completa.", result_ev["data"]["text"])
+            await close_graph()
+
+        asyncio.run(scenario())
+
+    def test_cancelamento_em_uma_conversa_nao_afeta_outra_concorrente(self) -> None:
+        import asyncio
+        import io
+        import json
+        from langchain_core.messages import AIMessage
+        from agents.bi_agent.agent import get_cancel_event
+        from agents.orchestrator.graph import close_graph
+        from agents.orchestrator.models import AgentCall, RouterDecision
+        from rpc.server import Server
+
+        _, tenant = session.current()
+        ctx = Contexto(
+            tenant_id=tenant.id,
+            slug="ctx-cancel-parallel",
+            name="Cancel Parallel",
+            views=[{"name": "vfact_projeto_pesquisa_resolved", "description": "Projetos"}],
+        ).insert()
+
+        started_a = asyncio.Event()
+        started_b = asyncio.Event()
+        release_b = asyncio.Event()
+        events_by_prompt: dict[str, object] = {}
+
+        class _StructuredFake:
+            async def ainvoke(self, messages):
+                text = messages[-1].content
+                return RouterDecision(calls=[AgentCall(intent="conversational", delegation_instruction=text)])
+
+        class _ConversationalFake:
+            async def ainvoke(self, messages):
+                text = messages[-1].content
+                ev = get_cancel_event()
+                events_by_prompt[text] = ev
+                if "Pergunta A" in text:
+                    started_a.set()
+                    await asyncio.sleep(30)
+                else:
+                    started_b.set()
+                    await release_b.wait()
+                return AIMessage(content=f"OK: {text}")
+
+        async def scenario():
+            out = io.StringIO()
+            server = Server(out)
+            with (
+                patch("rpc.chat.llm_configured", return_value=True),
+                patch("agents.orchestrator.router.get_chat_llm", return_value=_ConversationalFake()),
+                patch("agents.orchestrator.router.bind_structured_output", return_value=_StructuredFake()),
+                patch("agents.orchestrator.conversational_agent.get_chat_llm", return_value=_ConversationalFake()),
+            ):
+                server.handle({"id": 201, "method": "chat.stream", "params": {"question": "Pergunta A", "contexto_id": ctx.id}})
+                server.handle({"id": 202, "method": "chat.stream", "params": {"question": "Pergunta B", "contexto_id": ctx.id}})
+                await asyncio.wait_for(asyncio.gather(started_a.wait(), started_b.wait()), timeout=3)
+
+                # Cancela apenas A; B deve seguir sem cancel_event sinalizado
+                server.handle({"method": "$cancel", "params": {"id": 201}})
+                await asyncio.sleep(0.05)
+                release_b.set()
+                await asyncio.gather(*list(server.tasks.values()), return_exceptions=True)
+
+                lines = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+                reply_a = next(m for m in lines if m.get("id") == 201 and "ok" in m)
+                reply_b = next(m for m in lines if m.get("id") == 202 and "ok" in m)
+                self.assertFalse(reply_a["ok"])
+                self.assertEqual(reply_a["error"]["status"], 499)
+                self.assertTrue(reply_b["ok"])
+                self.assertTrue(events_by_prompt["Pergunta A"].is_set())
+                self.assertFalse(events_by_prompt["Pergunta B"].is_set())
+            await close_graph()
+
+        asyncio.run(scenario())
+
+    def test_cancelamento_integrado_orchestrator_mcp_tool_node_ate_bi_agent(self) -> None:
+        import asyncio
+        import io
+        import json
+        import threading
+        from agents.bi_agent.agent import BIAgent
+        from agents.orchestrator.graph import close_graph
+        from agents.orchestrator.models import AgentCall, RouterDecision
+        from core.records import Message, QueryExecution
+        from rpc.server import Server
+
+        _, tenant = session.current()
+        ctx = Contexto(
+            tenant_id=tenant.id,
+            slug="ctx-cancel-e2e-bi",
+            name="Cancel E2E BI",
+            views=[{"name": "vfact_projeto_pesquisa_resolved", "description": "Projetos"}],
+        ).insert()
+
+        extractor_started = threading.Event()
+        allow_extractor_finish = threading.Event()
+        etapas_chamadas: list[str] = []
+
+        def fake_extractor(state, embedder=None):
+            etapas_chamadas.append("extractor")
+            extractor_started.set()
+            # Aguarda o $cancel disparar na task principal antes de concluir o 1º nó
+            allow_extractor_finish.wait(timeout=3)
+            return {"extracted_context": "ctx"}
+
+        def fake_resolver(state, llm_model=None, embedder=None):
+            etapas_chamadas.append("semantic_value_resolver")
+            return {}
+
+        def fake_generator(state, llm_model=None, dialect="sqlite"):
+            etapas_chamadas.append("generator")
+            return {"generated_sql": "SELECT 1"}
+
+        class _RouteToBI:
+            async def ainvoke(self, messages):
+                return RouterDecision(calls=[AgentCall(intent="bi_agent", delegation_instruction="Quantos projetos?")])
+
+        async def scenario():
+            out = io.StringIO()
+            server = Server(out)
+            with (
+                patch("rpc.chat.llm_configured", return_value=True),
+                patch("agents.orchestrator.router.get_chat_llm", return_value=object()),
+                patch("agents.orchestrator.router.bind_structured_output", return_value=_RouteToBI()),
+                patch("agents.bi_agent.graph.query_extractor", side_effect=fake_extractor),
+                patch("agents.bi_agent.graph.semantic_value_resolver", side_effect=fake_resolver),
+                patch("agents.bi_agent.graph.sql_generator", side_effect=fake_generator),
+                patch("agents.bi_agent.agent.build_system_prompt", return_value="sys"),
+            ):
+                fake_agent = BIAgent(llm_model=object(), embedder=object())
+                with patch("agents.bi_agent.tool.get_bi_agent", return_value=fake_agent):
+                    server.handle({
+                        "id": 301,
+                        "method": "chat.stream",
+                        "params": {"question": "Quantos projetos?", "contexto_id": ctx.id},
+                    })
+                    # Espera o BIAgent entrar de fato em query_extractor dentro do asyncio.to_thread
+                    await asyncio.to_thread(extractor_started.wait, 3)
+                    self.assertTrue(extractor_started.is_set())
+
+                    # Dispara $cancel via Server (aciona CancelledError em chat_stream → cancel_event.set())
+                    server.handle({"method": "$cancel", "params": {"id": 301}})
+                    await asyncio.sleep(0.05)
+                    allow_extractor_finish.set()
+                    await asyncio.gather(*list(server.tasks.values()), return_exceptions=True)
+
+            lines = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+            reply = next(m for m in lines if m.get("id") == 301 and "ok" in m)
+            self.assertFalse(reply["ok"])
+            self.assertEqual(reply["error"]["status"], 499)
+            # Propagação real via ContextVar interrompeu após extractor sem disparar os nós seguintes
+            self.assertEqual(etapas_chamadas, ["extractor"])
+            # Nenhuma mensagem assistant nem QueryExecution persistida no app.db
+            conv_id = next(
+                m["data"]["conversation_id"]
+                for m in lines
+                if m.get("id") == 301 and m.get("event") == "status" and "conversation_id" in (m.get("data") or {})
+            )
+            saved = Message.select("conversation_id = ?", [db.to_db_id(conv_id)])
+            self.assertEqual([m.role for m in saved], ["user"])
+            self.assertEqual(QueryExecution.select(), [])
+            await close_graph()
+
+        asyncio.run(scenario())
+
+    def test_persist_assistant_response_aborta_quando_cancel_event_ja_sinalizado_ou_conversa_excluida(self) -> None:
+        import threading
+        from agents.bi_agent.agent import BIAgentCancelled
+        from core.records import Message, QueryExecution, delete_conversation
+        from rpc.chat import persist_assistant_response, prepare_conversation
+
+        _, tenant = session.current()
+        ctx = Contexto(tenant_id=tenant.id, slug="ctx-persist-guard", name="Persist Guard", views=[]).insert()
+        conv, user_msg = prepare_conversation("Pergunta teste", None, ctx.id)
+
+        ev = threading.Event()
+        ev.set()
+        with self.assertRaises(BIAgentCancelled):
+            persist_assistant_response(
+                conv,
+                user_msg,
+                "Pergunta teste",
+                {"answer": "Resposta tardia", "sql": "SELECT 1", "valid": True},
+                cancel_event=ev,
+            )
+        self.assertEqual([m.role for m in Message.select("conversation_id = ?", [db.to_db_id(conv.id)])], ["user"])
+        self.assertEqual(QueryExecution.select(), [])
+
+        # Mesmo com cancel_event limpo, se a conversa foi excluída em paralelo não grava órfão nem quebra FK
+        delete_conversation(conv.id)
+        with self.assertRaises(BIAgentCancelled):
+            persist_assistant_response(
+                conv,
+                user_msg,
+                "Pergunta teste",
+                {"answer": "Resposta órfã", "sql": "SELECT 1", "valid": True},
+                cancel_event=threading.Event(),
+            )
+        self.assertEqual(QueryExecution.select(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

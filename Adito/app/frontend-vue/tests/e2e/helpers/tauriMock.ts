@@ -18,6 +18,8 @@ export interface TauriMockOptions {
   llmSupportsEmbeddings?: boolean
   embeddingsNeedsRetrain?: boolean
   chatError503?: boolean
+  /** Atraso em ms antes de finalizar o stream do chat (útil para testar botão Parar / Esc / segundo plano). */
+  chatStreamDelayMs?: number
   role?: 'admin' | 'user'
   /** Há uma versão nova dos dados publicada (acende o aviso do canto). */
   dadosNovos?: boolean
@@ -37,6 +39,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     llmSupportsEmbeddings: options.llmSupportsEmbeddings,
     embeddingsNeedsRetrain: options.embeddingsNeedsRetrain ?? false,
     chatError503: options.chatError503 ?? false,
+    chatStreamDelayMs: options.chatStreamDelayMs ?? 0,
     role: options.role ?? 'admin',
     dadosNovos: options.dadosNovos ?? false,
     semDados: options.semDados ?? false,
@@ -125,23 +128,59 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       },
     ]
 
-    function sendChannel(channelArg: unknown, messages: unknown[]) {
+    const activeStreams = new Map<number, {
+      timers: Array<ReturnType<typeof setTimeout>>
+      cb: (raw: unknown) => void
+      nextIndex: number
+      canceled: boolean
+    }>()
+    const canceledStreamIds: number[] = []
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_CANCELED_IDS__ = canceledStreamIds
+    let liveConversationSeq = 1
+
+    function resolveChannelCallback(channelArg: unknown) {
       const serialized =
         channelArg && typeof channelArg === 'object' && 'id' in channelArg
           ? (channelArg as { id: number }).id
           : typeof channelArg === 'string' && channelArg.startsWith('__CHANNEL__:')
             ? Number(channelArg.split(':')[1])
             : null
-      if (serialized === null) return
-      const cb = callbacks.get(serialized)
+      if (serialized === null) return null
+      return callbacks.get(serialized) || null
+    }
+
+    function sendChannel(
+      channelArg: unknown,
+      messages: Array<{ msg: unknown; delayMs: number }>,
+      streamId?: number,
+    ) {
+      const cb = resolveChannelCallback(channelArg)
       if (!cb) return
-      let idx = 0
-      for (const msg of messages) {
-        const currentIndex = idx++
-        setTimeout(() => cb({ index: currentIndex, message: msg }), 5 * currentIndex)
+      const state = {
+        timers: [] as Array<ReturnType<typeof setTimeout>>,
+        cb,
+        nextIndex: 0,
+        canceled: false,
       }
-      const endIdx = idx
-      setTimeout(() => cb({ index: endIdx, end: true }), 5 * endIdx + 10)
+      if (typeof streamId === 'number') {
+        activeStreams.set(streamId, state)
+      }
+      let maxDelay = 0
+      for (const item of messages) {
+        maxDelay = Math.max(maxDelay, item.delayMs)
+        const timer = setTimeout(() => {
+          if (state.canceled) return
+          const currentIndex = state.nextIndex++
+          cb({ index: currentIndex, message: item.msg })
+        }, item.delayMs)
+        state.timers.push(timer)
+      }
+      const endTimer = setTimeout(() => {
+        if (state.canceled) return
+        if (typeof streamId === 'number') activeStreams.delete(streamId)
+        cb({ index: state.nextIndex++, end: true })
+      }, maxDelay + 10)
+      state.timers.push(endTimer)
     }
 
     function handleRpc(method: string, params: Record<string, unknown>) {
@@ -313,7 +352,24 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       },
       async invoke(cmd: string, args: Record<string, unknown> = {}) {
         if (cmd === 'core_ready') return undefined
-        if (cmd === 'core_cancel') return undefined
+        if (cmd === 'core_cancel') {
+          const streamId = Number(args.id)
+          if (Number.isFinite(streamId)) {
+            canceledStreamIds.push(streamId)
+            const active = activeStreams.get(streamId)
+            if (active && !active.canceled) {
+              active.canceled = true
+              for (const t of active.timers) clearTimeout(t)
+              activeStreams.delete(streamId)
+              active.cb({
+                index: active.nextIndex++,
+                message: { event: '$end', ok: false, error: { status: 499, data: { detail: 'Cancelado.' } } },
+              })
+              active.cb({ index: active.nextIndex++, end: true })
+            }
+          }
+          return undefined
+        }
         if (cmd === 'llm_key_status') {
           return { configured: llmConfigured, store_available: true, error: null }
         }
@@ -374,33 +430,55 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return handleRpc(String(args.method), (args.params as Record<string, unknown>) || {})
         }
         if (cmd === 'core_stream') {
+          const streamId = Number(args.id)
           const params = (args.params as Record<string, unknown>) || {}
           if (cfg.chatError503 || !llmConfigured) {
             sendChannel(args.onEvent, [
-              { event: '$end', ok: false, error: { status: 503, data: { detail: 'Chave do Gemini não configurada.' } } },
-            ])
+              {
+                msg: { event: '$end', ok: false, error: { status: 503, data: { detail: 'Chave do Gemini não configurada.' } } },
+                delayMs: 0,
+              },
+            ], streamId)
             return undefined
           }
           const question = String(params.question || '')
+          const rawConvId = params.conversation_id ? String(params.conversation_id) : ''
+          const resolvedConvId = rawConvId && !rawConvId.startsWith('local-')
+            ? rawConvId
+            : `conv-live-${liveConversationSeq++}`
+          const delay = Number(cfg.chatStreamDelayMs || 0)
+          const finalDelay = delay > 0 ? delay : 15
           sendChannel(args.onEvent, [
-            { event: 'status', data: { message: 'Consultando dados acadêmicos...' } },
-            { event: 'token', data: { text: 'Foram encontrados ' } },
             {
-              event: 'result',
-              data: {
-                message_id: 'msg-live-1',
-                conversation_id: 'conv-live-1',
-                type: 'analysis',
-                text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
-                sql: 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area',
-                data: [
-                  { grande_area: 'Engenharias', total: 120 },
-                  { grande_area: 'Ciências Exatas', total: 116 },
-                ],
-              },
+              msg: { event: 'status', data: { message: 'Consultando dados acadêmicos...', conversation_id: resolvedConvId } },
+              delayMs: 5,
             },
-            { event: '$end', ok: true, result: { ok: true } },
-          ])
+            {
+              msg: { event: 'token', data: { text: `Parcial para "${question}": ` } },
+              delayMs: 15,
+            },
+            {
+              msg: {
+                event: 'result',
+                data: {
+                  message_id: `msg-live-${streamId}`,
+                  conversation_id: resolvedConvId,
+                  type: 'analysis',
+                  text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
+                  sql: 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area',
+                  data: [
+                    { grande_area: 'Engenharias', total: 120 },
+                    { grande_area: 'Ciências Exatas', total: 116 },
+                  ],
+                },
+              },
+              delayMs: finalDelay,
+            },
+            {
+              msg: { event: '$end', ok: true, result: { ok: true } },
+              delayMs: finalDelay + 5,
+            },
+          ], streamId)
           return undefined
         }
         return undefined

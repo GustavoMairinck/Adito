@@ -92,12 +92,24 @@ export function stream<T = any>(
   onEvent: (event: string, data: any) => void,
   options: CallOptions = {},
 ): Promise<T> {
+  if (options.signal?.aborted) {
+    return Promise.reject(canceled())
+  }
   const id = nextId()
+  let settled = false
+  let abortRequest: (() => void) | undefined
+  const onAbort = () => {
+    if (settled) return
+    settled = true
+    abortRequest?.()
+  }
+  options.signal?.addEventListener('abort', onAbort, { once: true })
+
   const request = new Promise<T>((resolve, reject) => {
-    let settled = false
+    abortRequest = () => reject(canceled())
     const channel = new Channel<StreamMessage>()
     channel.onmessage = (message) => {
-      if (settled) return
+      if (settled || options.signal?.aborted) return
       if (message.event === '$end') {
         settled = true
         const end = message as StreamEnd
@@ -113,6 +125,8 @@ export function stream<T = any>(
         reject(toCoreError(err))
       }
     })
+  }).finally(() => {
+    options.signal?.removeEventListener('abort', onAbort)
   })
   return withAbort(id, request, options.signal)
 }

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted } from 'vue'
-import { Loader2, Send, Mic, MicOff } from 'lucide-vue-next'
+import { Send, Square, Mic, MicOff } from 'lucide-vue-next'
 
 const props = defineProps<{
   modelValue: string
   loading: boolean
+  disableEscape?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'send'): void
+  (e: 'cancel'): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -70,9 +72,17 @@ watch(() => props.modelValue, () => {
 })
 
 const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && props.loading && !props.disableEscape) {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('cancel')
+    return
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    emit('send')
+    if (!props.loading) {
+      emit('send')
+    }
   }
 }
 </script>
@@ -103,20 +113,33 @@ const handleKeydown = (event: KeyboardEvent) => {
             <Mic v-else class="h-5 w-5" />
           </button>
           <button
+            v-if="loading"
+            id="btn-stop-chat"
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--neutral-dark)] text-[var(--bg-surface)] hover:opacity-90 transition-all cursor-pointer dark:bg-slate-200 dark:text-slate-900"
+            @click="emit('cancel')"
+            title="Parar geração (Esc)"
+            aria-label="Parar geração"
+          >
+            <Square class="h-3.5 w-3.5 fill-current" />
+          </button>
+          <button
+            v-else
             id="btn-send-chat"
-            :disabled="!modelValue.trim() || loading"
+            type="button"
+            :disabled="!modelValue.trim()"
             class="flex h-9 w-9 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:bg-surface-elevated disabled:text-text-muted bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-dark)]"
             @click="emit('send')"
             title="Enviar mensagem"
             aria-label="Enviar mensagem"
           >
-            <Loader2 v-if="loading" class="h-5 w-5 animate-spin" />
-            <Send v-else class="h-4 w-4 ml-0.5" />
+            <Send class="h-4 w-4 ml-0.5" />
           </button>
         </div>
       </div>
       <p class="mt-3 text-center text-xs text-text-muted">
-        Enter para enviar · Shift+Enter para nova linha
+        <template v-if="loading">Esc para parar · Você pode continuar digitando a próxima pergunta</template>
+        <template v-else>Enter para enviar · Shift+Enter para nova linha</template>
       </p>
     </div>
   </div>

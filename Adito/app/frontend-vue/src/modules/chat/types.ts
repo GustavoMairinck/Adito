@@ -33,6 +33,7 @@ export interface ChatMessage {
   isScalarResult?: boolean
   isLoading?: boolean
   loadingStatus?: string
+  interrupted?: boolean
   isFallback?: boolean
   isChat?: boolean
   error?: boolean

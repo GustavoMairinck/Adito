@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { AlertCircle, CheckCircle2 } from 'lucide-vue-next'
 
@@ -26,14 +26,22 @@ const {
   setCurrentConvId,
   handleNewConversation,
   handleDeleteConversation,
-  updateCurrentConversation,
+  updateConversationById,
   replaceConversationId,
   setConversationContexto,
   currentConversation
 } = useChatHistory()
 
-const { askQuestionStream, checkHealth, isLoading } = useChatApi()
+const {
+  askQuestionStream,
+  cancelStream,
+  checkHealth,
+  isConversationLoading,
+  activeConversationIds
+} = useChatApi()
 const { selectedId: selectedContextoId, loadContextos } = useContextos()
+
+const isCurrentConvLoading = computed(() => isConversationLoading(currentConvId.value))
 
 // Conversa ainda não salva no backend: o contexto pode ser escolhido.
 const isNewConversation = computed(() => !!currentConvId.value?.startsWith('local-'))
@@ -117,9 +125,24 @@ const scrollToBottom = async () => {
 }
 
 watch(messages, scrollToBottom, { deep: true })
-watch(isLoading, scrollToBottom)
+watch(isCurrentConvLoading, scrollToBottom)
+
+const cancelCurrentQuestion = () => {
+  if (conversationToDelete.value || pinModalOpen.value) return
+  if (!currentConvId.value || !isCurrentConvLoading.value) return
+  cancelStream(currentConvId.value)
+}
+
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape') return
+  if (conversationToDelete.value || pinModalOpen.value) return
+  if (!isCurrentConvLoading.value) return
+  event.preventDefault()
+  cancelCurrentQuestion()
+}
 
 onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
   checkHealth().then((status) => {
     healthOnline.value = status
   })
@@ -133,9 +156,14 @@ onMounted(() => {
   }
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+})
+
 const sendQuestion = async (questionText?: string) => {
   const userInput = (questionText ?? input.value).trim()
-  if (!userInput || isLoading.value) return
+  const activeConversationId = currentConvId.value
+  if (!userInput || !activeConversationId || isConversationLoading(activeConversationId)) return
   if (!llmConfigured.value) {
     const provLabel = user.value?.llm_provider_label || 'Gemini'
     showToast(`Configure ${user.value?.llm_is_local ? `o servidor local (${provLabel})` : `a chave do ${provLabel}`} em Configurações para usar o chat.`, 'error')
@@ -144,6 +172,8 @@ const sendQuestion = async (questionText?: string) => {
 
   input.value = ''
 
+  let targetConvId = activeConversationId
+
   const userMessage: ChatMessage = {
     id: Date.now().toString(),
     type: 'user',
@@ -151,14 +181,13 @@ const sendQuestion = async (questionText?: string) => {
     timestamp: new Date().toISOString()
   }
 
-  updateCurrentConversation((conversation) => ({
+  updateConversationById(targetConvId, (conversation) => ({
     ...conversation,
     title: conversation.messages.length === 1 ? userInput.slice(0, 50) : conversation.title,
     messages: [...conversation.messages, userMessage],
     updatedAt: new Date().toISOString()
   }))
 
-  const activeConversationId = currentConvId.value
   const contextoId = currentConversation.value?.contextoId || selectedContextoId.value
   let serverConversationId: string | null = null
   let draftCounter = 1
@@ -174,14 +203,14 @@ const sendQuestion = async (questionText?: string) => {
     loadingStatus: currentLoadingStatus
   })
 
-  updateCurrentConversation((conversation) => ({
+  updateConversationById(targetConvId, (conversation) => ({
     ...conversation,
     messages: [...conversation.messages, createDraft(currentDraftId)],
     updatedAt: new Date().toISOString()
   }))
 
   const updateDraft = (updater: (message: ChatMessage) => ChatMessage) => {
-    updateCurrentConversation((conversation) => ({
+    updateConversationById(targetConvId, (conversation) => ({
       ...conversation,
       messages: conversation.messages.map((message) =>
         message.id === currentDraftId ? updater(message) : message
@@ -203,11 +232,12 @@ const sendQuestion = async (questionText?: string) => {
     },
     onStatus: (status, payload) => {
       // O backend cria a conversa (com o contexto) antes de chamar o LLM e avisa no primeiro status;
-      // adotar o id aqui evita duplicar a conversa se a resposta falhar.
-      if (activeConversationId?.startsWith('local-') && payload?.conversation_id && !serverConversationId) {
+      // adotar o id aqui evita duplicar a conversa e mantém a geração vinculada mesmo em segundo plano.
+      if (targetConvId.startsWith('local-') && payload?.conversation_id && !serverConversationId) {
         serverConversationId = String(payload.conversation_id)
-        replaceConversationId(activeConversationId, serverConversationId)
+        replaceConversationId(targetConvId, serverConversationId)
         setConversationContexto(serverConversationId, contextoId)
+        targetConvId = serverConversationId
       }
       currentLoadingStatus = status
       updateDraft((message) => ({
@@ -218,7 +248,13 @@ const sendQuestion = async (questionText?: string) => {
     },
     onResult: (message) => {
       streamedResults += 1
-      updateCurrentConversation((conversation) => {
+      if (targetConvId.startsWith('local-') && message.conversationId && !serverConversationId) {
+        serverConversationId = String(message.conversationId)
+        replaceConversationId(targetConvId, serverConversationId)
+        setConversationContexto(serverConversationId, contextoId)
+        targetConvId = serverConversationId
+      }
+      updateConversationById(targetConvId, (conversation) => {
         const alreadyExists = conversation.messages.some((item) => item.id === message.id)
         if (streamedResults === 1) {
           return {
@@ -238,7 +274,7 @@ const sendQuestion = async (questionText?: string) => {
         )
         draftCounter++
         currentDraftId = `${Date.now()}-draft-${draftCounter}`
-        
+
         return {
           ...conversation,
           messages: [...replacedMessages, createDraft(currentDraftId)],
@@ -248,24 +284,37 @@ const sendQuestion = async (questionText?: string) => {
     }
   }, contextoId)
 
-  if (!serverConversationId && activeConversationId && aiMessage.conversationId && activeConversationId !== aiMessage.conversationId) {
-    replaceConversationId(activeConversationId, aiMessage.conversationId)
-    // O backend fixou este contexto na conversa recém-criada.
+  if (!serverConversationId && aiMessage.conversationId && targetConvId !== aiMessage.conversationId) {
+    replaceConversationId(targetConvId, aiMessage.conversationId)
     setConversationContexto(aiMessage.conversationId, contextoId)
+    targetConvId = aiMessage.conversationId
   }
 
-  updateCurrentConversation((conversation) => {
+  if (aiMessage.interrupted) {
+    updateConversationById(targetConvId, (conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((m) =>
+        m.id === currentDraftId
+          ? { ...m, isLoading: false, loadingStatus: undefined, interrupted: true }
+          : m
+      ),
+      updatedAt: new Date().toISOString()
+    }))
+    return
+  }
+
+  updateConversationById(targetConvId, (conversation) => {
     let finalMessages = conversation.messages.filter(m => m.id !== currentDraftId)
-    
+
     if (streamedResults === 0) {
       const alreadyExists = finalMessages.some(m => m.id === aiMessage.id)
       if (!alreadyExists) {
         finalMessages.push(aiMessage)
       }
     }
-    
+
     finalMessages = finalMessages.map(m => m.isLoading ? { ...m, isLoading: false } : m)
-    
+
     return {
       ...conversation,
       messages: finalMessages,
@@ -275,7 +324,8 @@ const sendQuestion = async (questionText?: string) => {
 }
 
 const toggleSql = (messageId: string) => {
-  updateCurrentConversation((conversation) => ({
+  if (!currentConvId.value) return
+  updateConversationById(currentConvId.value, (conversation) => ({
     ...conversation,
     messages: conversation.messages.map((message) => ({
       ...message,
@@ -373,6 +423,7 @@ const confirmDeleteConversation = async () => {
         :conversations="conversations"
         :current-conv-id="currentConvId"
         :open="isConvSidebarOpen"
+        :loading-conv-ids="activeConversationIds"
         @select="setCurrentConvId($event); isConvSidebarOpen = false"
         @new="handleNewConversation(); isConvSidebarOpen = false"
         @delete="requestDeleteConversation($event)"
@@ -389,7 +440,7 @@ const confirmDeleteConversation = async () => {
         <ChatConversation
           :messages="messages"
           :current-conversation="currentConversation"
-          :loading="isLoading"
+          :loading="isCurrentConvLoading"
           :health-online="healthOnline"
           :starter-categories="starterCategories"
           @open-conversations="isConvSidebarOpen = true"
@@ -409,7 +460,13 @@ const confirmDeleteConversation = async () => {
           :is-new-conversation="isNewConversation"
           :conversation-contexto-id="currentConversation?.contextoId"
         />
-        <ChatInputArea v-model="input" :loading="isLoading" @send="sendQuestion()" />
+        <ChatInputArea
+          v-model="input"
+          :loading="isCurrentConvLoading"
+          :disable-escape="!!conversationToDelete || pinModalOpen"
+          @send="sendQuestion()"
+          @cancel="cancelCurrentQuestion()"
+        />
       </div>
     </div>
   </div>

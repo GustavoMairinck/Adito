@@ -1,9 +1,10 @@
 import { call } from "@/common/api/core";
-import { buildChart, isScalarResultData } from "@/modules/chat/composables/useChatApi";
+import { buildChart, cancelChatStream, isChatConversationLoading, isScalarResultData } from "@/modules/chat/composables/useChatApi";
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
 import { computed, ref } from "vue";
 
 const STORAGE_PREFIX = "adito_chat_history";
+let localConversationSeq = 0;
 
 function createWelcomeMessage(): ChatMessage {
   return {
@@ -16,8 +17,9 @@ function createWelcomeMessage(): ChatMessage {
 
 export function createConversation(): Conversation {
   const now = new Date().toISOString();
+  localConversationSeq += 1;
   return {
-    id: `local-${Date.now()}`,
+    id: `local-${Date.now()}-${localConversationSeq}`,
     title: "Nova Conversa",
     contextoId: null,
     messages: [createWelcomeMessage()],
@@ -84,17 +86,27 @@ function clearLegacyChatStorage() {
   }
 }
 
+// Estado compartilhado no módulo: sobrevive à troca de rota (ex.: Chat → Dashboard → Chat)
+// mantendo rascunhos e streams em segundo plano intactos.
+const conversations = ref<Conversation[]>([]);
+const currentConvId = ref<string | null>(null);
+let hasInitialized = false;
+
+function resetToEmptyConversation() {
+  const initial = createConversation();
+  conversations.value = [initial];
+  currentConvId.value = initial.id;
+}
+
+export function resetChatHistoryForTests() {
+  hasInitialized = false;
+  localConversationSeq = 0;
+  conversations.value = [];
+  currentConvId.value = null;
+}
+
 export function useChatHistory() {
-  const conversations = ref<Conversation[]>([]);
-  const currentConvId = ref<string | null>(null);
-
-  const resetToEmptyConversation = () => {
-    conversations.value = [createConversation()];
-    currentConvId.value = conversations.value[0]?.id || null;
-  };
-
   clearLegacyChatStorage();
-  resetToEmptyConversation();
 
   const updateMessage = (convId: string, messageId: string, patch: Partial<ChatMessage>) => {
     conversations.value = conversations.value.map((conversation) =>
@@ -143,20 +155,48 @@ export function useChatHistory() {
       const data = await call("chat.conversations.list");
       if (!Array.isArray(data)) return;
 
+      // Preserva conversas com stream ativo, locais já interagidas ou com aviso efêmero de interrupção.
+      const preserved = conversations.value.filter(
+        (c) =>
+          isChatConversationLoading(c.id)
+          || (c.id.startsWith("local-") && c.messages.length > 1)
+          || c.messages.some((m) => m.interrupted),
+      );
+
       if (data.length === 0) {
+        if (preserved.length > 0) {
+          conversations.value = preserved;
+          if (!currentConvId.value || !preserved.some((c) => c.id === currentConvId.value)) {
+            currentConvId.value = preserved[0].id;
+          }
+          return;
+        }
         resetToEmptyConversation();
         return;
       }
 
-      conversations.value = data.map(mapBackendConversation);
-      currentConvId.value = conversations.value[0]?.id || null;
+      const remote = data.map(mapBackendConversation);
+      const preservedIds = new Set(preserved.map((c) => c.id));
+      const merged = [...preserved, ...remote.filter((c) => !preservedIds.has(c.id))];
+      conversations.value = merged;
+
+      const keepCurrent = currentConvId.value && preservedIds.has(currentConvId.value);
+      if (!keepCurrent) {
+        currentConvId.value = merged[0]?.id || null;
+      }
       loadRows(currentConvId.value);
     } catch {
       // Mantem fallback local quando o backend esta offline.
     }
   };
 
-  syncFromBackend();
+  if (!hasInitialized) {
+    hasInitialized = true;
+    resetToEmptyConversation();
+    syncFromBackend();
+  } else if (conversations.value.length === 0) {
+    resetToEmptyConversation();
+  }
 
   const handleNewConversation = () => {
     const newConversation = createConversation();
@@ -165,6 +205,8 @@ export function useChatHistory() {
   };
 
   const handleDeleteConversation = async (id: string) => {
+    // Cancela qualquer stream em andamento dessa conversa antes de removê-la.
+    cancelChatStream(id);
     if (!id.startsWith("local-")) {
       await call("chat.conversations.delete", { id });
     }
@@ -182,19 +224,31 @@ export function useChatHistory() {
     }
   };
 
-  const updateCurrentConversation = (
+  const updateConversationById = (
+    convId: string,
     updater: (conversation: Conversation) => Conversation,
   ) => {
     conversations.value = conversations.value.map((conversation) => {
-      if (conversation.id !== currentConvId.value) return conversation;
+      if (conversation.id !== convId) return conversation;
       return updater(conversation);
     });
   };
 
+  const updateCurrentConversation = (
+    updater: (conversation: Conversation) => Conversation,
+  ) => {
+    if (!currentConvId.value) return;
+    updateConversationById(currentConvId.value, updater);
+  };
+
   const replaceConversationId = (oldId: string, newId: string) => {
-    conversations.value = conversations.value.map((conversation) =>
-      conversation.id === oldId ? { ...conversation, id: newId } : conversation,
-    );
+    if (!oldId || !newId || oldId === newId) return;
+    // Remove eventual cópia já vinda de syncFromBackend() com id === newId para evitar chaves duplicadas.
+    conversations.value = conversations.value
+      .filter((conversation) => conversation.id !== newId)
+      .map((conversation) =>
+        conversation.id === oldId ? { ...conversation, id: newId } : conversation,
+      );
     if (currentConvId.value === oldId) currentConvId.value = newId;
   };
 
@@ -221,6 +275,7 @@ export function useChatHistory() {
     setCurrentConvId,
     handleNewConversation,
     handleDeleteConversation,
+    updateConversationById,
     updateCurrentConversation,
     replaceConversationId,
     setConversationContexto,
