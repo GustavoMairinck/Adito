@@ -31,6 +31,7 @@ import {
 } from 'lucide-vue-next'
 
 import { call } from '@/common/api/core'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 import TrainingItemCard from '@/modules/admin/components/TrainingItemCard.vue'
 import AddTrainingModal from '@/modules/admin/components/AddTrainingModal.vue'
@@ -598,6 +599,15 @@ watch(activeTab, (val) => {
     fetchSystemStatus()
   }
 }, { immediate: true })
+
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq <= 0) return
+  void fetchContextos()
+  void fetchSystemStatus()
+  if (activeTab.value === 'governance') void fetchTrainings()
+  if (activeTab.value === 'audit') void fetchQueryExecutions()
+})
 
 onBeforeUnmount(() => {
   if (sysPolling) clearInterval(sysPolling)

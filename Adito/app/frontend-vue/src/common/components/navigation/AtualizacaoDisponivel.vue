@@ -14,6 +14,8 @@ const {
   dadosNovos,
   temAtualizacao,
   instalandoApp,
+  baixandoAppEmSegundoPlano,
+  appProntoParaReinicio,
   instalandoDados,
   progressoApp,
   erro,
@@ -121,13 +123,28 @@ onBeforeUnmount(() => {
           Nova versão do Adito
         </div>
         <p class="mb-2 text-xs text-text-secondary">
-          Versão {{ app.version }}. O app reinicia no fim; suas conversas e painéis continuam.
+          <template v-if="appProntoParaReinicio">
+            Versão {{ app.version }} baixada e pronta para instalar. Suas conversas e painéis continuam.
+          </template>
+          <template v-else>
+            Versão {{ app.version }}. O app reinicia no fim; suas conversas e painéis continuam.
+          </template>
         </p>
-        <button type="button" class="btn-primary w-full disabled:opacity-50" :disabled="ocupado" @click="instalarApp">
+        <button
+          type="button"
+          class="btn-primary w-full disabled:opacity-50"
+          :disabled="ocupado || baixandoAppEmSegundoPlano"
+          @click="instalarApp"
+        >
           <template v-if="instalandoApp">
             <Loader2 class="mr-1 inline h-4 w-4 animate-spin" />
-            {{ progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…' }}
+            {{ appProntoParaReinicio ? 'Reiniciando…' : (progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…') }}
           </template>
+          <template v-else-if="baixandoAppEmSegundoPlano">
+            <Loader2 class="mr-1 inline h-4 w-4 animate-spin" />
+            {{ progressoApp > 0 ? `Baixando em segundo plano… ${Math.round(progressoApp * 100)}%` : 'Baixando em segundo plano…' }}
+          </template>
+          <template v-else-if="appProntoParaReinicio">Reiniciar para atualizar</template>
           <template v-else>Atualizar o app</template>
         </button>
       </div>

@@ -28,6 +28,10 @@ Habilitação de múltiplos provedores de IA com suporte completo a Chat + Embed
 Capacidade de abortar respostas em andamento no chat do Adito via botão **"Parar"** ou tecla **`Esc`** sem perder o texto já digitado nem gravar respostas incompletas no `app.db`, com execução em segundo plano independente por conversa/rota, indicador de carregamento na sidebar, filtro pós-abort no IPC (`core.ts`) e cancelamento cooperativo no `BIAgent` para economizar cota de API BYOK. Origem: `Adito/docs/discovery/abortar-prompt-chat.md` e `Adito/docs/requirements/abortar-prompt-chat.md`.
 - **Stories**: US-CHAT-01 e US-CHAT-02.
 
+### EPIC-13: Atualização Automática (Opt-in) e Auto-Reload de Telas
+Evolução do sistema de distribuição desktop (`ADR-0006`/`ADR-0007`) com opção opt-in em Configurações (desligada por padrão) para verificação periódica/foco, download em segundo plano do executável com proteção de chat ativo e contagem regressiva de 10s (com "Reiniciar agora" e "Adiar"), auto-update de `dados.db` priorizando o executável e sinal reativo `dadosReloadSeq` para recarga automática de Dashboard, Meu painel, Contextos/Chat e Administração com toast discreto, sem reindexação automática de embeddings. Origem: `Adito/docs/discovery/auto-update-reload.md` e `Adito/docs/requirements/auto-update-reload.md`.
+- **Stories**: US-UPD-01 e US-UPD-02.
+
 ---
 
 ## User Stories Priorizadas
@@ -118,6 +122,19 @@ Capacidade de abortar respostas em andamento no chat do Adito via botão **"Para
 > Total EPIC-12: 8 pts (100% Concluído em 25/11/2026 na branch `feat/abortar-prompt-chat`, Nível ScrumAIDev 1).  
 > - **Vertical Slice 1 (3 pts):** `US-CHAT-01` (filtro pós-abort no `Channel` em `core.ts` + `cancel_event` cooperativo no `BIAgent` + integridade do checkpointer). Concluído.  
 > - **Vertical Slice 2 (5 pts):** `US-CHAT-02` (estado compartilhado por conversa/rota, botão "Parar" + `Esc`, aviso discreto *"Resposta interrompida"*, indicador na sidebar, `tauriMock.ts`, Vitest e Playwright E2E). Concluído.
+
+---
+
+### 🗂️ EPIC-13 — Atualização Automática (Opt-in) e Auto-Reload de Telas (Aprovado em 25/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-UPD-01](stories/US-UPD-01_motor-auto-update-optin-configuracoes-adr.md) | Motor de auto-update opt-in, proteção de chat ativo, Configurações e adenda ADR-0006 | EPIC-13 | 5 | 🔴 Alta (slice 1) | — | FR01–FR06, FR08, FR09 (unit), BR01–BR06, NFR01–NFR04, A01–A03 | 🔍 Review |
+| [US-UPD-02](stories/US-UPD-02_banner-auto-reload-telas-toast-e2e.md) | Banner de reinício, auto-reload reativo nas telas abertas, toast e testes E2E Playwright | EPIC-13 | 3 | 🔴 Alta (slice 2) | US-UPD-01 | FR04 (UI), FR07, FR09 (unit + E2E), BR03, NFR02, NFR04, NFR05 | 🔍 Review |
+
+> Total EPIC-13: 8 pts (Nível ScrumAIDev 1, branch `feat/auto-update-reload`).  
+> - **Vertical Slice 1 (5 pts):** `US-UPD-01` (separação `download()`/`install()`, preferência opt-in em Configurações, monitoramento 30 min / foco 15 min, proteção `useChatApi().isLoading`, contagem 10s, prioridade app > dados, backoff, `dadosReloadSeq`, adenda `ADR-0006` e Vitest).  
+> - **Vertical Slice 2 (3 pts):** `US-UPD-02` (banner discreto de reinício + toast no `MainLayout.vue`, auto-reload reativo nas 4 telas abertas sem retrain automático e Playwright E2E em `atualizacoes.spec.ts`).
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
