@@ -179,4 +179,16 @@ describe('modules/chat/composables/useChatApi', () => {
     expect(result.interrupted).toBe(true)
     expect(isConversationLoading('conv-real-42')).toBe(false)
   })
+
+  it('limpa o estado de carregamento e retorna erro amigável quando o núcleo reinicia com status 503', async () => {
+    const { askQuestionStream, isConversationLoading } = useChatApi()
+    streamMock.mockRejectedValueOnce(Object.assign(new Error('O núcleo está reiniciando.'), { status: 503 }))
+
+    const msg = await askQuestionStream('Pergunta durante reinício', 'conv-503')
+
+    expect(msg.error).toBe(true)
+    expect(msg.interrupted).toBeFalsy()
+    expect(msg.text).toContain('O núcleo está reiniciando.')
+    expect(isConversationLoading('conv-503')).toBe(false)
+  })
 })

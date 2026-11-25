@@ -463,6 +463,7 @@ const confirmDeleteConversation = async () => {
         <ChatInputArea
           v-model="input"
           :loading="isCurrentConvLoading"
+          :disable-escape="!!conversationToDelete || pinModalOpen"
           @send="sendQuestion()"
           @cancel="cancelCurrentQuestion()"
         />

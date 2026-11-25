@@ -155,16 +155,19 @@ export function useChatHistory() {
       const data = await call("chat.conversations.list");
       if (!Array.isArray(data)) return;
 
-      // Preserva conversas com stream em andamento ou já interagidas localmente antes de o sync responder.
-      const inFlight = conversations.value.filter(
-        (c) => isChatConversationLoading(c.id) || (c.id.startsWith("local-") && c.messages.length > 1),
+      // Preserva conversas com stream ativo, locais já interagidas ou com aviso efêmero de interrupção.
+      const preserved = conversations.value.filter(
+        (c) =>
+          isChatConversationLoading(c.id)
+          || (c.id.startsWith("local-") && c.messages.length > 1)
+          || c.messages.some((m) => m.interrupted),
       );
 
       if (data.length === 0) {
-        if (inFlight.length > 0) {
-          conversations.value = inFlight;
-          if (!currentConvId.value || !inFlight.some((c) => c.id === currentConvId.value)) {
-            currentConvId.value = inFlight[0].id;
+        if (preserved.length > 0) {
+          conversations.value = preserved;
+          if (!currentConvId.value || !preserved.some((c) => c.id === currentConvId.value)) {
+            currentConvId.value = preserved[0].id;
           }
           return;
         }
@@ -173,11 +176,11 @@ export function useChatHistory() {
       }
 
       const remote = data.map(mapBackendConversation);
-      const inFlightIds = new Set(inFlight.map((c) => c.id));
-      const merged = [...inFlight, ...remote.filter((c) => !inFlightIds.has(c.id))];
+      const preservedIds = new Set(preserved.map((c) => c.id));
+      const merged = [...preserved, ...remote.filter((c) => !preservedIds.has(c.id))];
       conversations.value = merged;
 
-      const keepCurrent = currentConvId.value && inFlightIds.has(currentConvId.value);
+      const keepCurrent = currentConvId.value && preservedIds.has(currentConvId.value);
       if (!keepCurrent) {
         currentConvId.value = merged[0]?.id || null;
       }
@@ -240,9 +243,12 @@ export function useChatHistory() {
 
   const replaceConversationId = (oldId: string, newId: string) => {
     if (!oldId || !newId || oldId === newId) return;
-    conversations.value = conversations.value.map((conversation) =>
-      conversation.id === oldId ? { ...conversation, id: newId } : conversation,
-    );
+    // Remove eventual cópia já vinda de syncFromBackend() com id === newId para evitar chaves duplicadas.
+    conversations.value = conversations.value
+      .filter((conversation) => conversation.id !== newId)
+      .map((conversation) =>
+        conversation.id === oldId ? { ...conversation, id: newId } : conversation,
+      );
     if (currentConvId.value === oldId) currentConvId.value = newId;
   };
 

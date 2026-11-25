@@ -129,7 +129,16 @@ def prepare_conversation(question: str, raw_conversation_id, contexto_id):
     return conversation, user_message
 
 
-def persist_assistant_response(conversation: Conversation, user_message: Message, question: str, result: dict) -> dict:
+def persist_assistant_response(
+    conversation: Conversation,
+    user_message: Message,
+    question: str,
+    result: dict,
+    cancel_event: threading.Event | None = None,
+) -> dict:
+    if cancel_event is not None and cancel_event.is_set():
+        raise BIAgentCancelled("Resposta cancelada antes de persistir.")
+
     answer = result.get("answer") or "Não consegui formular uma resposta."
     sql = result.get("sql")
     data = _json_safe(result.get("data") or [])
@@ -151,6 +160,10 @@ def persist_assistant_response(conversation: Conversation, user_message: Message
     }
 
     with db.transaction():
+        if cancel_event is not None and cancel_event.is_set():
+            raise BIAgentCancelled("Resposta cancelada antes da gravação.")
+        if Conversation.first("id = ?", [to_db_id(conversation.id)]) is None:
+            raise BIAgentCancelled("Conversa excluída antes da gravação.")
         assistant_msg = Message(
             conversation_id=conversation.id, role="assistant", content=answer, metadata=metadata,
         ).insert()
@@ -167,6 +180,9 @@ def persist_assistant_response(conversation: Conversation, user_message: Message
                 is_valid=valid,
                 error_message=metadata["error"] or (metadata["message"] if not valid else None),
             ).insert()
+        if cancel_event is not None and cancel_event.is_set():
+            # Força rollback da transação se $cancel chegou durante a gravação (BR01).
+            raise BIAgentCancelled("Resposta cancelada durante a gravação.")
 
     return {
         "conversation_id": conversation.id,
@@ -288,8 +304,10 @@ async def chat_stream(params, emit):
                                 res.get("answer") and res["answer"] != "Não consegui formular uma resposta."
                             ):
                                 payload = await asyncio.to_thread(
-                                    persist_assistant_response, conversation, user_message, question, res,
+                                    persist_assistant_response, conversation, user_message, question, res, cancel_event,
                                 )
+                                if cancel_event.is_set():
+                                    raise asyncio.CancelledError()
                                 await emit("result", payload)
                                 has_emitted_result = True
 
@@ -301,7 +319,11 @@ async def chat_stream(params, emit):
 
         if not has_emitted_result:
             result = build_final_result(final_state)
-            payload = await asyncio.to_thread(persist_assistant_response, conversation, user_message, question, result)
+            payload = await asyncio.to_thread(
+                persist_assistant_response, conversation, user_message, question, result, cancel_event,
+            )
+            if cancel_event.is_set():
+                raise asyncio.CancelledError()
             log_success(
                 "chat",
                 f"estado final fallback type={payload.get('type')!r} rows={len(payload.get('data') or [])} "

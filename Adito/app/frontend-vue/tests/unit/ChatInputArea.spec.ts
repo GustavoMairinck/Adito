@@ -39,4 +39,13 @@ describe('modules/chat/components/ChatInputArea', () => {
     await textarea.trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('send')).toBeUndefined()
   })
+
+  it('não dispara cancel nem preventDefault no Esc quando disableEscape está ativo (modal aberto)', async () => {
+    const wrapper = mount(ChatInputArea, {
+      props: { modelValue: '', loading: true, disableEscape: true },
+    })
+
+    await wrapper.find('textarea').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.emitted('cancel')).toBeUndefined()
+  })
 })

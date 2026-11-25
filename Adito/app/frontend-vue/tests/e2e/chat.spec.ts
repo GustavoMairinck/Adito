@@ -131,4 +131,28 @@ test.describe('Chat estratégico', () => {
     await expect(page.getByText(/Resposta para "Consulta em segundo plano"/i)).toBeVisible()
     expect(getErrors()).toEqual([])
   })
+
+  test('excluir conversa em geração dispara core_cancel automaticamente', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatStreamDelayMs: 1200 })
+    await page.goto('/#/chat')
+
+    await page.getByRole('button', { name: /Novo chat/i }).click()
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Conversa para excluir gerando')
+    await input.press('Enter')
+
+    await expect(page.getByRole('button', { name: 'Parar geração' })).toBeVisible()
+
+    // Abre o modal de exclusão da conversa em geração na sidebar e confirma
+    const convItem = page.locator('.conv-item', { hasText: 'Conversa para excluir gerando' }).first()
+    await convItem.hover()
+    await convItem.getByTitle('Excluir chat').click()
+    await page.getByRole('button', { name: 'Excluir conversa' }).click()
+
+    const canceledCount = await page.evaluate(() => ((window as any).__TAURI_MOCK_CANCELED_IDS__ || []).length)
+    expect(canceledCount).toBeGreaterThanOrEqual(1)
+    await expect(page.locator('.conv-item', { hasText: 'Conversa para excluir gerando' })).toHaveCount(0)
+    expect(getErrors()).toEqual([])
+  })
 })

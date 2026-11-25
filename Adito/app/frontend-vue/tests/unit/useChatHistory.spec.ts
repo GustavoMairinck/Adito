@@ -180,5 +180,31 @@ describe('modules/chat/composables/useChatHistory', () => {
 
     cancelStream(activeLocalId)
     await pending
+
+    // Mesmo após interrompida e migrada para conv-remota-1 (já presente no sync), não duplica nem perde o aviso
+    history.updateConversationById(activeLocalId, (conv) => ({
+      ...conv,
+      messages: [
+        ...conv.messages,
+        { id: 'ai-int', type: 'ai', text: 'Parcial', timestamp: new Date().toISOString(), interrupted: true },
+      ],
+    }))
+    history.replaceConversationId(activeLocalId, 'conv-remota-1')
+    expect(history.conversations.value.filter((c) => c.id === 'conv-remota-1')).toHaveLength(1)
+    expect(history.currentConvId.value).toBe('conv-remota-1')
+
+    // Novo syncFromBackend preserva a conversa recém-interrompida em memória
+    callMock.mockResolvedValueOnce([
+      {
+        id: 'conv-remota-1',
+        title: 'Histórico antigo',
+        contexto: 'ctx-1',
+        created_at: '2026-11-18T10:00:00Z',
+        messages: [],
+      },
+    ])
+    await history.syncFromBackend()
+    const preserved = history.conversations.value.find((c) => c.id === 'conv-remota-1')
+    expect(preserved?.messages.some((m) => m.interrupted)).toBe(true)
   })
 })

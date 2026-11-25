@@ -111,14 +111,6 @@ export function cancelChatStream(conversationId?: string | null): boolean {
   return true
 }
 
-export function cancelAllChatStreams(): void {
-  const controllers = Object.values(activeControllers.value)
-  activeControllers.value = {}
-  for (const controller of controllers) {
-    controller.abort()
-  }
-}
-
 export function isChatConversationLoading(conversationId?: string | null): boolean {
   return !!(conversationId && activeControllers.value[conversationId])
 }
@@ -228,7 +220,6 @@ export function useChatApi() {
   return {
     askQuestionStream,
     cancelStream: cancelChatStream,
-    cancelAllStreams: cancelAllChatStreams,
     migrateStreamKey: migrateChatStreamKey,
     checkHealth,
     isLoading,

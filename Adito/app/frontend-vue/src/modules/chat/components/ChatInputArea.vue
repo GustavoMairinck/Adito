@@ -5,6 +5,7 @@ import { Send, Square, Mic, MicOff } from 'lucide-vue-next'
 const props = defineProps<{
   modelValue: string
   loading: boolean
+  disableEscape?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -71,8 +72,9 @@ watch(() => props.modelValue, () => {
 })
 
 const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && props.loading) {
+  if (event.key === 'Escape' && props.loading && !props.disableEscape) {
     event.preventDefault()
+    event.stopPropagation()
     emit('cancel')
     return
   }
