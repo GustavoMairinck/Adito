@@ -109,6 +109,59 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       ],
     }
 
+    // Explorar dados: projetos sintéticos (sem nomes de pessoas) para catálogo, busca, filtro e gráfico.
+    const AREAS = ['Engenharias', 'Ciências Exatas e da Terra', 'Ciências Humanas', 'Ciências Biológicas']
+    const explorerRows: Record<string, Array<Record<string, unknown>>> = {
+      vfact_projeto_pesquisa_resolved: Array.from({ length: 33 }, (_, i) => ({
+        id_projeto: i + 1,
+        titulo_projeto: i === 0 ? 'Robótica educacional 100%' : `Projeto ${String(i + 1).padStart(2, '0')}`,
+        grande_area: AREAS[i % AREAS.length],
+        ano: 2023 + (i % 2),
+      })),
+      vfact_orientacao_bolsa_resolved: [
+        { id_orientacao: 1, modalidade: 'PIBIC', ano: 2024 },
+        { id_orientacao: 2, modalidade: 'PIBITI', ano: 2024 },
+      ],
+      vfact_extensao_acao_resolved: [],
+    }
+    const explorerColumns = (name: string) => {
+      const sample = explorerRows[name]?.[0]
+      if (!sample) return []
+      return Object.entries(sample).map(([column, value]) => ({ name: column, type: typeof value === 'number' ? 'INTEGER' : 'TEXT' }))
+    }
+    function explorerQuery(params: Record<string, unknown>) {
+      const all = explorerRows[String(params.table)] || []
+      const search = String(params.search || '').toLowerCase()
+      const filterColumn = String(params.filter_column || '')
+      const filterValue = String(params.filter_value || '')
+      let rows = all.filter((row) => (
+        (!search || Object.values(row).some((value) => String(value).toLowerCase().includes(search)))
+        && (!filterColumn || !filterValue || String(row[filterColumn]) === filterValue)
+      ))
+      const sort = String(params.sort || Object.keys(all[0] || {})[0] || '')
+      const desc = params.direction === 'desc'
+      rows = [...rows].sort((a, b) => {
+        const x = a[sort] as string | number
+        const y = b[sort] as string | number
+        return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1)
+      })
+      const pageSize = Number(params.page_size || 25)
+      const page = Math.min(Number(params.page || 1), Math.max(1, Math.ceil(rows.length / pageSize)))
+      const groupBy = String(params.group_by || '')
+      const counts = new Map<unknown, number>()
+      if (groupBy) for (const row of rows) counts.set(row[groupBy], (counts.get(row[groupBy]) || 0) + 1)
+      return {
+        rows: rows.slice((page - 1) * pageSize, page * pageSize),
+        total: rows.length,
+        page,
+        page_size: pageSize,
+        distribution: [...counts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 12),
+      }
+    }
+
     const conversations: Array<Record<string, unknown>> = [
       {
         id: 'conv-1',
@@ -278,6 +331,19 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           if (idx >= 0) widgets.splice(idx, 1)
           return { ok: true }
         }
+        case 'explorer.tables':
+          return {
+            tables: CONTEXTOS[0].views.map((view) => ({
+              name: view.name,
+              label: view.description,
+              description: view.description,
+              kind: 'fact',
+              columns: explorerColumns(view.name),
+              available: explorerColumns(view.name).length > 0,
+            })),
+          }
+        case 'explorer.rows':
+          return explorerQuery(params)
         case 'chat.conversations.list':
           return conversations
         case 'chat.message_rows':

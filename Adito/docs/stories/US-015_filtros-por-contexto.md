@@ -20,6 +20,8 @@
 Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.top_projects`) consultam uma view fixa, hoje `vfact_orientacao_bolsa_resolved` (antes era a view da demonstração de vendas, removida). A proposta é um `filters.json` por contexto.
 
 > **2026-11-19:** a tela Explorar dados saiu do produto, a pedido do usuário. Esta história passa a tratar só dos filtros do dashboard.
+>
+> **2026-11-25:** a tela Explorar dados voltou, a pedido do usuário, porque os dados usados não são privados. Voltou exatamente como era antes da remoção (`explorer.tables` e `explorer.rows`, lendo as views do contexto escolhido). Os filtros por contexto (`filters.json`) continuam pendentes nesta história.
 
 ---
 
@@ -94,7 +96,7 @@ N/A
 
 ## 📝 Notas e Comentários
 
-- Ligada à US-010. Em 2026-11-19 a tela Explorar dados foi removida de vez.
+- Ligada à US-010. Em 2026-11-19 a tela Explorar dados foi removida; em 2026-11-25 voltou como era.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

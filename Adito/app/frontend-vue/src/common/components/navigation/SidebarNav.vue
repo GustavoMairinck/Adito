@@ -6,6 +6,7 @@ import BrandIcon from '@/common/components/BrandIcon.vue'
 import AtualizacaoDisponivel from '@/common/components/navigation/AtualizacaoDisponivel.vue'
 import {
   AreaChart,
+  Database,
   MessageSquare,
   Settings,
   KeyRound,
@@ -55,6 +56,7 @@ function closeSidebar() {
 const menuItems = [
   { icon: MessageSquare, label: 'Chat', path: '/chat' },
   { icon: AreaChart, label: 'Meu painel', path: '/meu-dashboard' },
+  { icon: Database, label: 'Explorar dados', path: '/explorar' },
   { icon: Settings, label: 'Administração', path: '/admin', adminOnly: true },
   { icon: KeyRound, label: 'Configurações', path: '/configuracoes' }
 ]
