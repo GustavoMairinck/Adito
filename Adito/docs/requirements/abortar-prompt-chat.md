@@ -59,7 +59,7 @@ O Adito usa BYOK (chave de API do próprio usuário em provedores como Gemini, O
   - `src/common/api/core.ts` (`stream`, `withAbort`, `core_cancel`).
   - `src/modules/chat/composables/useChatHistory.ts` e `useChatApi.ts` (promoção para estado compartilhado + mapa de streams por `conversationId` + helper de reset para testes).
   - `src/modules/chat/views/ChatEstrategicoView.vue`, `components/ChatInputArea.vue`, `components/ChatMessageBubble.vue`, `components/ChatSidebar.vue`, `types.ts`.
-  - `tests/e2e/support/tauriMock.ts` e specs Vitest / Playwright.
+  - `tests/e2e/helpers/tauriMock.ts` e specs Vitest / Playwright.
 - **Backend Python (`Adito/app/backend/nucleo/`):**
   - `rpc/server.py` (`$cancel` já implementado — validar/testar).
   - `rpc/chat.py` (`chat_stream`, criação e disparo de `cancel_event`, tratamento de `CancelledError` sem persistir resposta parcial).

@@ -86,12 +86,12 @@ Nenhum ponto pendente (todas as decisões de UX e segundo plano foram consolidad
 
 ### Dependencias
 
-- [ ] `US-CHAT-01` concluída (filtro pós-abort em `core.ts` + cancelamento cooperativo no núcleo Python).
+- [x] `US-CHAT-01` concluída (filtro pós-abort em `core.ts` + cancelamento cooperativo no núcleo Python).
 
 ### Consideracoes de Performance
 
-- Usar `reactive(new Map<string, AbortController>())` ou `ref<Record<string, AbortController>>({})` em estado de módulo para rastrear streams ativos por `conversationId`, evitando re-renderizações desnecessárias em conversas não afetadas.
-- Ao voltar à tela de Chat (re-montagem de `ChatEstrategicoView.vue`), evitar sobrescrever `conversations` com `syncFromBackend()` se já houver conversas hidratadas ou streams em andamento (só hidratar na primeira inicialização ou mesclar sem perder rascunhos em andamento).
+- Usar `shallowRef<Record<string, AbortController>>({})` em estado de módulo para rastrear streams ativos por `conversationId`, evitando proxificação de `AbortController` e re-renderizações desnecessárias em conversas não afetadas.
+- Ao voltar à tela de Chat (re-montagem de `ChatEstrategicoView.vue`), evitar sobrescrever `conversations` com `syncFromBackend()` se já houver conversas hidratadas, streams em andamento ou avisos de interrupção em memória.
 
 ---
 
@@ -99,21 +99,21 @@ Nenhum ponto pendente (todas as decisões de UX e segundo plano foram consolidad
 
 ### Testes Unitarios
 
-- [ ] Vitest (`useChatApi.spec.ts`): `askQuestionStream` suporta `conversationId` independente, `cancelStream(convId)` aborta apenas a conversa alvo e retorna/sinaliza cancelamento sem marcar `error: true`, e `migrateStreamKey(oldId, newId)` transfere o `AbortController` corretamente.
-- [ ] Vitest (`useChatHistory.spec.ts`): `updateConversationById` atualiza conversa inativa sem afetar `currentConvId`; `replaceConversationId` migra ID de conversa inativa sem puxar foco; helper de reset limpa o estado entre testes.
-- [ ] Vitest (`ChatInputArea.spec.ts`): exibe botão **"Parar"** durante `loading`, emite `cancel` ao clicar ou pressionar `Esc`, mantém texto digitado no `<textarea>`.
+- [x] Vitest (`useChatApi.spec.ts`): `askQuestionStream` suporta `conversationId` independente, `cancelStream(convId)` aborta apenas a conversa alvo e retorna cancelamento sem marcar `error: true`, `migrateStreamKey(oldId, newId)` transfere o `AbortController` corretamente e erro `503` limpa o carregamento sem travar a UI.
+- [x] Vitest (`useChatHistory.spec.ts`): `updateConversationById` atualiza conversa inativa sem afetar `currentConvId`; `replaceConversationId` deduplica e migra ID sem puxar foco; `syncFromBackend` preserva conversas em andamento e recém-interrompidas; helper de reset limpa o estado entre testes.
+- [x] Vitest (`ChatInputArea.spec.ts`): exibe botão **"Parar"** durante `loading`, emite `cancel` ao clicar ou pressionar `Esc` (respeitando `disableEscape` quando há modal aberto), mantém texto digitado no `<textarea>`.
 
 ### Testes de Integracao
 
-- [ ] Playwright E2E (`chat.spec.ts` com `tauriMock.ts`):
+- [x] Playwright E2E (`chat.spec.ts` com `helpers/tauriMock.ts`):
   - Enviar pergunta → receber texto parcial → clicar em **"Parar"** → manter texto parcial + *"Resposta interrompida"* → enviar 2ª pergunta imediatamente sem erro.
   - Enviar pergunta → digitar texto novo no input enquanto carrega → pressionar **`Esc`** → abortar sem apagar texto digitado.
-  - Enviar pergunta na Conversa A → trocar para Nova conversa / navegar para Dashboard e voltar ao Chat → resposta da Conversa A conclui em segundo plano sem vazar para a Conversa B.
+  - Enviar pergunta na Conversa A → trocar para outra conversa / navegar para **Meu painel** e voltar ao Chat → resposta da Conversa A conclui em segundo plano sem vazar para a Conversa B.
   - Excluir conversa em geração → `core_cancel` é disparado automaticamente.
 
 ### Testes de Contract
 
-- [ ] N/A (sem alteração de contrato RPC).
+- [x] N/A (sem alteração de contrato RPC; `teste_contrato.py` verde).
 
 ### Testes Manuais
 
@@ -168,17 +168,17 @@ Nenhum ponto pendente (todas as decisões de UX e segundo plano foram consolidad
 
 ## Definition of Done Checklist
 
-- [ ] Codigo implementado conforme criterios de aceitacao
+- [x] Codigo implementado conforme criterios de aceitacao
 - [x] Decisao sobre Spec governada foi registrada
 - [x] Decisao sobre Contract governado foi registrada
 - [x] Nivel ScrumAIDev foi registrado
-- [ ] Spec, Contract e BDD foram atualizados quando aplicavel
-- [ ] Gates opcionais executados ou dispensados com justificativa
-- [ ] Error handling observavel segue o padrao compartilhado quando aplicavel
-- [ ] Code review aprovado
-- [ ] Testes unitarios com cobertura adequada
-- [ ] Testes de integracao e contract passando
-- [ ] Documentacao atualizada
-- [ ] Build/CI passando
-- [ ] `Behavior change` documentado no PR
-- [ ] Aprovacao do Product Owner
+- [x] Spec, Contract e BDD foram atualizados quando aplicavel (N/A — Nível 1)
+- [x] Gates opcionais executados ou dispensados com justificativa (N/A — Nível 1)
+- [x] Error handling observavel segue o padrao compartilhado quando aplicavel (`CanceledError`/`499` neutro, `503` amigável)
+- [ ] Code review aprovado (em revisão no PR #122)
+- [x] Testes unitarios com cobertura adequada
+- [x] Testes de integracao e contract passando
+- [x] Documentacao atualizada
+- [x] Build/CI passando
+- [x] `Behavior change` documentado no PR
+- [ ] Aprovacao do Product Owner (aguardando merge do PR #122)

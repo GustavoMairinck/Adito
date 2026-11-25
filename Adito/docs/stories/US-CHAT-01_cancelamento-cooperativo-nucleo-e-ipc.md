@@ -21,7 +21,7 @@
 
 O protocolo STDIO (`$cancel` em `rpc/server.py`), o Tauri (`core_cancel` em `src-tauri/src/lib.rs`) e a bridge (`AbortSignal` em `common/api/core.ts`) já existem, mas hoje:
 1. Em `common/api/core.ts`, `withAbort()` rejeita com `CanceledError` quando `signal` aborta, mas `channel.onmessage` continua ativo até o `$end` chegar — permitindo vazamento de eventos atrasados (`token`, `status`, `result`, `error`) para os callbacks da UI.
-2. Em `rpc/chat.py`, `task.cancel()` cancela o `orchestrator_graph.astream(...)` em pontos de `await`, mas o `BIAgent` roda de forma síncrona em thread (`self.app.invoke`), continuando a executar os nós seguintes (`query_extractor`, `semantic_value_resolver`, `sql_generator`, `sql_validator`, `sql_corrector`, `response_generator`) e consumindo cota do LLM mesmo depois do cancelamento.
+2. Em `rpc/chat.py`, `task.cancel()` cancela o `orchestrator_graph.astream(...)` em pontos de `await`, mas o `BIAgent` roda de forma síncrona em thread (`self.app.invoke`), continuando a executar os nós seguintes (`query_extractor`, `semantic_value_resolver`, `question_rewriter`, `sql_generator`, `sql_validator`, `sql_corrector`, `formatter` / `response_formatter` e `answer_from_rows`) e consumindo cota do LLM mesmo depois do cancelamento.
 
 ### Pontos de Esclarecimento
 
@@ -97,22 +97,23 @@ N/A (story de infraestrutura/backend + bridge IPC).
 
 ### Testes Unitarios
 
-- [ ] Python (`core/tests.py`): `BIAgent` com `cancel_event` sinalizado durante o primeiro nó interrompe antes do segundo nó (não chama `sql_generator` / `response_generator`).
-- [ ] Python (`core/tests.py`): `Server.handle({"method": "$cancel", ...})` em `chat.stream` sinaliza `cancel_event`, devolve `499` e não grava mensagem `assistant` nem `QueryExecution` no `app.db`.
-- [ ] Python (`core/tests.py`): duas execuções concorrentes de `chat.stream` em conversas distintas cancelando apenas a 1ª não afetam o `cancel_event` da 2ª.
-- [ ] Frontend Vitest: `stream()` em `core.ts` ao receber `signal.abort()` dispara `core_cancel`, rejeita com `CanceledError` e ignora eventos `token`/`result` enviados depois no `Channel`.
+- [x] Python (`core/tests.py`): `BIAgent` com `cancel_event` sinalizado durante o primeiro nó interrompe antes do segundo nó (não chama `semantic_value_resolver`, `sql_generator`, `formatter` nem `answer_from_rows`).
+- [x] Python (`core/tests.py`): `Server.handle({"method": "$cancel", ...})` em `chat.stream` sinaliza `cancel_event`, devolve `499` e não grava mensagem `assistant` nem `QueryExecution` no `app.db` (incluindo guarda dentro de `persist_assistant_response`).
+- [x] Python (`core/tests.py`): duas execuções concorrentes de `chat.stream` em conversas distintas cancelando apenas a 1ª não afetam o `cancel_event` da 2ª.
+- [x] Frontend Vitest (`core.spec.ts`): `stream()` em `core.ts` ao receber `signal.abort()` dispara `core_cancel`, rejeita com `CanceledError`, libera a Promise interna e ignora eventos `token`/`result` enviados depois no `Channel`.
 
 ### Testes de Integracao
 
-- [ ] Python (`core/tests.py`): fluxo `perguntar → cancelar → perguntar novamente na mesma conversa` usando `AsyncSqliteSaver` confirma checkpointer íntegro e resposta válida na 2ª pergunta.
+- [x] Python (`core/tests.py`): fluxo `perguntar → cancelar → perguntar novamente na mesma conversa` usando `AsyncSqliteSaver` confirma checkpointer íntegro e resposta válida na 2ª pergunta.
+- [x] Python (`core/tests.py`): fluxo completo `chat_stream → orchestrator → mcp_tool_node → asyncio.to_thread(run_bi_agent) → BIAgent` com `$cancel` confirma propagação real via `ContextVar` e re-lançamento de `BIAgentCancelled` em `mcp_tool_node`.
 
 ### Testes de Contract
 
-- [ ] Executar `python Adito/app/scripts/teste_contrato.py` garantindo 0 regressões frente a `referencia.json`.
+- [x] Executar `python Adito/app/scripts/teste_contrato.py` garantindo 0 regressões frente a `referencia.json`.
 
 ### Testes Manuais
 
-- [ ] Conferir em `src-tauri/src/lib.rs` se `core_cancel` seguido de resposta `499` limpa o `HashMap` `pending` sem warnings ou vazamento (rodar `cargo test`).
+- [x] Conferido em `src-tauri/src/lib.rs` que `core_cancel` seguido de resposta `499` limpa o `HashMap` `pending` sem warnings ou vazamento (`cargo test` 19/19 OK).
 
 ### BDD / Cenarios de Comportamento
 
@@ -163,17 +164,17 @@ N/A (story de infraestrutura/backend + bridge IPC).
 
 ## Definition of Done Checklist
 
-- [ ] Codigo implementado conforme criterios de aceitacao
+- [x] Codigo implementado conforme criterios de aceitacao
 - [x] Decisao sobre Spec governada foi registrada
 - [x] Decisao sobre Contract governado foi registrada
 - [x] Nivel ScrumAIDev foi registrado
-- [ ] Spec, Contract e BDD foram atualizados quando aplicavel
-- [ ] Gates opcionais executados ou dispensados com justificativa
-- [ ] Error handling observavel segue o padrao compartilhado quando aplicavel
-- [ ] Code review aprovado
-- [ ] Testes unitarios com cobertura adequada
-- [ ] Testes de integracao e contract passando
-- [ ] Documentacao atualizada
-- [ ] Build/CI passando
-- [ ] `Behavior change` documentado no PR
-- [ ] Aprovacao do Product Owner
+- [x] Spec, Contract e BDD foram atualizados quando aplicavel (N/A — Nível 1)
+- [x] Gates opcionais executados ou dispensados com justificativa (`teste_contrato.py` executado)
+- [x] Error handling observavel segue o padrao compartilhado quando aplicavel (`499` / `CanceledError`)
+- [ ] Code review aprovado (em revisão no PR #122)
+- [x] Testes unitarios com cobertura adequada
+- [x] Testes de integracao e contract passando
+- [x] Documentacao atualizada
+- [x] Build/CI passando
+- [x] `Behavior change` documentado no PR
+- [ ] Aprovacao do Product Owner (aguardando merge do PR #122)
