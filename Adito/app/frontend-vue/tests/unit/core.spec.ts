@@ -134,4 +134,45 @@ describe('common/api/core', () => {
       message: 'Chave LLM não configurada',
     })
   })
+
+  it('stream dispara core_cancel, rejeita com CanceledError e ignora eventos atrasados após abort()', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'core_stream') return new Promise(() => {})
+      return Promise.resolve(undefined)
+    })
+
+    const controller = new AbortController()
+    const received: Array<{ event: string; data: unknown }> = []
+    const promise = stream(
+      'chat.stream',
+      { question: 'Teste' },
+      (event, data) => received.push({ event, data }),
+      { signal: controller.signal },
+    )
+
+    expect(createdChannels).toHaveLength(1)
+    createdChannels[0].onmessage?.({ event: 'token', data: { text: 'Parcial' } })
+    expect(received).toEqual([{ event: 'token', data: { text: 'Parcial' } }])
+
+    controller.abort()
+
+    await expect(promise).rejects.toMatchObject({ name: 'CanceledError', status: 499 })
+    expect(invokeMock).toHaveBeenCalledWith('core_cancel', { id: expect.any(Number) })
+
+    // Eventos atrasados do canal após abort devem ser totalmente ignorados.
+    createdChannels[0].onmessage?.({ event: 'token', data: { text: 'Atrasado' } })
+    createdChannels[0].onmessage?.({ event: 'result', data: { text: 'Final atrasado' } })
+    expect(received).toEqual([{ event: 'token', data: { text: 'Parcial' } }])
+  })
+
+  it('stream rejeita imediatamente sem chamar core_stream quando o signal já chega abortado', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      stream('chat.stream', { question: 'Teste' }, () => {}, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'CanceledError', status: 499 })
+
+    expect(invokeMock).not.toHaveBeenCalled()
+  })
 })

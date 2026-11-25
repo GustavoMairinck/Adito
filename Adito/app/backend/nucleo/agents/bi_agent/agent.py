@@ -1,3 +1,4 @@
+import threading
 from typing import Optional, List, Any
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -6,6 +7,13 @@ from langchain_core.embeddings import Embeddings
 from core.contexts import build_system_prompt, get_contexto, read_policy_for
 from core.datastore import connect_dados
 
+from .cancellation import (
+    BIAgentCancelled,
+    check_cancelled,
+    get_cancel_event,
+    reset_cancel_event,
+    set_cancel_event,
+)
 from .graph import build_graph
 
 def execute_query(sql: str, contexto_id: str | None, max_rows: int | None = None, dados_path=None) -> List[dict]:
@@ -54,52 +62,70 @@ class BIAgent:
     def execute_query(self, sql: str, contexto_id: str | None, max_rows: int | None = None) -> List[dict]:
         return execute_query(sql, contexto_id, max_rows, self.dados_path)
 
-    def ask(self, question: str, tenant_id: str, contexto_id: str, thread_id: str, callbacks: Optional[List[Any]] = None, execute: bool = False) -> dict:
+    def ask(
+        self,
+        question: str,
+        tenant_id: str,
+        contexto_id: str,
+        thread_id: str,
+        callbacks: Optional[List[Any]] = None,
+        execute: bool = False,
+        cancel_event: threading.Event | None = None,
+    ) -> dict:
         """Processa a pergunta do usuário dentro de um contexto (views, regras e RAG do contexto)."""
-        contexto = get_contexto(contexto_id)
-        if contexto is None:
+        token = set_cancel_event(cancel_event) if cancel_event is not None else None
+        try:
+            check_cancelled()
+            contexto = get_contexto(contexto_id)
+            if contexto is None:
+                return {
+                    "sql": None,
+                    "valid": False,
+                    "explanation": "Nenhum contexto de dados selecionado. Escolha um contexto para esta conversa.",
+                    "data": None,
+                    "field_formats": {},
+                }
+
+            config = {
+                "configurable": {"thread_id": thread_id},
+                "callbacks": callbacks,
+                "metadata": {
+                    "langfuse_session_id": thread_id
+                }
+            }
+
+            system_prompt = build_system_prompt(contexto, self.dados_path)
+            if self.system_prompt:
+                system_prompt = f"{system_prompt}\n\n{self.system_prompt}"
+
+            input_data = {
+                "user_input": question,
+                "tenant_id": str(tenant_id),
+                "contexto_id": str(contexto.id),
+                "allowed_views": contexto.view_names(),
+                "messages": [HumanMessage(content=question)],
+                "system_prompt": system_prompt,
+            }
+
+            check_cancelled()
+            output = self.app.invoke(input_data, config=config)
+            check_cancelled()
+
+            sql = output.get("generated_sql")
+            valid = output.get("validation_result", {}).get("valid", False)
+
+            data = None
+            if execute and sql and valid:
+                check_cancelled()
+                data = self.execute_query(sql, contexto_id=str(contexto.id))
+
             return {
-                "sql": None,
-                "valid": False,
-                "explanation": "Nenhum contexto de dados selecionado. Escolha um contexto para esta conversa.",
-                "data": None,
-                "field_formats": {},
+                "sql": sql,
+                "valid": valid,
+                "explanation": output.get("final_response"),
+                "data": data,
+                "field_formats": output.get("field_formats", {})
             }
-
-        config = {
-            "configurable": {"thread_id": thread_id},
-            "callbacks": callbacks,
-            "metadata": {
-                "langfuse_session_id": thread_id
-            }
-        }
-
-        system_prompt = build_system_prompt(contexto, self.dados_path)
-        if self.system_prompt:
-            system_prompt = f"{system_prompt}\n\n{self.system_prompt}"
-
-        input_data = {
-            "user_input": question,
-            "tenant_id": str(tenant_id),
-            "contexto_id": str(contexto.id),
-            "allowed_views": contexto.view_names(),
-            "messages": [HumanMessage(content=question)],
-            "system_prompt": system_prompt,
-        }
-
-        output = self.app.invoke(input_data, config=config)
-
-        sql = output.get("generated_sql")
-        valid = output.get("validation_result", {}).get("valid", False)
-
-        data = None
-        if execute and sql and valid:
-            data = self.execute_query(sql, contexto_id=str(contexto.id))
-
-        return {
-            "sql": sql,
-            "valid": valid,
-            "explanation": output.get("final_response"),
-            "data": data,
-            "field_formats": output.get("field_formats", {})
-        }
+        finally:
+            if token is not None:
+                reset_cancel_event(token)

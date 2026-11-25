@@ -11,6 +11,7 @@ from .state import MultiAgentState
 from .router import orchestrator_node
 from .conversational_agent import conversational_node
 from .guard import GUARD_INTENTS, INTENT_BLOCKED, INTENT_OUT_OF_SCOPE, guard_node
+from agents.bi_agent.agent import BIAgentCancelled
 from agents.config import checkpoint_db_path
 
 mcp_tools = []
@@ -121,6 +122,8 @@ async def mcp_tool_node(state: MultiAgentState):
 
                 return {"messages": [AIMessage(content=f"[{tool_name}]:\n{content_str}")]}
 
+            except (asyncio.CancelledError, BIAgentCancelled):
+                raise
             except Exception as e:
                 print(f"[MCP ← {tool_name}] ERRO: {e}")
                 return {"messages": [AIMessage(content=f"Erro na ferramenta {tool_name}: {str(e)}")]}

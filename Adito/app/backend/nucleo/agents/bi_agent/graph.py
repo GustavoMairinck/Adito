@@ -5,6 +5,7 @@ from langgraph.graph import END, StateGraph
 
 from core.rich_logging import log_info
 
+from .cancellation import check_cancelled
 from .nodes import (
     query_extractor,
     question_rewriter,
@@ -39,6 +40,16 @@ def route_validation(state: BiAgentState, max_attempts: int) -> str:
     return "correct"
 
 
+def _cancellable(node_fn):
+    def wrapped(state: BiAgentState):
+        check_cancelled()
+        result = node_fn(state)
+        check_cancelled()
+        return result
+
+    return wrapped
+
+
 def build_graph(
     dados_path: str | None,
     llm_model: BaseChatModel,
@@ -49,19 +60,19 @@ def build_graph(
 ):
     workflow = StateGraph(BiAgentState)
 
-    workflow.add_node("extractor", partial(query_extractor, embedder=embedder))
+    workflow.add_node("extractor", _cancellable(partial(query_extractor, embedder=embedder)))
     workflow.add_node(
         "semantic_value_resolver",
-        partial(semantic_value_resolver, llm_model=llm_model, embedder=embedder),
+        _cancellable(partial(semantic_value_resolver, llm_model=llm_model, embedder=embedder)),
     )
-    workflow.add_node("question_rewriter", partial(question_rewriter, llm_model=llm_model))
-    workflow.add_node("generator", partial(sql_generator, llm_model=llm_model, dialect=dialect))
+    workflow.add_node("question_rewriter", _cancellable(partial(question_rewriter, llm_model=llm_model)))
+    workflow.add_node("generator", _cancellable(partial(sql_generator, llm_model=llm_model, dialect=dialect)))
     workflow.add_node(
         "validator",
-        partial(sql_validator, dados_path=dados_path, dialect=dialect, validate_sql=validate_sql),
+        _cancellable(partial(sql_validator, dados_path=dados_path, dialect=dialect, validate_sql=validate_sql)),
     )
-    workflow.add_node("corrector", partial(sql_corrector, llm_model=llm_model, dialect=dialect))
-    workflow.add_node("formatter", response_formatter)
+    workflow.add_node("corrector", _cancellable(partial(sql_corrector, llm_model=llm_model, dialect=dialect)))
+    workflow.add_node("formatter", _cancellable(response_formatter))
 
     workflow.set_entry_point("extractor")
     workflow.add_edge("extractor", "semantic_value_resolver")

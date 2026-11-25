@@ -13,7 +13,7 @@ from langchain_core.tools import StructuredTool
 from agents.config import get_active_llm_config, get_chat_llm, get_embeddings, langfuse_callbacks
 from core.contexts import row_limit_for
 
-from .agent import BIAgent
+from .agent import BIAgent, BIAgentCancelled, check_cancelled
 
 # Prévia de linhas que entra na resposta da ferramenta e, portanto, no histórico enviado ao LLM.
 PREVIEW_ROWS = 5
@@ -50,6 +50,7 @@ def get_bi_agent() -> BIAgent:
 
 
 def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: str = "default_session") -> str:
+    check_cancelled()
     print(f"[BI Agent] tenant={tenant_id!r} contexto={contexto_id!r} | instrução={instruction[:80]!r}")
 
     result = get_bi_agent().ask(
@@ -60,6 +61,7 @@ def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: 
         callbacks=langfuse_callbacks(),
         execute=True,
     )
+    check_cancelled()
     data_rows = result.get("data") or []
     text_resp = result.get("text", result.get("explanation", "")) or ""
     is_valid = bool(result.get("valid"))
@@ -72,8 +74,10 @@ def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: 
     elif is_valid and isinstance(data_rows, list) and len(data_rows) == 0:
         text_resp = "A consulta foi executada com sucesso, mas nenhum registro correspondeu ao filtro aplicado."
     elif is_valid and data_rows:
+        check_cancelled()
         limit = row_limit_for(contexto_id, ANSWER_ROWS_DEFAULT)
         text_resp = answer_from_rows(instruction, data_rows, limit) or text_resp
+        check_cancelled()
 
     data_preview = ""
     if data_rows:
@@ -111,12 +115,16 @@ def answer_from_rows(question: str, rows: list[dict], limit: int) -> str | None:
         f"Linhas do resultado (JSON):\n{json.dumps(amostra, ensure_ascii=False, default=str)}"
     )
     try:
+        check_cancelled()
         resposta = get_chat_llm(temperature=0.0).invoke(
             [SystemMessage(content=ANSWER_SYSTEM_PROMPT), HumanMessage(content=prompt)],
             config={"callbacks": langfuse_callbacks(), "run_name": "bi_answer_from_rows"},
         )
+        check_cancelled()
         texto = (resposta.text or "").strip()
         return texto or None
+    except BIAgentCancelled:
+        raise
     except Exception as exc:
         print(f"[BI Agent] Falha ao escrever a resposta a partir dos dados: {exc}")
         return None

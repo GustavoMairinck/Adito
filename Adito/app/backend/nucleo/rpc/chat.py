@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
 from langchain_core.messages import HumanMessage
 
-from agents.bi_agent.agent import execute_query
+from agents.bi_agent.agent import BIAgentCancelled, execute_query, reset_cancel_event, set_cancel_event
 from agents.bi_agent.tool import local_tools
 from agents.config import langfuse_callbacks
 from agents.orchestrator.graph import get_graph
@@ -219,6 +220,9 @@ async def chat_stream(params, emit):
     from agents.orchestrator import graph as graph_module
     from agents.orchestrator import router
 
+    cancel_event = threading.Event()
+    cancel_token = set_cancel_event(cancel_event)
+
     try:
         await emit("status", {
             "status": "processing",
@@ -252,6 +256,8 @@ async def chat_stream(params, emit):
             async for mode, chunk in orchestrator_graph.astream(
                 initial_state, config=config, stream_mode=["updates", "messages"]
             ):
+                if cancel_event.is_set():
+                    raise asyncio.CancelledError()
                 if mode == "messages":
                     message_chunk, metadata = chunk
                     if metadata.get("langgraph_node") == "conversational_agent" and message_chunk.text:
@@ -259,6 +265,8 @@ async def chat_stream(params, emit):
                     continue
 
                 for node_name, update in chunk.items():
+                    if cancel_event.is_set():
+                        raise asyncio.CancelledError()
                     updates_list = update if isinstance(update, list) else [update]
                     for upd in updates_list:
                         if isinstance(upd, dict):
@@ -272,6 +280,8 @@ async def chat_stream(params, emit):
                         for upd in updates_list:
                             if not isinstance(upd, dict) or has_emitted_result:
                                 continue
+                            if cancel_event.is_set():
+                                raise asyncio.CancelledError()
                             res = build_final_result(upd)
                             # Emite se houver algo útil para apresentar
                             if res.get("data") or res.get("sql") or (
@@ -282,6 +292,9 @@ async def chat_stream(params, emit):
                                 )
                                 await emit("result", payload)
                                 has_emitted_result = True
+
+        if cancel_event.is_set():
+            raise asyncio.CancelledError()
 
         if not final_state:
             raise ValueError("Grafo finalizou sem estado.")
@@ -296,12 +309,16 @@ async def chat_stream(params, emit):
             )
             await emit("result", payload)
 
-    except asyncio.CancelledError:
-        raise
+    except (asyncio.CancelledError, BIAgentCancelled):
+        cancel_event.set()
+        log_info("chat", f"stream cancelado pelo usuário thread={thread_id}")
+        raise asyncio.CancelledError()
     except Exception as e:
         logger.exception("Erro no processamento do stream de chat")
         err_msg = str(e) or e.__class__.__name__
         await emit("error", {"message": llm_error_message(e) or f"Erro interno ao processar sua pergunta: {err_msg}"})
+    finally:
+        reset_cancel_event(cancel_token)
     return None
 
 
