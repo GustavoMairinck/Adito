@@ -929,11 +929,91 @@
   }
  },
  {
+  "nome": "reports.create",
+  "status": "2xx",
+  "body": {
+   "id": "<id14>",
+   "role": "assistant",
+   "content": "Relatório do contrato",
+   "metadata": {
+    "type": "report",
+    "title": "Relatório do contrato",
+    "contexto_nome": "Contrato",
+    "sections": [
+     {
+      "source_message_id": "<id8>",
+      "title": "Seção 1",
+      "sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+      "field_formats": {
+       "total": "currency"
+      },
+      "chart_type": null
+     },
+     {
+      "source_message_id": "<id10>",
+      "title": "Seção 2",
+      "sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+      "field_formats": {
+       "total": "currency"
+      },
+      "chart_type": null
+     }
+    ]
+   },
+   "created_at": "<data>"
+  }
+ },
+ {
+  "nome": "reports.create sem seções",
+  "status": 400,
+  "body": {
+   "sections": [
+    "Escolha ao menos uma resposta para o relatório."
+   ]
+  }
+ },
+ {
+  "nome": "report_rows",
+  "status": "2xx",
+  "body": {
+   "sections": [
+    {
+     "data": [
+      {
+       "ano": 2024,
+       "total": 7207.5
+      },
+      {
+       "ano": 2025,
+       "total": 7426.0
+      },
+      {
+       "ano": 2026,
+       "total": 7226.5
+      }
+     ],
+     "error": null
+    },
+    {
+     "data": [],
+     "error": "os dados mudaram desde a pergunta"
+    }
+   ]
+  }
+ },
+ {
+  "nome": "report_rows de resposta comum",
+  "status": 404,
+  "body": {
+   "detail": "No Report matches the given query."
+  }
+ },
+ {
   "nome": "query_executions",
   "status": "2xx",
   "body": [
    {
-    "id": "<id14>",
+    "id": "<id15>",
     "user": "local",
     "question_original": "Oi",
     "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
@@ -941,12 +1021,12 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": "<id13>"
    },
    {
-    "id": "<id16>",
+    "id": "<id17>",
     "user": "local",
     "question_original": "E por área?",
     "generated_sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
@@ -954,12 +1034,12 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": "<id10>"
    },
    {
-    "id": "<id17>",
+    "id": "<id18>",
     "user": "local",
     "question_original": "Total por ano?",
     "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
@@ -967,7 +1047,7 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": "<id8>"
    }
@@ -1036,7 +1116,7 @@
   "status": "2xx",
   "body": [
    {
-    "id": "<id14>",
+    "id": "<id15>",
     "user": "local",
     "question_original": "Oi",
     "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
@@ -1044,12 +1124,12 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": "<id13>"
    },
    {
-    "id": "<id16>",
+    "id": "<id17>",
     "user": "local",
     "question_original": "E por área?",
     "generated_sql": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
@@ -1057,12 +1137,12 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": null
    },
    {
-    "id": "<id17>",
+    "id": "<id18>",
     "user": "local",
     "question_original": "Total por ano?",
     "generated_sql": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
@@ -1070,7 +1150,7 @@
     "error_message": null,
     "execution_time_ms": null,
     "created_at": "<data>",
-    "tenant": "<id15>",
+    "tenant": "<id16>",
     "contexto": "<id2>",
     "message": null
    }
@@ -1127,7 +1207,7 @@
   "nome": "trainings.create",
   "status": "2xx",
   "body": {
-   "id": "<id18>",
+   "id": "<id19>",
    "type": "sql",
    "name": "Quantas orientações?",
    "question": "Quantas orientações?",
@@ -1204,7 +1284,7 @@
   "status": "2xx",
   "body": [
    {
-    "id": "<id18>",
+    "id": "<id19>",
     "type": "sql",
     "name": "Quantas orientações?",
     "question": "Quantas orientações?",
@@ -1231,7 +1311,7 @@
   "nome": "trainings.create com contexto",
   "status": "2xx",
   "body": {
-   "id": "<id19>",
+   "id": "<id20>",
    "type": "documentation",
    "name": "Bolsista é aluno com bolsa.",
    "question": "",
@@ -1282,7 +1362,7 @@
   "status": "2xx",
   "body": [
    {
-    "id": "<id20>",
+    "id": "<id21>",
     "type": "sql",
     "name": "Investimento por ano?",
     "question": "Investimento por ano?",
@@ -1301,7 +1381,7 @@
     "updated_at": "<data>"
    },
    {
-    "id": "<id21>",
+    "id": "<id22>",
     "type": "documentation",
     "name": "Regras do contexto — Contrato",
     "question": "",
@@ -1319,7 +1399,7 @@
     "updated_at": "<data>"
    },
    {
-    "id": "<id22>",
+    "id": "<id23>",
     "type": "ddl",
     "name": "Esquema das views — Contrato",
     "question": "",
@@ -1337,7 +1417,7 @@
     "updated_at": "<data>"
    },
    {
-    "id": "<id19>",
+    "id": "<id20>",
     "type": "documentation",
     "name": "Bolsista é aluno com bolsa.",
     "question": "",
@@ -1357,7 +1437,7 @@
     "updated_at": "<data>"
    },
    {
-    "id": "<id18>",
+    "id": "<id19>",
     "type": "sql",
     "name": "Quantas orientações?",
     "question": "Quantas orientações?",
@@ -1384,7 +1464,7 @@
   "nome": "trainings.delete",
   "status": "2xx",
   "body": {
-   "id": "<id19>",
+   "id": "<id20>",
    "deleted": true
   }
  },

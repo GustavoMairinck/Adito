@@ -4,7 +4,7 @@
 **Prioridade:** Alta (slice 1)
 **Story Points:** 8
 **Sprint:** —
-**Status:** Backlog
+**Status:** Review
 
 **Origem:** [`docs/discovery/relatorios-chat.md`](../discovery/relatorios-chat.md) · [`docs/requirements/relatorios-chat.md`](../requirements/relatorios-chat.md)
 **Requisitos:** FR01, FR02 (sem título de seção editável), FR04–FR10; BR01–BR08; NFR01 (chat), NFR05–NFR07; KD01–KD03, KD05, KD06
@@ -110,6 +110,8 @@ Referência: formulário "O que você quer no relatório?" com lista de seções
 ---
 
 ## 📝 Notas e Comentários
+
+- 2026-11-25: implementada na branch `feat/relatorios-chat`, junto com as outras stories do EPIC-14, a pedido do usuário (sem sprint planning). Nota do spike de PDF: [`docs/resultados/spike-pdf-relatorio-2026-11-25.md`](../resultados/spike-pdf-relatorio-2026-11-25.md).
 
 - Decisões do usuário em 2026-11-25: modelo fixo sem LLM, relatório no chat, números atuais, salvo na conversa.
 

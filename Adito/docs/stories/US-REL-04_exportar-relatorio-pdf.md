@@ -4,7 +4,7 @@
 **Prioridade:** Alta (slice 3)
 **Story Points:** 5
 **Sprint:** —
-**Status:** Backlog
+**Status:** Review
 
 **Origem:** [`docs/discovery/relatorios-chat.md`](../discovery/relatorios-chat.md) · [`docs/requirements/relatorios-chat.md`](../requirements/relatorios-chat.md)
 **Requisitos:** FR12–FR18; BR03, BR09, BR10; NFR01 (PDF), NFR02–NFR04, NFR07; KD04
@@ -99,6 +99,8 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 ---
 
 ## 📝 Notas e Comentários
+
+- 2026-11-25: implementada na branch `feat/relatorios-chat`, junto com as outras stories do EPIC-14, a pedido do usuário (sem sprint planning). Nota do spike de PDF: [`docs/resultados/spike-pdf-relatorio-2026-11-25.md`](../resultados/spike-pdf-relatorio-2026-11-25.md).
 
 ---
 

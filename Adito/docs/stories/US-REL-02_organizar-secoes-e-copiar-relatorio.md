@@ -4,7 +4,7 @@
 **Prioridade:** Alta (slice 2)
 **Story Points:** 3
 **Sprint:** —
-**Status:** Backlog
+**Status:** Review
 
 **Origem:** [`docs/discovery/relatorios-chat.md`](../discovery/relatorios-chat.md) · [`docs/requirements/relatorios-chat.md`](../requirements/relatorios-chat.md)
 **Requisitos:** FR02 (título de seção editável), FR03, FR11; BR04, BR06; NFR06, NFR07
@@ -90,6 +90,8 @@ Mesma referência visual da US-REL-01, com os controles de ordem e o campo de t�
 ---
 
 ## 📝 Notas e Comentários
+
+- 2026-11-25: implementada na branch `feat/relatorios-chat`, junto com as outras stories do EPIC-14, a pedido do usuário (sem sprint planning). Nota do spike de PDF: [`docs/resultados/spike-pdf-relatorio-2026-11-25.md`](../resultados/spike-pdf-relatorio-2026-11-25.md).
 
 ---
 

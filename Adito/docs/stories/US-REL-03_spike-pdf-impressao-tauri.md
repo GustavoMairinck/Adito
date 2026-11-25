@@ -4,7 +4,7 @@
 **Prioridade:** Alta (slice 1, em paralelo à US-REL-01)
 **Story Points:** 2 (limite de tempo: 1 dia)
 **Sprint:** —
-**Status:** Backlog
+**Status:** Review
 
 **Origem:** [`docs/discovery/relatorios-chat.md`](../discovery/relatorios-chat.md) · [`docs/requirements/relatorios-chat.md`](../requirements/relatorios-chat.md)
 **Requisitos:** NFR02, NFR03, NFR04; KD04 (insumo para FR12–FR18)
@@ -96,6 +96,8 @@ Estrutura do PDF descrita em FR13–FR17 dos requisitos (capa, sumário, cabeça
 ---
 
 ## 📝 Notas e Comentários
+
+- 2026-11-25: implementada na branch `feat/relatorios-chat`, junto com as outras stories do EPIC-14, a pedido do usuário (sem sprint planning). Nota do spike de PDF: [`docs/resultados/spike-pdf-relatorio-2026-11-25.md`](../resultados/spike-pdf-relatorio-2026-11-25.md).
 
 ---
 

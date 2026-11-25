@@ -146,12 +146,13 @@ Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já receb
 
 | ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
 |----|--------|------|------------------|------------|------------|------------|--------|
-| [US-REL-01](stories/US-REL-01_gerar-e-ver-relatorio-no-chat.md) | Gerar e ver o relatório no chat | EPIC-14 | 8 | 🔴 Alta (slice 1) | — | FR01, FR02 (sem título de seção editável), FR04–FR10, BR01–BR08, NFR01 (chat), NFR05–NFR07 | Backlog |
-| [US-REL-03](stories/US-REL-03_spike-pdf-impressao-tauri.md) | Spike: PDF pela impressão do Tauri | EPIC-14 | 2 | 🔴 Alta (slice 1, em paralelo) | — | NFR02–NFR04 (insumo para FR12–FR18) | Backlog |
-| [US-REL-02](stories/US-REL-02_organizar-secoes-e-copiar-relatorio.md) | Organizar as seções e copiar o relatório | EPIC-14 | 3 | 🔴 Alta (slice 2) | US-REL-01 | FR02 (título de seção editável), FR03, FR11, BR04, BR06, NFR06, NFR07 | Backlog |
-| [US-REL-04](stories/US-REL-04_exportar-relatorio-pdf.md) | Exportar o relatório em PDF com acabamento | EPIC-14 | 5 | 🔴 Alta (slice 3) | US-REL-01, US-REL-03 | FR12–FR18, BR03, BR09, BR10, NFR01 (PDF), NFR02–NFR04, NFR07 | Backlog |
+| [US-REL-01](stories/US-REL-01_gerar-e-ver-relatorio-no-chat.md) | Gerar e ver o relatório no chat | EPIC-14 | 8 | 🔴 Alta (slice 1) | — | FR01, FR02 (sem título de seção editável), FR04–FR10, BR01–BR08, NFR01 (chat), NFR05–NFR07 | 🔍 Review |
+| [US-REL-03](stories/US-REL-03_spike-pdf-impressao-tauri.md) | Spike: PDF pela impressão do Tauri | EPIC-14 | 2 | 🔴 Alta (slice 1, em paralelo) | — | NFR02–NFR04 (insumo para FR12–FR18) | 🔍 Review |
+| [US-REL-02](stories/US-REL-02_organizar-secoes-e-copiar-relatorio.md) | Organizar as seções e copiar o relatório | EPIC-14 | 3 | 🔴 Alta (slice 2) | US-REL-01 | FR02 (título de seção editável), FR03, FR11, BR04, BR06, NFR06, NFR07 | 🔍 Review |
+| [US-REL-04](stories/US-REL-04_exportar-relatorio-pdf.md) | Exportar o relatório em PDF com acabamento | EPIC-14 | 5 | 🔴 Alta (slice 3) | US-REL-01, US-REL-03 | FR12–FR18, BR03, BR09, BR10, NFR01 (PDF), NFR02–NFR04, NFR07 | 🔍 Review |
 
-> Total EPIC-14: 18 pts (Nível ScrumAIDev 1, branch de planejamento `docs/relatorios-chat`).
+> Total EPIC-14: 18 pts (Nível ScrumAIDev 1, branch `feat/relatorios-chat`).
+> 25/11/2026: o usuário pediu para implementar o épico inteiro direto, sem sprint planning. Spike do PDF: `docs/resultados/spike-pdf-relatorio-2026-11-25.md` (Chromium verificado; WebKitGTK e janela de impressão do Windows a conferir no app).
 > - **Vertical Slice 1 (10 pts):** `US-REL-01` (botão "Mais", formulário, relatório como mensagem da conversa com números atuais, componentes de gráfico/cartão/tabela compartilhados) com `US-REL-03` em paralelo (spike da impressão no Windows e no Linux).
 > - **Vertical Slice 2 (3 pts):** `US-REL-02` (ordem e títulos das seções, "Copiar" em Markdown).
 > - **Vertical Slice 3 (5 pts):** `US-REL-04` (PDF com capa, sumário, cabeçalho/rodapé, divisões, figuras e metodologia), pelo caminho decidido no spike.
