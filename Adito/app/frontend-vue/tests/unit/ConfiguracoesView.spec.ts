@@ -35,6 +35,7 @@ vi.mock('@/modules/auth/composables/useAuth', () => ({
 }))
 
 import ConfiguracoesView from '@/modules/settings/views/ConfiguracoesView.vue'
+import { _resetAtualizacoes, AUTO_UPDATE_STORAGE_KEY } from '@/common/composables/useAtualizacoes'
 
 function makeStatus(overrides: Partial<LlmConfigStatus> = {}): LlmConfigStatus {
   return {
@@ -67,6 +68,7 @@ async function selectProviderOption(wrapper: VueWrapper, label: string) {
 
 describe('ConfiguracoesView.vue', () => {
   beforeEach(() => {
+    _resetAtualizacoes()
     listProvidersMock.mockReset().mockResolvedValue(DEFAULT_LLM_PROVIDERS)
     llmConfigStatusMock.mockReset().mockResolvedValue(makeStatus())
     testAndSaveConfigMock.mockReset()
@@ -215,5 +217,25 @@ describe('ConfiguracoesView.vue', () => {
     expect(mistralOpt.text()).toContain('Em uso')
     expect(geminiOpt.text()).not.toContain('Em uso')
     expect(geminiOpt.text()).toContain('Chave salva')
+  })
+
+  it('exibe toggle de atualização automática desligado por padrão e persiste preferência em localStorage', async () => {
+    const wrapper = mount(ConfiguracoesView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Atualização automática (app e dados)')
+    const toggle = wrapper.get<HTMLInputElement>('#auto-update-toggle')
+    expect(toggle.element.checked).toBe(false)
+    expect(toggle.attributes('role')).toBe('switch')
+    expect(toggle.attributes('aria-checked')).toBe('false')
+
+    await toggle.setValue(true)
+    expect(toggle.element.checked).toBe(true)
+    expect(toggle.attributes('aria-checked')).toBe('true')
+    expect(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY)).toBe('true')
+
+    await toggle.setValue(false)
+    expect(toggle.element.checked).toBe(false)
+    expect(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY)).toBe('false')
   })
 })

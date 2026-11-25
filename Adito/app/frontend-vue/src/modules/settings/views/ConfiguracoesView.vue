@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, ChevronDown, ChevronUp, Info, KeyRound, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { CheckCircle2, ChevronDown, ChevronUp, Info, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import {
   clearKey,
   DEFAULT_LLM_PROVIDERS,
@@ -11,10 +11,17 @@ import {
   type LlmConfigStatus,
   type LlmProviderSpec,
 } from '@/common/api/llmKey'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import { useAuth } from '@/modules/auth/composables/useAuth'
 import ProviderSelect from '@/modules/settings/components/ProviderSelect.vue'
 
 const { user, loadLocalUser } = useAuth()
+const { autoAtualizar, setAutoAtualizar } = useAtualizacoes()
+
+function handleAutoUpdateToggle(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  setAutoAtualizar(checked)
+}
 
 const providers = ref<LlmProviderSpec[]>([...DEFAULT_LLM_PROVIDERS])
 const status = ref<LlmConfigStatus | null>(null)
@@ -332,6 +339,51 @@ onMounted(() => {
         <ShieldAlert v-else class="mt-0.5 h-4 w-4 shrink-0" />
         {{ message.text }}
       </p>
+    </section>
+
+    <section class="rounded-xl border border-border-subtle bg-surface p-5 shadow-premium">
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <RefreshCw class="h-5 w-5 text-[var(--brand-primary)] dark:text-[#68d388]" />
+        <h2 class="font-semibold text-text-primary">Atualizações</h2>
+      </div>
+
+      <div class="flex items-start justify-between gap-4">
+        <div class="space-y-1">
+          <label
+            for="auto-update-toggle"
+            class="cursor-pointer text-sm font-medium text-text-primary"
+          >
+            Atualização automática (app e dados)
+          </label>
+          <p id="auto-update-desc" class="text-xs text-text-secondary">
+            Quando ativada, o Adito verifica novas versões em segundo plano, baixa o executável sem interromper
+            perguntas ativas no chat (exibindo contagem de 10 segundos com opção de adiar) e atualiza o banco
+            <code class="font-mono">dados.db</code> recarregando as telas abertas automaticamente — sem reindexar
+            embeddings. Desligada por padrão (modo assistido na barra lateral).
+          </p>
+        </div>
+
+        <label class="relative mt-0.5 inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+          <input
+            id="auto-update-toggle"
+            type="checkbox"
+            role="switch"
+            aria-describedby="auto-update-desc"
+            :aria-checked="autoAtualizar"
+            :checked="autoAtualizar"
+            class="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+            @change="handleAutoUpdateToggle"
+          />
+          <span
+            aria-hidden="true"
+            class="pointer-events-none h-6 w-11 rounded-full border border-border-subtle bg-surface-elevated transition-colors peer-checked:border-[var(--brand-primary)] peer-checked:bg-[var(--brand-primary)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--brand-primary)]/40 dark:peer-checked:border-[#68d388] dark:peer-checked:bg-[#2f9e59]"
+          />
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"
+          />
+        </label>
+      </div>
     </section>
 
     <section class="rounded-xl border border-border-subtle bg-surface p-5 text-sm shadow-premium">

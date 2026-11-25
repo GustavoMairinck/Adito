@@ -1108,9 +1108,16 @@ fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>>
 
 pub fn run() {
     migrate_legacy_data();
-    tauri::Builder::default()
-        // Atualização do app (ADR-0006): lê o latest.json do GitHub Releases; o front pergunta antes.
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    // Atualização do app (ADR-0006): lê o latest.json do GitHub Releases; o front pergunta antes.
+    // Em desenvolvimento (`cargo tauri dev` / `debug_assertions`), o updater do executável fica
+    // desligado para não baixar releases antigas do GitHub sobre o build local (`tauri.conf.json`
+    // permanece em 0.1.0 e o CI injeta a versão da tag apenas no release).
+    #[cfg(not(debug_assertions))]
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(debug_assertions)]
+    let builder = tauri::Builder::default();
+    builder
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let core = setup_core(app)?;
