@@ -1,0 +1,114 @@
+# User Story: [US-REL-04] Exportar o relatório em PDF com acabamento
+
+**Epic:** EPIC-14 — Relatórios a partir das respostas do chat
+**Prioridade:** Alta (slice 3)
+**Story Points:** 5
+**Sprint:** —
+**Status:** Backlog
+
+**Origem:** [`docs/discovery/relatorios-chat.md`](../discovery/relatorios-chat.md) · [`docs/requirements/relatorios-chat.md`](../requirements/relatorios-chat.md)
+**Requisitos:** FR12–FR18; BR03, BR09, BR10; NFR01 (PDF), NFR02–NFR04, NFR07; KD04
+
+---
+
+## 📖 História
+
+**Como** gestor que precisa apresentar ou anexar uma análise
+**Eu quero** exportar o relatório do chat em PDF com aparência de documento institucional e a logo do Adito
+**Para que** quem recebe o arquivo reconheça a origem, a data e a base dos números e confie no documento
+
+### Contexto Adicional
+O relatório já existe no chat (US-REL-01) e o caminho de geração do PDF foi decidido no spike (US-REL-03). O PDF tem o mesmo conteúdo do chat, com organização e elementos visuais a mais, e sai sempre em tema claro.
+
+---
+
+## ✅ Critérios de Aceitação
+
+- [ ] **Critério 1 — Ação:** a mensagem de relatório tem "Exportar PDF", que gera o PDF a partir dos dados mostrados no momento, sem chamar nenhum provedor de IA.
+- [ ] **Critério 2 — Capa:** a primeira página tem a logo do Adito, o título, o contexto, a data e hora de geração, a versão dos dados, a versão do app e o identificador do relatório (id da mensagem).
+- [ ] **Critério 3 — Sumário:** depois da capa, o sumário lista o número e o título de cada seção.
+- [ ] **Critério 4 — Cabeçalho e rodapé:** toda página, exceto a capa, tem cabeçalho (logo e título) e rodapé (selo "Gerado pelo Adito", data de geração e "Página X de Y").
+- [ ] **Critério 5 — Seções:** cada seção começa com uma divisão visual (número da seção e faixa de destaque) e mostra o cartão do número principal, o gráfico no tipo da seção com legenda "Figura N — título" e a tabela com cabeçalho destacado e linhas alternadas; seções com erro ou sem linhas mostram o mesmo aviso do chat.
+- [ ] **Critério 6 — Metodologia:** o PDF termina com o anexo "Metodologia": contexto e views usadas, versão dos dados, data de geração, o SQL de cada seção e a frase de que os números foram calculados diretamente dos dados, sem uso de IA.
+- [ ] **Critério 7 — Layout:** A4 retrato; gráficos e tabelas não são cortados no meio; o cabeçalho da tabela se repete quando ela continua; fontes do app embutidas; sem animações; tema claro mesmo com o app no tema escuro.
+- [ ] **Critério 8 — Nome do arquivo:** o nome sugerido é `Relatório - <título> - <AAAA-MM-DD>.pdf`.
+- [ ] **Critério 9 — Plataformas e tempo:** funciona no Windows e no Linux; com 10 seções, o PDF fica pronto para salvar em até 5 s.
+- [ ] **Critério 10 — Cancelamento:** cancelar a janela de impressão (ou de salvar) não grava nem altera nada.
+- [ ] **Critério 11 — Sem dependência não aprovada:** o caminho usado é o decidido na US-REL-03; nenhuma dependência entra sem aprovação registrada.
+
+---
+
+## 🎨 Mockups/Wireframes
+
+Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
+
+---
+
+## 🔧 Notas Técnicas
+
+### Arquitetura
+- **Componentes afetados:** página/rota de impressão do relatório, ação "Exportar PDF" na mensagem de relatório, componentes de gráfico, cartão e tabela compartilhados (US-REL-01) em modo de impressão.
+- **APIs necessárias:** `window.print()` (ou a alternativa aprovada no spike); `dados_status` para a versão dos dados; `@tauri-apps/api/app` para a versão do app.
+- **Database changes:** nenhuma.
+
+### Dependências
+- [ ] US-REL-01
+- [ ] US-REL-03 (decisão do caminho do PDF)
+
+### Considerações de Performance
+- Renderizar os gráficos sem animação e com largura fixa antes de abrir a impressão.
+
+---
+
+## 🧪 Plano de Testes
+
+### Testes Unitários
+- [ ] Vitest: montagem da página de impressão (capa, sumário, numeração das seções e das figuras, metodologia, nome do arquivo, seções com aviso).
+
+### Testes de Integração
+- [ ] Playwright com `tauriMock.ts`: abrir a página de impressão de um relatório e conferir capa, sumário, seções, "Figura N", metodologia e tema claro; gerar o PDF pelo Chromium do Playwright e conferir número de páginas e textos.
+
+### Testes Manuais
+- [ ] Exportar no Windows e no Linux um relatório de 3 e de 10 seções e conferir os critérios 2 a 8.
+
+---
+
+## 📋 Tasks (Breakdown)
+
+- [ ] **[TASK-001]** Página de impressão do relatório (a partir do protótipo do spike)
+- [ ] **[TASK-002]** Capa, sumário, cabeçalho, rodapé e numeração
+- [ ] **[TASK-003]** Seções com divisões, cartões, figuras e tabelas no modo de impressão
+- [ ] **[TASK-004]** Anexo de metodologia
+- [ ] **[TASK-005]** Ação "Exportar PDF" e nome do arquivo
+- [ ] **[TASK-006]** Testes Vitest e Playwright; verificação manual nas duas plataformas
+
+---
+
+## 🤖 IA Insights
+
+### Sugestões de Implementação
+- Montar a página de impressão a partir dos mesmos dados já carregados na mensagem de relatório, para não reexecutar o SQL de novo ao exportar.
+
+### Riscos Identificados
+- Diferenças de renderização entre WebView2 e WebKitGTK (fontes, quebras de página).
+- O selo e a logo podem ser lidos como garantia de autenticidade; o PDF não é assinado (BR09).
+
+### Alternativas Consideradas
+- Verificação de autenticidade (código ou hash no rodapé): fica para depois (LATER do Discovery).
+
+---
+
+## 📝 Notas e Comentários
+
+---
+
+## ✓ Definition of Done Checklist
+
+- [ ] Código implementado conforme critérios de aceitação
+- [ ] Code review aprovado
+- [ ] Testes unitários com cobertura adequada
+- [ ] Testes de integração passando
+- [ ] Documentação atualizada
+- [ ] Build/CI passando
+- [ ] Deploy em staging
+- [ ] Aprovação do Product Owner
