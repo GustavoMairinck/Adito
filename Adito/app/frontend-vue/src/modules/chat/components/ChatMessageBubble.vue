@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
-import { ArrowLeftRight, Code, Database, Lightbulb, Pin, Copy, Check, Minimize2 } from 'lucide-vue-next'
+import { ArrowLeftRight, Code, Database, Lightbulb, Pin, Copy, Check, Minimize2, Square } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ApexOptions } from 'apexcharts'
 import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
@@ -639,6 +639,18 @@ const chartSeries = computed(() => {
                 <div class="skeleton-line w-[92%] [animation-delay:0.1s]" />
                 <div class="skeleton-line w-[68%] [animation-delay:0.2s]" />
               </div>
+            </div>
+
+            <div
+              v-else-if="message.interrupted"
+              :class="[
+                'flex items-center gap-1.5 text-xs text-text-muted italic',
+                message.text ? 'mt-3 pt-2 border-t border-border-subtle/60 dark:border-white/[0.08]' : ''
+              ]"
+              role="status"
+            >
+              <Square class="h-2.5 w-2.5 shrink-0 opacity-70" />
+              <span>Resposta interrompida</span>
             </div>
           </div>
         </template>

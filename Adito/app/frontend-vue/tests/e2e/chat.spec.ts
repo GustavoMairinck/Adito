@@ -51,4 +51,84 @@ test.describe('Chat estratégico', () => {
     await expect(page.getByText(/Chave do Gemini não configurada/i)).toBeVisible()
     expect(getErrors()).toEqual([])
   })
+
+  test('aborta prompt pelo botão Parar, preserva texto digitado e permite enviar nova pergunta imediatamente', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatStreamDelayMs: 600 })
+    await page.goto('/#/chat')
+
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Pergunta lenta para abortar')
+    await input.press('Enter')
+
+    // Botão Parar aparece e texto parcial começa a chegar
+    const stopBtn = page.getByRole('button', { name: 'Parar geração' })
+    await expect(stopBtn).toBeVisible()
+    await expect(page.getByText(/Parcial para "Pergunta lenta para abortar"/i)).toBeVisible()
+
+    // Usuário já digita a próxima pergunta enquanto a anterior carrega
+    await input.fill('Nova pergunta imediata')
+    await stopBtn.click()
+
+    // Mostra aviso discreto mantendo o texto parcial e sem apagar o que foi digitado
+    await expect(page.getByText('Resposta interrompida')).toBeVisible()
+    await expect(page.getByText(/Parcial para "Pergunta lenta para abortar"/i)).toBeVisible()
+    await expect(input).toHaveValue('Nova pergunta imediata')
+
+    // Confirma que core_cancel foi chamado no Tauri
+    const canceledCount = await page.evaluate(() => ((window as any).__TAURI_MOCK_CANCELED_IDS__ || []).length)
+    expect(canceledCount).toBeGreaterThanOrEqual(1)
+
+    // Envia a nova pergunta imediatamente e recebe a resposta completa
+    await page.getByRole('button', { name: 'Enviar mensagem' }).click()
+    await expect(page.getByText(/Resposta para "Nova pergunta imediata"/i)).toBeVisible()
+    expect(getErrors()).toEqual([])
+  })
+
+  test('aborta prompt pela tecla Esc mantendo o texto digitado no campo', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatStreamDelayMs: 800 })
+    await page.goto('/#/chat')
+
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Consulta com Esc')
+    await input.press('Enter')
+
+    await expect(page.getByRole('button', { name: 'Parar geração' })).toBeVisible()
+    await input.fill('Rascunho preservado')
+    await input.press('Escape')
+
+    await expect(page.getByText('Resposta interrompida')).toBeVisible()
+    await expect(input).toHaveValue('Rascunho preservado')
+    await expect(page.getByRole('button', { name: 'Enviar mensagem' })).toBeVisible()
+    expect(getErrors()).toEqual([])
+  })
+
+  test('mantém geração em segundo plano ao trocar de conversa e navegar para Meu painel e voltar', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatStreamDelayMs: 500 })
+    await page.goto('/#/chat')
+
+    // Inicia geração numa conversa nova
+    await page.getByRole('button', { name: /Novo chat/i }).click()
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Consulta em segundo plano')
+    await input.press('Enter')
+    await expect(page.getByRole('button', { name: 'Parar geração' })).toBeVisible()
+
+    // Troca para outra conversa na sidebar: botão volta a Enviar e resposta não vaza para cá
+    await page.getByText('Panorama de Projetos').click()
+    await expect(page.getByRole('button', { name: 'Enviar mensagem' })).toBeVisible()
+
+    // Navega para Meu painel enquanto a geração ainda roda e volta para o Chat
+    await page.getByRole('link', { name: 'Meu painel' }).click()
+    await expect(page).toHaveURL(/#\/meu-dashboard/)
+    await page.getByRole('link', { name: 'Chat' }).click()
+    await expect(page).toHaveURL(/#\/chat/)
+
+    // Volta na conversa original e confirma que a resposta concluiu em segundo plano
+    await page.getByText('Consulta em segundo plano').first().click()
+    await expect(page.getByText(/Resposta para "Consulta em segundo plano"/i)).toBeVisible()
+    expect(getErrors()).toEqual([])
+  })
 })

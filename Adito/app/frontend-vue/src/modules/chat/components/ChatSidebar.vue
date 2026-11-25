@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Trash2, X, Search, Edit } from 'lucide-vue-next'
+import { Trash2, X, Search, Edit, Loader2 } from 'lucide-vue-next'
 import type { Conversation } from '@/modules/chat/types'
 
 const props = defineProps<{
   conversations: Conversation[]
   currentConvId: string | null
   open: boolean
+  loadingConvIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -85,7 +86,15 @@ const filteredConversations = computed(() => {
             @click="emit('select', conversation.id)"
           >
             <div class="min-w-0 flex-1 pr-1">
-              <div class="truncate leading-snug">{{ conversation.title }}</div>
+              <div class="flex items-center gap-1.5 min-w-0">
+                <Loader2
+                  v-if="loadingConvIds?.includes(conversation.id)"
+                  class="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--brand-primary)]"
+                  title="Gerando resposta..."
+                  aria-label="Gerando resposta"
+                />
+                <div class="truncate leading-snug">{{ conversation.title }}</div>
+              </div>
               <div class="text-xs mt-0.5 text-text-muted" :class="currentConvId === conversation.id ? '' : 'opacity-75'">
                 {{ new Date(conversation.updatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }}
               </div>

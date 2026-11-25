@@ -8,12 +8,13 @@ vi.mock('@/common/api/core', () => ({
   stream: (...args: unknown[]) => streamMock(...args),
 }))
 
-import { buildChart, isScalarResultData, useChatApi } from '@/modules/chat/composables/useChatApi'
+import { buildChart, isScalarResultData, resetChatApiForTests, useChatApi } from '@/modules/chat/composables/useChatApi'
 
 describe('modules/chat/composables/useChatApi', () => {
   beforeEach(() => {
     callMock.mockReset()
     streamMock.mockReset()
+    resetChatApiForTests()
   })
 
   it('isScalarResultData identifica corretamente resultado de célula única', () => {
@@ -92,6 +93,7 @@ describe('modules/chat/composables/useChatApi', () => {
         contexto_id: 'ctx-ifes',
       }),
       expect.any(Function),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
   })
 
@@ -104,5 +106,77 @@ describe('modules/chat/composables/useChatApi', () => {
     const msg = await askQuestionStream('Quantos projetos?')
     expect(msg.error).toBe(true)
     expect(msg.text).toContain('Chave Gemini não configurada')
+  })
+
+  it('cancelStream aborta apenas a conversa alvo, retorna interrupted sem erro e mantém outra conversa ativa', async () => {
+    const { askQuestionStream, cancelStream, isConversationLoading } = useChatApi()
+    let resolveB!: () => void
+
+    streamMock.mockImplementation((_m, payload, onEvent, options) => {
+      if (payload.conversation_id === 'conv-a') {
+        return new Promise((_resolve, reject) => {
+          onEvent('token', { text: 'Parcial A' })
+          options?.signal?.addEventListener('abort', () => {
+            const err = new Error('canceled')
+            err.name = 'CanceledError'
+            reject(err)
+          })
+        })
+      }
+      return new Promise<void>((resolve) => {
+        resolveB = () => {
+          onEvent('result', {
+            message_id: 'msg-b',
+            conversation_id: 'conv-b',
+            type: 'chat',
+            text: 'Resposta B completa',
+          })
+          resolve()
+        }
+      })
+    })
+
+    const promiseA = askQuestionStream('Pergunta A', 'conv-a')
+    const promiseB = askQuestionStream('Pergunta B', 'conv-b')
+
+    expect(isConversationLoading('conv-a')).toBe(true)
+    expect(isConversationLoading('conv-b')).toBe(true)
+
+    expect(cancelStream('conv-a')).toBe(true)
+    const resultA = await promiseA
+
+    expect(resultA.interrupted).toBe(true)
+    expect(resultA.error).toBeFalsy()
+    expect(isConversationLoading('conv-a')).toBe(false)
+    expect(isConversationLoading('conv-b')).toBe(true)
+
+    resolveB()
+    const resultB = await promiseB
+    expect(resultB.text).toBe('Resposta B completa')
+    expect(isConversationLoading('conv-b')).toBe(false)
+  })
+
+  it('migra a chave do stream quando conversa local-* recebe conversation_id no status', async () => {
+    const { askQuestionStream, cancelStream, isConversationLoading } = useChatApi()
+
+    streamMock.mockImplementation((_m, _payload, onEvent, options) => {
+      return new Promise((_resolve, reject) => {
+        onEvent('status', { message: 'Roteando...', conversation_id: 'conv-real-42' })
+        options?.signal?.addEventListener('abort', () => {
+          const err = new Error('canceled')
+          err.name = 'CanceledError'
+          reject(err)
+        })
+      })
+    })
+
+    const promise = askQuestionStream('Nova pergunta', 'local-999')
+    expect(isConversationLoading('local-999')).toBe(false)
+    expect(isConversationLoading('conv-real-42')).toBe(true)
+
+    expect(cancelStream('conv-real-42')).toBe(true)
+    const result = await promise
+    expect(result.interrupted).toBe(true)
+    expect(isConversationLoading('conv-real-42')).toBe(false)
   })
 })
