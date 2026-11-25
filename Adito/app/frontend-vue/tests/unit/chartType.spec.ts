@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { apexChartType, CHAT_CHART_TYPES, canUsePie, defaultChartType } from '@/modules/chat/utils/chartType'
+import {
+  apexChartType,
+  CHAT_CHART_TYPES,
+  canUsePie,
+  defaultChartType,
+  initialChartType,
+  isChatChartType,
+} from '@/modules/chat/utils/chartType'
 
 describe('modules/chat/utils/chartType', () => {
   it('oferece os mesmos tipos de gráfico do Meu painel, com rótulos', () => {
@@ -54,6 +61,28 @@ describe('modules/chat/utils/chartType', () => {
     expect(defaultChartType([])).toBe('bar')
     expect(defaultChartType(undefined)).toBe('bar')
     expect(defaultChartType(null)).toBe('bar')
+  })
+
+  it('isChatChartType aceita só os tipos do chat', () => {
+    for (const type of ['bar', 'horizontal_bar', 'line', 'area', 'pie']) {
+      expect(isChatChartType(type)).toBe(true)
+    }
+    for (const type of ['table', 'metric_card', 'donut', '', null, undefined, 1]) {
+      expect(isChatChartType(type)).toBe(false)
+    }
+  })
+
+  it('initialChartType usa a sugestão do agente e, sem ela, o formato dos dados', () => {
+    const porAno = [
+      { ano: 2022, total: 10 },
+      { ano: 2023, total: 12 },
+      { ano: 2024, total: 15 },
+    ]
+    expect(initialChartType('area', porAno)).toBe('area')
+    expect(initialChartType('pie', porAno)).toBe('pie')
+    expect(initialChartType(undefined, porAno)).toBe('line')
+    expect(initialChartType('metric_card', porAno)).toBe('line')
+    expect(initialChartType(null, [{ grande_area: 'Engenharias', total: 1 }])).toBe('bar')
   })
 
   it('canUsePie exige uma série só, sem negativos e com algum valor positivo', () => {

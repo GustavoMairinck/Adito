@@ -27,6 +27,8 @@ export interface TauriMockOptions {
   semDados?: boolean
   /** Linhas devolvidas na resposta do chat (padrão: projetos por grande área, 2 linhas). */
   chatData?: Array<Record<string, unknown>>
+  /** Tipo de gráfico sugerido pelo agente de painéis na resposta do chat (padrão: nenhum). */
+  chatChartType?: string
 }
 
 /**
@@ -46,6 +48,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     dadosNovos: options.dadosNovos ?? false,
     semDados: options.semDados ?? false,
     chatData: options.chatData ?? null,
+    chatChartType: options.chatChartType ?? null,
   }
 
   await page.addInitScript((cfg) => {
@@ -476,6 +479,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
                     { grande_area: 'Engenharias', total: 120 },
                     { grande_area: 'Ciências Exatas', total: 116 },
                   ],
+                  chart_type: cfg.chatChartType,
                 },
               },
               delayMs: finalDelay,

@@ -31,6 +31,21 @@ export function defaultChartType(rows: Array<Record<string, any>> | null | undef
   return 'bar'
 }
 
+export function isChatChartType(value: unknown): value is ChatChartType {
+  return CHAT_CHART_TYPES.some(type => type.value === value)
+}
+
+/**
+ * Tipo com que o gráfico abre quando o usuário ainda não escolheu: o sugerido pelo agente de
+ * painéis, se for um tipo válido; senão, o que o formato dos dados indica.
+ */
+export function initialChartType(
+  suggested: unknown,
+  rows: Array<Record<string, any>> | null | undefined
+): ChatChartType {
+  return isChatChartType(suggested) ? suggested : defaultChartType(rows)
+}
+
 /** Pizza só faz sentido com uma série de valores, todos não negativos e algum maior que zero. */
 export function canUsePie(series: ChartSeries[] | null | undefined): boolean {
   if (!Array.isArray(series) || series.length !== 1) return false

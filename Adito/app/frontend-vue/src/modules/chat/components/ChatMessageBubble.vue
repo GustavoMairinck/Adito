@@ -20,7 +20,7 @@ import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ApexOptions } from 'apexcharts'
 import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
-import { apexChartType, CHAT_CHART_TYPES, canUsePie, defaultChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
+import { apexChartType, CHAT_CHART_TYPES, canUsePie, initialChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
 
 const props = defineProps<{
   message: ChatMessage
@@ -202,14 +202,14 @@ const chartTypeIcons = {
   pie: PieChart
 } as const
 
-// Tipo escolhido pelo usuário; até ele escolher, o tipo segue o formato dos dados
-// (as linhas de uma conversa antiga só chegam depois de abrir a conversa).
+// Tipo escolhido pelo usuário. Até ele escolher, vale a sugestão do agente de painéis e, sem
+// sugestão, o formato dos dados (as linhas de uma conversa antiga só chegam depois de abri-la).
 const selectedChartType = ref<ChatChartType | null>(props.message.chartType ?? null)
 const isPieAvailable = computed(() => canUsePie(props.message.chart?.series))
 const pieUnavailableReason = 'Pizza só funciona com uma única série de valores, sem números negativos'
 
 const chartType = computed<ChatChartType>(() => {
-  const type = selectedChartType.value ?? defaultChartType(props.message.table)
+  const type = selectedChartType.value ?? initialChartType(props.message.suggestedChartType, props.message.table)
   return type === 'pie' && !isPieAvailable.value ? 'bar' : type
 })
 

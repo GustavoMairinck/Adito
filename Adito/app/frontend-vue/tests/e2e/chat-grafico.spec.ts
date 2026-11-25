@@ -138,6 +138,61 @@ test.describe('Chat — tipos de gráfico', () => {
     expect(getErrors()).toEqual([])
   })
 
+  test('abre no tipo sugerido pelo agente de painéis e fixa com ele', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatData: POR_AREA, chatChartType: 'area' })
+    await ask(page)
+
+    await expect(typeButton(page, 'Área')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.apexcharts-area-series')).toBeVisible()
+
+    // Sem o usuário escolher nada, o widget nasce com o tipo sugerido.
+    await page.getByRole('button', { name: /Fixar no Dashboard/i }).last().click()
+    await page.getByRole('button', { name: /Salvar no Painel/i }).click()
+    await expect(page.getByText('Fixado com sucesso')).toBeVisible()
+    const created = await page.evaluate(() => {
+      const widgets = (window as any).__TAURI_MOCK_WIDGETS__ as Array<Record<string, unknown>>
+      return widgets[widgets.length - 1]
+    })
+    expect(created.chart_type).toBe('area')
+    expect(getErrors()).toEqual([])
+  })
+
+  test('a escolha do usuário vence a sugestão do agente', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatData: POR_AREA, chatChartType: 'pie' })
+    await ask(page)
+
+    await expect(page.locator('.apexcharts-pie-series').first()).toBeVisible()
+    await typeButton(page, 'Barras horizontais').click()
+    await expect(typeButton(page, 'Barras horizontais')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.apexcharts-pie-series')).toHaveCount(0)
+    expect(getErrors()).toEqual([])
+  })
+
+  test('pizza sugerida para dados que não cabem em pizza abre em barras', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, {
+      chatData: POR_AREA.map(row => ({ ...row, valor: row.total * 1000 })),
+      chatChartType: 'pie',
+    })
+    await ask(page)
+
+    await expect(typeButton(page, 'Barras verticais')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.apexcharts-bar-series')).toBeVisible()
+    await expect(page.locator('.apexcharts-pie-series')).toHaveCount(0)
+    expect(getErrors()).toEqual([])
+  })
+
+  test('tipo sugerido fora da lista é ignorado', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { chatData: POR_ANO, chatChartType: 'metric_card' })
+    await ask(page, 'Quantos projetos por ano?')
+
+    await expect(typeButton(page, 'Linhas')).toHaveAttribute('aria-pressed', 'true')
+    expect(getErrors()).toEqual([])
+  })
+
   test('fixar no painel leva o tipo de gráfico escolhido', async ({ page }) => {
     const getErrors = trackPageErrors(page)
     await installTauriMock(page)

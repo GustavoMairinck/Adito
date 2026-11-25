@@ -56,7 +56,11 @@ describe('modules/chat/composables/useChatHistory', () => {
                 role: 'assistant',
                 content: 'Foram 120 bolsas.',
                 created_at: '2026-11-18T10:00:02Z',
-                metadata: { sql: 'SELECT COUNT(*) AS total FROM vfact_orientacao_bolsa_resolved', type: 'analysis' },
+                metadata: {
+                  sql: 'SELECT COUNT(*) AS total FROM vfact_orientacao_bolsa_resolved',
+                  type: 'analysis',
+                  chart_type: 'horizontal_bar',
+                },
               },
             ],
           },
@@ -78,6 +82,8 @@ describe('modules/chat/composables/useChatHistory', () => {
     expect(aiMsg.table).toEqual([{ total: 120 }])
     expect(aiMsg.isScalarResult).toBe(true)
     expect(aiMsg.needsRows).toBe(false)
+    // O tipo de gráfico sugerido continua ao reabrir a conversa
+    expect(aiMsg.suggestedChartType).toBe('horizontal_bar')
   })
 
   it('handleNewConversation, replaceConversationId e handleDeleteConversation mantêm estado consistente', async () => {
