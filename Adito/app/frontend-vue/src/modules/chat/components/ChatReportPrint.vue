@@ -170,7 +170,7 @@ const entries = computed(() => {
   /* Margens no padrão ABNT (3 cm em cima e à esquerda, 2 cm embaixo e à direita). */
   @page {
     size: A4;
-    margin: 2cm 2cm 2cm 3cm;
+    margin: 3cm 2cm 2cm 3cm;
 
     @top-right {
       content: counter(page);
@@ -178,7 +178,7 @@ const entries = computed(() => {
       font-size: 10pt;
       color: #000000;
       vertical-align: bottom;
-      padding-bottom: 4mm;
+      padding-bottom: 8mm;
     }
   }
 
@@ -210,7 +210,7 @@ const entries = computed(() => {
 .report-print-root .rp-layout { width: 100%; border-collapse: collapse; }
 .report-print-root .rp-layout > thead > tr > td,
 .report-print-root .rp-layout > tbody > tr > td { padding: 0; }
-.report-print-root .rp-header { display: flex; align-items: center; gap: 1.5mm; margin-bottom: 8mm; }
+.report-print-root .rp-header { display: flex; align-items: center; gap: 1.5mm; margin-bottom: 6mm; }
 .report-print-root .rp-header-logo { width: 4.5mm; height: auto; }
 .report-print-root .rp-header-name { font-size: 9pt; font-weight: 700; color: #1f5f3a; }
 
@@ -248,7 +248,6 @@ const entries = computed(() => {
 .report-print-root .rp-source { margin: 1.5mm 0 0; font-size: 10pt; line-height: 1.2; }
 .report-print-root .rp-table-note { margin-top: 0.5mm; color: #444444; }
 .report-print-root .rp-figure figcaption { font-style: normal; color: #000000; }
-.report-print-root .report-print-chart { height: 260px; }
 
 /* Tabelas no padrão IBGE: traço grosso em cima e embaixo, sem linhas verticais */
 .report-print-root .report-print-table table,

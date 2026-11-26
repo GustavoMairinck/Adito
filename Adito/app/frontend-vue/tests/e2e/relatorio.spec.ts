@@ -130,7 +130,7 @@ test.describe('Relatório a partir das respostas do chat', () => {
     expect(getErrors()).toEqual([])
   })
 
-  test('exporta o PDF com capa, sumário, seções, figuras e metodologia', async ({ page }) => {
+  test('exporta o PDF com abertura, seções, tabelas, figuras e apêndice com o SQL', async ({ page }) => {
     const getErrors = trackPageErrors(page)
     await setup(page)
     await ask(page, 'Projetos por área')
@@ -177,6 +177,35 @@ test.describe('Relatório a partir das respostas do chat', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
     expect(await page.evaluate(() => document.documentElement.classList.contains('adito-printing'))).toBe(false)
     await expect(root).toHaveCount(0)
+    expect(getErrors()).toEqual([])
+  })
+
+  test('libera o "Exportar PDF" quando a impressão fecha sem afterprint ou a conversa muda', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await setup(page)
+    await ask(page, 'Projetos por área')
+    const form = await createReport(page)
+    await form.getByRole('button', { name: 'Gerar relatório' }).click()
+
+    const report = page.getByTestId('report-message')
+    const exportButton = report.getByRole('button', { name: 'Exportar PDF' })
+    const printingClass = () => page.evaluate(() => document.documentElement.classList.contains('adito-printing'))
+
+    // WebKitGTK: cancelar a janela de impressão pode não disparar afterprint; a volta do foco limpa.
+    await exportButton.click()
+    await expect.poll(() => page.evaluate(() => (window as any).__printed)).toBe(1)
+    expect(await printingClass()).toBe(true)
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect.poll(printingClass).toBe(false)
+    await expect(exportButton).toBeEnabled()
+
+    // Sair da conversa com a impressão aberta também limpa
+    await exportButton.click()
+    await expect.poll(() => page.evaluate(() => (window as any).__printed)).toBe(2)
+    expect(await printingClass()).toBe(true)
+    await page.getByRole('button', { name: /Novo chat/i }).click()
+    await expect.poll(printingClass).toBe(false)
+    await expect(page.locator('.report-print-root')).toHaveCount(0)
     expect(getErrors()).toEqual([])
   })
 })

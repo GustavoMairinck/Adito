@@ -492,7 +492,7 @@ const apexSeries = computed(() => {
 
     <div
       :class="print
-        ? 'report-print-chart h-[300px]'
+        ? 'report-print-chart h-[260px]'
         : 'mt-4 h-[320px] rounded-lg border border-border-subtle bg-surface-elevated/50 p-3 dark:border-white/[0.06] dark:bg-surface-elevated md:h-[360px] md:p-4'"
     >
       <VueApexCharts :key="`chart-${type}`" :type="apexChartType(type)" height="100%" :options="chartOptions" :series="apexSeries" />

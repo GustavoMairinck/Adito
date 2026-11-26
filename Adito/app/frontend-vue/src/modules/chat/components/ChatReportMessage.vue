@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { AlertTriangle, Check, Code, Copy, FileDown, FileText, Inbox, Loader2 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import ChatResultChart from '@/modules/chat/components/ChatResultChart.vue'
@@ -80,23 +80,46 @@ const waitForPrintCharts = async () => {
 }
 
 // PDF pela impressão do webview ("Salvar como PDF" do sistema), sem dependência nova (KD04).
+// A limpeza (classe `adito-printing`, título da janela e estado do botão) roda uma vez só, no que vier
+// primeiro: `afterprint`, a janela voltar a ter foco depois da impressão (o WebKitGTK nem sempre
+// dispara `afterprint` ao cancelar), um tempo limite de segurança ou a mensagem sair da tela.
+const PRINT_SAFETY_TIMEOUT_MS = 120_000
+let disposed = false
+let finishPrint: (() => void) | null = null
+
 const exportPdf = async () => {
   if (printing.value || !report.value.loaded) return
   printing.value = true
   await nextTick()
   await waitForPrintCharts()
+  if (disposed) return
   const previousTitle = document.title
   document.title = reportFileName(report.value.title, report.value.generatedAt)
   document.documentElement.classList.add('adito-printing')
-  const cleanup = () => {
+
+  let safetyTimer: ReturnType<typeof setTimeout> | null = null
+  const onFocus = () => setTimeout(() => finishPrint?.(), 300)
+  finishPrint = () => {
+    finishPrint = null
+    if (safetyTimer) clearTimeout(safetyTimer)
+    window.removeEventListener('afterprint', onAfterPrint)
+    window.removeEventListener('focus', onFocus)
     document.documentElement.classList.remove('adito-printing')
     document.title = previousTitle
     printing.value = false
-    window.removeEventListener('afterprint', cleanup)
   }
-  window.addEventListener('afterprint', cleanup)
+  const onAfterPrint = () => finishPrint?.()
+  window.addEventListener('afterprint', onAfterPrint)
+  safetyTimer = setTimeout(() => finishPrint?.(), PRINT_SAFETY_TIMEOUT_MS)
   window.print()
+  // Só escuta o foco depois de abrir a impressão, para não limpar antes da janela do sistema aparecer.
+  window.addEventListener('focus', onFocus)
 }
+
+onBeforeUnmount(() => {
+  disposed = true
+  finishPrint?.()
+})
 </script>
 
 <template>
