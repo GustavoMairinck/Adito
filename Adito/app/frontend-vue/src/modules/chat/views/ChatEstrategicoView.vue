@@ -18,6 +18,7 @@ import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import type { ChatMessage } from '@/modules/chat/types'
 
 const route = useRoute()
@@ -33,8 +34,15 @@ const {
   replaceConversationId,
   setConversationContexto,
   currentConversation,
-  createReport
+  createReport,
+  reloadReports
 } = useChatHistory()
+
+// Relatórios guardam só o SQL: quando o dados.db é atualizado em segundo plano, recalcula os números.
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq > 0) void reloadReports(currentConvId.value)
+})
 
 const {
   askQuestionStream,

@@ -162,6 +162,15 @@ export function useChatHistory() {
     }
   };
 
+  /** Reexecuta todos os relatórios da conversa (ex.: o dados.db foi atualizado em segundo plano). */
+  const reloadReports = async (convId: string | null) => {
+    const conversation = conversations.value.find((c) => c.id === convId);
+    if (!conversation || !convId || convId.startsWith("local-")) return;
+    await Promise.all(
+      conversation.messages.filter((m) => m.report).map((m) => loadReportRows(convId, m)),
+    );
+  };
+
   /** Recarrega as linhas das respostas da conversa aberta (o histórico só guarda o SQL). */
   const loadRows = async (convId: string | null) => {
     const conversation = conversations.value.find((c) => c.id === convId);
@@ -337,6 +346,7 @@ export function useChatHistory() {
     conversations,
     currentConvId,
     createReport,
+    reloadReports,
     setCurrentConvId,
     handleNewConversation,
     handleDeleteConversation,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertTriangle, Check, Code, Copy, FileDown, FileText, Inbox, Loader2 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import ChatResultChart from '@/modules/chat/components/ChatResultChart.vue'
@@ -14,6 +14,7 @@ import {
   sectionView,
 } from '@/modules/chat/utils/report'
 import { dadosStatus } from '@/common/api/atualizacoes'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 
 const props = defineProps<{
   message: ChatMessage
@@ -29,12 +30,21 @@ const appVersion = ref<string | null>(null)
 const isCopied = ref(false)
 const printing = ref(false)
 
-onMounted(async () => {
+const loadDataVersion = async () => {
   try {
     dataVersion.value = (await dadosStatus())?.versao ?? null
   } catch {
     dataVersion.value = null
   }
+}
+
+// A versão dos dados acompanha a atualização do dados.db em segundo plano (os números são
+// recarregados pela tela do chat).
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => { if (seq > 0) void loadDataVersion() })
+
+onMounted(async () => {
+  await loadDataVersion()
   try {
     const { getVersion } = await import('@tauri-apps/api/app')
     const version = await getVersion()
