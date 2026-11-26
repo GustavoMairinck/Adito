@@ -3,6 +3,7 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 // Module routes
 import dashboardRoutes from '@/modules/dashboard/router'
 import chatRoutes from '@/modules/chat/router'
+import dataExplorerRoutes from '@/modules/dataExplorer/router'
 import adminRoutes from '@/modules/admin/router'
 import settingsRoutes from '@/modules/settings/router'
 
@@ -14,6 +15,7 @@ const routes: RouteRecordRaw[] = [
   },
   ...dashboardRoutes,
   ...chatRoutes,
+  ...dataExplorerRoutes,
   ...adminRoutes,
   ...settingsRoutes,
   {

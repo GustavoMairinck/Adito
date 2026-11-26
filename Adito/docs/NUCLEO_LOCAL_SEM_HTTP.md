@@ -17,7 +17,7 @@ Registrado em 2026-11-17 ([US-016](stories/US-016_nucleo-local-sem-http.md)). Es
 | Front: cliente | axios (`httpClient.ts`) e `fetch` com SSE no chat | `common/api/core.ts`: `call()`, `stream()`, `coreReady()` |
 | Front: telas | Uma chamada HTTP por ação | A mesma ação, uma linha trocada (`call('widgets.list')` em vez de `GET /api/dashboard/widgets`) |
 | Python: entrada | `desktop_server.py` rodava `migrate` e subia o daphne | `desktop_server.py` sobe `rpc/server.py` (stdin/stdout) |
-| Python: rotas e views | `bi_agent_api/urls.py` e views do DRF em `chat/`, `dashboard/`, `knowledge/`, `core/` | Métodos em `rpc/` (`core_methods`, `dashboard`, `chat`, `admin`) |
+| Python: rotas e views | `bi_agent_api/urls.py` e views do DRF em `chat/`, `dashboard/`, `knowledge/`, `core/` | Métodos em `rpc/` (`core_methods`, `explorer`, `dashboard`, `chat`, `admin`) |
 | Python: banco | ORM do Django, models e migrations | `core/db.py` (sqlite3), `core/records.py` (tabelas), `core/schema.sql` + `core/schema.py` (`PRAGMA user_version`) |
 | Python: validação | Serializers do DRF | `rpc/params.py`, com as mesmas mensagens de erro |
 | Python: DuckDB | Abria o `dados.duckdb` a cada consulta (~12 ms) | Abre uma vez; cada chamada usa um cursor próprio (`core/datastore.py`) |
@@ -42,7 +42,7 @@ Cada mensagem é um objeto JSON numa linha. O `id` é gerado pelo front e casa c
 | Mensagem | Sentido | Exemplo |
 |---|---|---|
 | Pronto | núcleo → Rust, uma vez ao subir | `{"event":"ready","data":{"schema":1,"methods":22,"startup_ms":504}}` |
-| Pedido | Rust → núcleo | `{"id":42,"method":"dashboard.kpis","params":{"ano":"2025"}}` |
+| Pedido | Rust → núcleo | `{"id":42,"method":"explorer.rows","params":{"contexto_id":"…","page":1}}` |
 | Resposta | núcleo → Rust | `{"id":42,"ok":true,"result":{"rows":[…],"total":310}}` |
 | Erro | núcleo → Rust | `{"id":42,"ok":false,"error":{"status":404,"data":{"detail":"Tabela indisponível neste contexto."}}}` |
 | Evento de stream | núcleo → Rust, antes da resposta | `{"id":7,"event":"token","data":{"text":"O total"}}` |
@@ -52,7 +52,7 @@ Cada mensagem é um objeto JSON numa linha. O `id` é gerado pelo front e casa c
 - **Erros.** O `status` repete o código HTTP de antes (400, 403, 404, 409, 503) e `data` repete o corpo de antes. No front, o erro é um `CoreError` com `status`, `data` e `response = {status, data}`. Por isso o tratamento atual das telas (`error.response.data.detail`) não mudou.
 - **Streaming do chat.** O Python emite `status`, `token`, `result` e `error`, com os mesmos nomes e campos do SSE de antes. O Rust repassa cada um por um `tauri::ipc::Channel` e manda o fim (`$end`) pelo mesmo canal. Assim, nenhum evento chega depois de a chamada terminar.
 - **Concorrência.** No Python, cada pedido vira uma task do asyncio. Os métodos síncronos (sqlite3, DuckDB) rodam numa thread, cada uma com a sua conexão ao `app.db`. A escrita no stdout é serializada.
-- **Cancelamento.** Um `AbortController` no front, como o do Dashboard, chama `core_cancel`. A Promise rejeita na hora com `name === 'CanceledError'`, e o núcleo cancela a task.
+- **Cancelamento.** Um `AbortController` no front, como os do Dashboard e do Explorar, chama `core_cancel`. A Promise rejeita na hora com `name === 'CanceledError'`, e o núcleo cancela a task.
 - **Por que os logs vão para o stderr.** O stdout é o canal do protocolo: qualquer texto solto ali quebraria a leitura. Ao subir, o núcleo guarda uma cópia do stdout só para o protocolo e aponta o descritor 1 para o stderr. Assim, um `print()` de qualquer biblioteca (LangGraph, rich) vai para o `backend.log`.
 - **O núcleo morre junto com o app.** Quando o app fecha, ou é morto com `kill -9` ou pelo Gerenciador de Tarefas, o sistema fecha o pipe. O núcleo lê o fim do stdin e encerra. Não sobra processo órfão em Linux nem em Windows, o que resolve a [US-013](stories/US-013_backend-orfao.md). No fechamento normal, o Rust fecha o stdin e espera até 3 s antes de matar o processo.
 - **Troca da chave do Gemini.** A chave continua indo do cofre do SO ao núcleo por variável de ambiente. Salvar ou apagar a chave reinicia o núcleo: os pedidos pendentes recebem 503 "O núcleo está reiniciando." e o front espera `core_ready` antes de seguir.
@@ -81,7 +81,7 @@ Cada mensagem é um objeto JSON numa linha. O `id` é gerado pelo front e casa c
 | `GET /health`, `GET /api/me` | `health`, `me` |
 | `POST /api/config/test-llm-key` | `config.test_llm_key` |
 | `GET /api/contextos` | `contextos.list` |
-| `GET /api/explorer/tables`, `GET /api/explorer/rows` | `explorer.tables`, `explorer.rows` (removidos em 2026-11-19, com a tela Explorar dados) |
+| `GET /api/explorer/tables`, `GET /api/explorer/rows` | `explorer.tables`, `explorer.rows` |
 | `POST /api/chat/stream` | `chat.stream` (com eventos) |
 | `GET /api/chat/conversations`, `DELETE /api/chat/conversations/{id}` | `chat.conversations.list`, `chat.conversations.delete` |
 | `GET /api/chat/messages/{id}/rows` | `chat.message_rows` |

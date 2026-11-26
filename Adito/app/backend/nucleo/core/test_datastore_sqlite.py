@@ -51,6 +51,18 @@ class DatastoreSQLiteSecurityTests(unittest.TestCase):
         self.assertEqual(custom_like("%acoes%", "Ações Comunitárias"), 1)
         self.assertEqual(custom_like("%nao_existe%", "Campus Vitória"), 0)
 
+    def test_custom_like_com_escape(self):
+        # `x LIKE y ESCAPE z` chama like/3: segue sem acento e sem caixa, e o escape vale.
+        self.assertEqual(custom_like("%robotica%", "Robótica educacional 100%", "!"), 1)
+        self.assertEqual(custom_like("%ACAO%", "AÇÃO", "!"), 1)
+        self.assertEqual(custom_like("%100!%%", "Robótica educacional 100%", "!"), 1)
+        self.assertEqual(custom_like("%100!%%", "Robótica educacional 1000", "!"), 0)
+        self.assertEqual(custom_like("%a!_b%", "a_b", "!"), 1)
+        self.assertEqual(custom_like("%a!_b%", "axb", "!"), 0)
+        self.assertEqual(custom_like("%!!%", "sim!", "!"), 1)
+        with self.assertRaises(ValueError):
+            custom_like("%a%", "a", "!!")
+
     def test_authorizer_bloqueia_mutacoes_e_ddl(self):
         conn = connect_dados(path=DADOS_DB_PATH)
         try:
