@@ -31,8 +31,22 @@ const chooseCreateReport = () => {
   emit('create-report')
 }
 
-onMounted(() => document.addEventListener('mousedown', closeMoreMenu))
-onBeforeUnmount(() => document.removeEventListener('mousedown', closeMoreMenu))
+// Esc fecha o menu de qualquer lugar da tela. Os ouvintes globais só existem com o menu aberto.
+const closeMoreMenuOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') moreMenuOpen.value = false
+}
+const toggleMenuListeners = (open: boolean) => {
+  if (open) {
+    document.addEventListener('mousedown', closeMoreMenu)
+    document.addEventListener('keydown', closeMoreMenuOnEscape)
+  } else {
+    document.removeEventListener('mousedown', closeMoreMenu)
+    document.removeEventListener('keydown', closeMoreMenuOnEscape)
+  }
+}
+watch(moreMenuOpen, toggleMenuListeners)
+watch(() => props.canCreateReport, (can) => { if (!can) moreMenuOpen.value = false })
+onBeforeUnmount(() => toggleMenuListeners(false))
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isRecording = ref(false)
