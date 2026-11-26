@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, FileText, Loader2, Sparkles } from 'lucide-vue-next'
 import { REPORT_MAX_SECTIONS } from '@/modules/chat/utils/report'
 
@@ -30,6 +30,20 @@ const items = ref(props.options.map(option => ({
   chartType: option.chartType ?? null,
   checked: true,
 })))
+
+// FR08: o tipo de gráfico é o que está na tela ao gerar. Se ele mudar com o formulário aberto
+// (ou surgir uma resposta nova), atualiza sem perder marcação, títulos e ordem já editados.
+watch(() => props.options, (options) => {
+  const byId = new Map(options.map(option => [option.id, option]))
+  const kept = items.value
+    .filter(item => byId.has(item.id))
+    .map(item => ({ ...item, chartType: byId.get(item.id)!.chartType ?? null }))
+  const known = new Set(kept.map(item => item.id))
+  const added = options
+    .filter(option => !known.has(option.id))
+    .map(option => ({ id: option.id, question: option.question, title: option.question, chartType: option.chartType ?? null, checked: true }))
+  items.value = [...kept, ...added]
+}, { deep: true })
 
 const checkedCount = computed(() => items.value.filter(item => item.checked).length)
 const emptySectionTitle = computed(() => items.value.some(item => item.checked && !item.title.trim()))

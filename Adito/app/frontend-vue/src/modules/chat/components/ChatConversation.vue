@@ -177,7 +177,7 @@ function select(key: string) {
           v-for="message in (messages.length === 1 && messages[0]?.id === 'welcome' && !loading ? [] : messages)"
           :key="message.id"
         >
-          <ChatReportMessage v-if="message.report" :message="message as any" />
+          <ChatReportMessage v-if="message.report" :message="message" :report="message.report" />
           <ChatMessageBubble
             v-else
             :message="message"

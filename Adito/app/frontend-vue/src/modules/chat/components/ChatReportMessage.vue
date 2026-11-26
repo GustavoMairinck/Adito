@@ -16,10 +16,11 @@ import {
 import { dadosStatus } from '@/common/api/atualizacoes'
 
 const props = defineProps<{
-  message: ChatMessage & { report: ChatReport }
+  message: ChatMessage
+  report: ChatReport
 }>()
 
-const report = computed(() => props.message.report)
+const report = computed(() => props.report)
 const views = computed(() => report.value.sections.map(section => sectionView(section, report.value.loaded)))
 const entries = computed(() => report.value.sections.map((section, index) => ({ section, view: views.value[index], index })))
 const openSql = ref<Record<number, boolean>>({})
