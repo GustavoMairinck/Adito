@@ -6,6 +6,8 @@
 
 ## Como ficou
 
+> **2026-11-26:** o visual do PDF mudou a pedido do usuário (documento formal, sem capa com logo grande, sem selo e sem rodapé). Hoje o cabeçalho é só a logo pequena com o nome "Adito" (`thead` repetido), o número da página fica no canto superior direito (`@page @top-right`) e as margens seguem a ABNT (3 cm em cima e à esquerda, 2 cm embaixo e à direita). A limpeza depois da impressão também roda na volta do foco, num tempo limite e ao sair da conversa, porque o WebKitGTK nem sempre dispara `afterprint` ao cancelar. O registro abaixo é o do spike original.
+
 - A página de impressão é o componente `ChatReportPrint.vue`, montado fora da tela (`position: fixed; left: -10000px`) só durante a exportação, para os gráficos renderizarem com largura real.
 - Ao exportar, `html.adito-printing` esconde o app e mostra só a página de impressão; `document.title` vira o nome sugerido do arquivo (`Relatório - <título> - <AAAA-MM-DD>`); o evento `afterprint` desfaz tudo.
 - **Capa** em página própria (`@page :first` com margem 0 e sem numeração).

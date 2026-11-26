@@ -24,7 +24,7 @@ O app não tem plugins de diálogo nem de sistema de arquivos. O caminho preferi
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1 — Protótipo:** existe uma página de impressão de teste com capa, sumário, duas seções (gráfico do ApexCharts e tabela longa que passa de uma página) e anexo, usando a logo (`public/brand/adito-light.png`) e as fontes do app.
+- [x] **Critério 1 — Protótipo:** existe uma página de impressão de teste com capa, sumário, duas seções (gráfico do ApexCharts e tabela longa que passa de uma página) e anexo, usando a logo (`public/brand/adito-light.png`) e as fontes do app.
 - [ ] **Critério 2 — Janela de impressão:** confirmado, no app desktop do Windows e do Linux, se `window.print()` abre a janela de impressão com "Salvar como PDF".
 - [ ] **Critério 3 — Verificação do PDF:** para cada plataforma, registrado se o PDF salvo tem:
   - cabeçalho e rodapé repetidos em todas as páginas, exceto a capa;
@@ -33,9 +33,9 @@ O app não tem plugins de diálogo nem de sistema de arquivos. O caminho preferi
   - cabeçalho da tabela repetido quando ela continua na página seguinte;
   - fontes do app embutidas;
   - tema claro com o app em tema escuro.
-- [ ] **Critério 4 — Decisão registrada:** a conclusão fica registrada (nota de decisão em `Adito/docs/` ou adenda de ADR) com o que funciona em cada plataforma e o caminho escolhido para a US-REL-04.
-- [ ] **Critério 5 — Alternativa:** se algum item do Critério 3 não for atingível sem dependência nova, a nota traz a alternativa proposta (plugin do Tauri ou biblioteca de PDF), com tamanho, licença e impacto no empacotamento, para aprovação do usuário (AGENTS.md, regra 6). Nenhuma dependência entra nesta story.
-- [ ] **Critério 6 — Sem código de produção:** o protótipo não fica no menu nem nas rotas do app; o que for aproveitável vira insumo para a US-REL-04.
+- [x] **Critério 4 — Decisão registrada:** a conclusão fica registrada (nota de decisão em `Adito/docs/` ou adenda de ADR) com o que funciona em cada plataforma e o caminho escolhido para a US-REL-04.
+- [x] **Critério 5 — Alternativa:** se algum item do Critério 3 não for atingível sem dependência nova, a nota traz a alternativa proposta (plugin do Tauri ou biblioteca de PDF), com tamanho, licença e impacto no empacotamento, para aprovação do usuário (AGENTS.md, regra 6). Nenhuma dependência entra nesta story.
+- [x] **Critério 6 — Sem código de produção:** o protótipo não fica no menu nem nas rotas do app; o que for aproveitável vira insumo para a US-REL-04.
 
 ---
 
@@ -75,10 +75,10 @@ Estrutura do PDF descrita em FR13–FR17 dos requisitos (capa, sumário, cabeça
 
 ## 📋 Tasks (Breakdown)
 
-- [ ] **[TASK-001]** Página de impressão de teste com CSS `@page`
+- [x] **[TASK-001]** Página de impressão de teste com CSS `@page`
 - [ ] **[TASK-002]** Teste no Windows (WebView2)
 - [ ] **[TASK-003]** Teste no Linux (WebKitGTK)
-- [ ] **[TASK-004]** Nota de decisão e, se preciso, proposta de dependência
+- [x] **[TASK-004]** Nota de decisão e, se preciso, proposta de dependência
 
 ---
 
@@ -104,6 +104,6 @@ Estrutura do PDF descrita em FR13–FR17 dos requisitos (capa, sumário, cabeça
 ## ✓ Definition of Done Checklist
 
 - [ ] Critérios de aceitação verificados nas duas plataformas
-- [ ] Nota de decisão registrada
+- [x] Nota de decisão registrada
 - [ ] Proposta de dependência apresentada, se necessária
 - [ ] Aprovação do Product Owner sobre o caminho da US-REL-04

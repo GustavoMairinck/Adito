@@ -33,7 +33,7 @@ Evolução do sistema de distribuição desktop (`ADR-0006`/`ADR-0007`) com opç
 - **Stories**: US-UPD-01 e US-UPD-02.
 
 ### EPIC-14: Relatórios a partir das respostas do chat
-Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já recebidas no chat: botão **"Mais" (+)** → **Criar relatório**, seleção das perguntas da conversa como seções, relatório gravado como **mensagem da conversa** com os números recalculados sobre os dados atuais, e **exportação em PDF** com capa, sumário, cabeçalho e rodapé com a logo e o selo "Gerado pelo Adito", divisões por seção e metodologia. Texto interpretativo por LLM fica para depois. Origem: `Adito/docs/discovery/relatorios-chat.md` e `Adito/docs/requirements/relatorios-chat.md` (HEAVY PROCESS).
+Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já recebidas no chat: botão **"Mais" (+)** → **Criar relatório**, seleção das perguntas da conversa como seções, relatório gravado como **mensagem da conversa** com os números recalculados sobre os dados atuais, e **exportação em PDF** com visual de documento formal: logo pequena com o nome "Adito" e número da página no topo, primeira página com os dados do relatório e o conteúdo, uma página por seção com Tabela N e Figura N (ou Quadro N) e a fonte, e o Apêndice A com o SQL (ajustado em 2026-11-26). Texto interpretativo por LLM fica para depois. Origem: `Adito/docs/discovery/relatorios-chat.md` e `Adito/docs/requirements/relatorios-chat.md` (HEAVY PROCESS).
 - **Stories**: US-REL-01 a US-REL-04.
 
 ---
@@ -155,7 +155,7 @@ Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já receb
 > 25/11/2026: o usuário pediu para implementar o épico inteiro direto, sem sprint planning. Spike do PDF: `docs/resultados/spike-pdf-relatorio-2026-11-25.md` (Chromium verificado; WebKitGTK e janela de impressão do Windows a conferir no app).
 > - **Vertical Slice 1 (10 pts):** `US-REL-01` (botão "Mais", formulário, relatório como mensagem da conversa com números atuais, componentes de gráfico/cartão/tabela compartilhados) com `US-REL-03` em paralelo (spike da impressão no Windows e no Linux).
 > - **Vertical Slice 2 (3 pts):** `US-REL-02` (ordem e títulos das seções, "Copiar" em Markdown).
-> - **Vertical Slice 3 (5 pts):** `US-REL-04` (PDF com capa, sumário, cabeçalho/rodapé, divisões, figuras e metodologia), pelo caminho decidido no spike.
+> - **Vertical Slice 3 (5 pts):** `US-REL-04` (PDF com visual de documento formal: abertura, tabelas, figuras e quadros numerados com a fonte e apêndice com o SQL), pelo caminho decidido no spike.
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >

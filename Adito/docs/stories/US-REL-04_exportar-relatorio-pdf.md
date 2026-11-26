@@ -24,17 +24,17 @@ O relatório já existe no chat (US-REL-01) e o caminho de geração do PDF foi 
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1 — Ação:** a mensagem de relatório tem "Exportar PDF", que gera o PDF a partir dos dados mostrados no momento, sem chamar nenhum provedor de IA.
-- [ ] **Critério 2 — Primeira página:** contexto, título, base de dados com a versão, data e hora de geração, versão do app e identificador do relatório (id da mensagem).
-- [ ] **Critério 3 — Conteúdo:** a primeira página lista o número e o título de cada seção e o apêndice.
-- [ ] **Critério 4 — Cabeçalho:** toda página tem a logo pequena com o nome "Adito" no canto superior esquerdo e o número da página no canto superior direito; sem rodapé e sem selo.
-- [ ] **Critério 5 — Seções:** cada seção começa em página nova com o título numerado, a "Tabela N – título" e a "Figura N – título" no tipo da seção, cada uma com a linha "Fonte:"; resultado escalar vira "Quadro N"; seções com erro ou sem linhas mostram o mesmo aviso do chat. Arial, margens ABNT e tabelas no padrão IBGE.
-- [ ] **Critério 6 — Apêndice:** o PDF termina com o "Apêndice A – Consultas utilizadas", com o SQL de cada seção e a frase de que os números foram calculados diretamente da base, sem uso de IA.
-- [ ] **Critério 7 — Layout:** A4 retrato; gráficos e tabelas não são cortados no meio; o cabeçalho da tabela se repete quando ela continua; fontes do app embutidas; sem animações; tema claro mesmo com o app no tema escuro.
-- [ ] **Critério 8 — Nome do arquivo:** o nome sugerido é `Relatório - <título> - <AAAA-MM-DD>.pdf`.
+- [x] **Critério 1 — Ação:** a mensagem de relatório tem "Exportar PDF", que gera o PDF a partir dos dados mostrados no momento, sem chamar nenhum provedor de IA.
+- [x] **Critério 2 — Primeira página:** contexto, título, base de dados com a versão, data e hora de geração, versão do app e identificador do relatório (id da mensagem).
+- [x] **Critério 3 — Conteúdo:** a primeira página lista o número e o título de cada seção e o apêndice.
+- [x] **Critério 4 — Cabeçalho:** toda página tem a logo pequena com o nome "Adito" no canto superior esquerdo e o número da página no canto superior direito; sem rodapé e sem selo.
+- [x] **Critério 5 — Seções:** cada seção começa em página nova com o título numerado, a "Tabela N – título" e a "Figura N – título" no tipo da seção, cada uma com a linha "Fonte:"; resultado escalar vira "Quadro N"; seções com erro ou sem linhas mostram o mesmo aviso do chat. Arial, margens ABNT e tabelas no padrão IBGE.
+- [x] **Critério 6 — Apêndice:** o PDF termina com o "Apêndice A – Consultas utilizadas", com o SQL de cada seção e a frase de que os números foram calculados diretamente da base, sem uso de IA.
+- [x] **Critério 7 — Layout:** A4 retrato; gráficos e tabelas não são cortados no meio; o cabeçalho da tabela se repete quando ela continua; fontes do app embutidas; sem animações; tema claro mesmo com o app no tema escuro.
+- [x] **Critério 8 — Nome do arquivo:** o nome sugerido é `Relatório - <título> - <AAAA-MM-DD>.pdf`.
 - [ ] **Critério 9 — Plataformas e tempo:** funciona no Windows e no Linux; com 10 seções, o PDF fica pronto para salvar em até 5 s.
-- [ ] **Critério 10 — Cancelamento:** cancelar a janela de impressão (ou de salvar) não grava nem altera nada.
-- [ ] **Critério 11 — Sem dependência não aprovada:** o caminho usado é o decidido na US-REL-03; nenhuma dependência entra sem aprovação registrada.
+- [x] **Critério 10 — Cancelamento:** cancelar a janela de impressão (ou de salvar) não grava nem altera nada.
+- [x] **Critério 11 — Sem dependência não aprovada:** o caminho usado é o decidido na US-REL-03; nenhuma dependência entra sem aprovação registrada.
 
 ---
 
@@ -52,8 +52,8 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 - **Database changes:** nenhuma.
 
 ### Dependências
-- [ ] US-REL-01
-- [ ] US-REL-03 (decisão do caminho do PDF)
+- [x] US-REL-01
+- [x] US-REL-03 (decisão do caminho do PDF)
 
 ### Considerações de Performance
 - Renderizar os gráficos sem animação e com largura fixa antes de abrir a impressão.
@@ -63,10 +63,10 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 ## 🧪 Plano de Testes
 
 ### Testes Unitários
-- [ ] Vitest: montagem da página de impressão (capa, sumário, numeração das seções e das figuras, metodologia, nome do arquivo, seções com aviso).
+- [x] Vitest: montagem da página de impressão (abertura, conteúdo, numeração das seções, tabelas, figuras e quadros, apêndice com o SQL, nome do arquivo, seções com aviso).
 
 ### Testes de Integração
-- [ ] Playwright com `tauriMock.ts`: abrir a página de impressão de um relatório e conferir capa, sumário, seções, "Figura N", metodologia e tema claro; gerar o PDF pelo Chromium do Playwright e conferir número de páginas e textos.
+- [x] Playwright com `tauriMock.ts`: abrir a página de impressão de um relatório e conferir a abertura, as seções, "Tabela N", "Figura N", o apêndice e o tema claro; gerar o PDF pelo Chromium do Playwright e conferir número de páginas e textos; liberar o botão quando a impressão fecha sem `afterprint` ou a conversa muda.
 
 ### Testes Manuais
 - [ ] Exportar no Windows e no Linux um relatório de 3 e de 10 seções e conferir os critérios 2 a 8.
@@ -75,11 +75,11 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 
 ## 📋 Tasks (Breakdown)
 
-- [ ] **[TASK-001]** Página de impressão do relatório (a partir do protótipo do spike)
-- [ ] **[TASK-002]** Capa, sumário, cabeçalho, rodapé e numeração
-- [ ] **[TASK-003]** Seções com divisões, cartões, figuras e tabelas no modo de impressão
-- [ ] **[TASK-004]** Anexo de metodologia
-- [ ] **[TASK-005]** Ação "Exportar PDF" e nome do arquivo
+- [x] **[TASK-001]** Página de impressão do relatório (a partir do protótipo do spike)
+- [x] **[TASK-002]** Primeira página, lista do conteúdo, cabeçalho com a logo pequena e número da página
+- [x] **[TASK-003]** Seções com Tabela N, Figura N e Quadro N, cada uma com a fonte, no modo de impressão
+- [x] **[TASK-004]** Apêndice A com o SQL de cada seção
+- [x] **[TASK-005]** Ação "Exportar PDF" e nome do arquivo
 - [ ] **[TASK-006]** Testes Vitest e Playwright; verificação manual nas duas plataformas
 
 ---
@@ -109,9 +109,9 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 
 - [ ] Código implementado conforme critérios de aceitação
 - [ ] Code review aprovado
-- [ ] Testes unitários com cobertura adequada
-- [ ] Testes de integração passando
-- [ ] Documentação atualizada
+- [x] Testes unitários com cobertura adequada
+- [x] Testes de integração passando
+- [x] Documentação atualizada
 - [ ] Build/CI passando
 - [ ] Deploy em staging
 - [ ] Aprovação do Product Owner

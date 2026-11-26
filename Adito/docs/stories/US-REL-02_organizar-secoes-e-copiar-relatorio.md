@@ -24,11 +24,11 @@ A US-REL-01 entrega o formulário com seleção e o relatório no chat, usando a
 
 ## ✅ Critérios de Aceitação
 
-- [ ] **Critério 1 — Ordem:** no formulário, cada seção tem os controles "Subir" e "Descer" (com rótulos acessíveis); a primeira não sobe e a última não desce; o relatório gerado segue a ordem da tela.
-- [ ] **Critério 2 — Títulos de seção:** o título de cada seção é editável no formulário, começa com a pergunta original e não pode ficar vazio (com título vazio, "Gerar relatório" fica desativado e o campo mostra o motivo).
-- [ ] **Critério 3 — Relatório imutável:** depois de gerado, o relatório não é editado; para mudar ordem ou títulos, o usuário gera outro relatório, que vira nova mensagem.
-- [ ] **Critério 4 — Copiar:** a mensagem de relatório tem "Copiar", que copia em Markdown o título, a data, o contexto, a versão dos dados e, para cada seção, o número e o título, o número principal e a tabela (até 20 linhas, com o total), sem o texto original das respostas.
-- [ ] **Critério 5 — Seções com problema no texto copiado:** seções com erro ou sem linhas aparecem no texto copiado com o mesmo aviso mostrado na tela.
+- [x] **Critério 1 — Ordem:** no formulário, cada seção tem os controles "Subir" e "Descer" (com rótulos acessíveis); a primeira não sobe e a última não desce; o relatório gerado segue a ordem da tela.
+- [x] **Critério 2 — Títulos de seção:** o título de cada seção é editável no formulário, começa com a pergunta original e não pode ficar vazio (com título vazio, "Gerar relatório" fica desativado e o campo mostra o motivo).
+- [x] **Critério 3 — Relatório imutável:** depois de gerado, o relatório não é editado; para mudar ordem ou títulos, o usuário gera outro relatório, que vira nova mensagem.
+- [x] **Critério 4 — Copiar:** a mensagem de relatório tem "Copiar", que copia em Markdown o título, a data, o contexto, a versão dos dados e, para cada seção, o número e o título, o número principal e a tabela (até 20 linhas, com o total), sem o texto original das respostas.
+- [x] **Critério 5 — Seções com problema no texto copiado:** seções com erro ou sem linhas aparecem no texto copiado com o mesmo aviso mostrado na tela.
 - [ ] **Critério 6 — Teclado:** reordenar, editar títulos e copiar funcionam só com o teclado.
 
 ---
@@ -47,7 +47,7 @@ Mesma referência visual da US-REL-01, com os controles de ordem e o campo de t�
 - **Database changes:** nenhuma.
 
 ### Dependências
-- [ ] US-REL-01
+- [x] US-REL-01
 
 ### Considerações de Performance
 - Nenhuma relevante.
@@ -57,10 +57,10 @@ Mesma referência visual da US-REL-01, com os controles de ordem e o campo de t�
 ## 🧪 Plano de Testes
 
 ### Testes Unitários
-- [ ] Vitest: subir/descer nas pontas, título vazio bloqueia a geração, montagem do Markdown copiado (incluindo seção com erro e seção vazia).
+- [x] Vitest: subir/descer nas pontas, título vazio bloqueia a geração, montagem do Markdown copiado (incluindo seção com erro e seção vazia).
 
 ### Testes de Integração
-- [ ] Playwright com `tauriMock.ts`: reordenar, renomear, gerar e conferir a ordem e os títulos no relatório; copiar e conferir o texto.
+- [x] Playwright com `tauriMock.ts`: reordenar, renomear, gerar e conferir a ordem e os títulos no relatório; copiar e conferir o texto.
 
 ### Testes Manuais
 - [ ] Colar o texto copiado num editor de Markdown e conferir as tabelas.
@@ -69,10 +69,10 @@ Mesma referência visual da US-REL-01, com os controles de ordem e o campo de t�
 
 ## 📋 Tasks (Breakdown)
 
-- [ ] **[TASK-001]** Controles de ordem no formulário
-- [ ] **[TASK-002]** Título editável por seção, com validação
-- [ ] **[TASK-003]** "Copiar" da mensagem de relatório em Markdown
-- [ ] **[TASK-004]** Testes Vitest e Playwright
+- [x] **[TASK-001]** Controles de ordem no formulário
+- [x] **[TASK-002]** Título editável por seção, com validação
+- [x] **[TASK-003]** "Copiar" da mensagem de relatório em Markdown
+- [x] **[TASK-004]** Testes Vitest e Playwright
 
 ---
 
@@ -99,9 +99,9 @@ Mesma referência visual da US-REL-01, com os controles de ordem e o campo de t�
 
 - [ ] Código implementado conforme critérios de aceitação
 - [ ] Code review aprovado
-- [ ] Testes unitários com cobertura adequada
-- [ ] Testes de integração passando
-- [ ] Documentação atualizada
+- [x] Testes unitários com cobertura adequada
+- [x] Testes de integração passando
+- [x] Documentação atualizada
 - [ ] Build/CI passando
 - [ ] Deploy em staging
 - [ ] Aprovação do Product Owner

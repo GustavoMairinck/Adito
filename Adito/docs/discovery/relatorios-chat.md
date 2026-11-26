@@ -136,6 +136,7 @@ O relatório é montado por um **modelo fixo** preenchido com os resultados do S
 - 2026-11-25 — decisão 1 (salvar): o relatório fica **salvo na conversa**, como mensagem do chat. A lista "Meus relatórios" separada foi para LATER, porque o relatório já é reaberto junto com a conversa.
 - 2026-11-25 — decisão 2 (números): **atuais**, recalculados ao gerar e ao reabrir, com a versão dos dados carimbada.
 - 2026-11-25 — decisão 3 (saída), alterada pelo usuário: o relatório é **escrito no chat**, com a opção de **exportar em PDF**. O PDF ganha organização e elementos visuais a mais (capa, divisões, cabeçalho e rodapé, numeração, cartões, legendas) e a **logo do Adito** atestando que o documento foi gerado por ele.
+- 2026-11-26 — adendo (visual do PDF), pedido do usuário: o PDF fica com **cara de documento formal** e menos enfeite. Saem a capa com a logo grande, o selo "Gerado pelo Adito", o rodapé e o texto corrido; ficam a logo pequena com o nome "Adito" no topo de toda página, tabelas e gráficos numerados com a fonte, títulos e o apêndice com o SQL. Requisitos FR13–FR17 e BR09 ajustados.
 
 ## Gate G0 — PROBLEM READY
 
