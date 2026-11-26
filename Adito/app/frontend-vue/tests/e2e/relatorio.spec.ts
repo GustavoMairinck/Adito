@@ -151,11 +151,14 @@ test.describe('Relatório a partir das respostas do chat', () => {
 
     const root = page.locator('.report-print-root')
     await expect(root.locator('.rp-cover-title')).toHaveText('Panorama de projetos de pesquisa')
-    await expect(root.locator('.rp-cover')).toContainText('Versão dos dados')
-    await expect(root.locator('.rp-cover')).toContainText('Documento gerado pelo Adito')
+    await expect(root.locator('.rp-cover')).toContainText('Base de dados')
+    await expect(root.locator('.rp-header')).toHaveText('Adito')
+    await expect(root).not.toContainText('Gerado pelo Adito')
     await expect(root.locator('.rp-toc li')).toHaveCount(4)
     await expect(root.locator('.rp-section')).toHaveCount(3)
-    await expect(root.locator('figcaption')).toHaveText(['Figura 1 — Projetos por área', 'Figura 2 — Projetos por ano'])
+    await expect(root.locator('figcaption')).toHaveText(['Figura 1 – Projetos por área', 'Figura 2 – Projetos por ano'])
+    await expect(root.locator('.rp-caption').filter({ hasText: /^Tabela/ })).toHaveText(['Tabela 1 – Projetos por área', 'Tabela 2 – Projetos por ano'])
+    await expect(root.locator('.rp-caption').filter({ hasText: /^Quadro/ })).toHaveCount(1)
     await expect(root.locator('.rp-card-value').first()).toBeVisible()
     await expect(root.locator('.rp-method')).toContainText('sem uso de IA')
     await expect(root.locator('.rp-sql')).toHaveCount(3)
@@ -167,8 +170,8 @@ test.describe('Relatório a partir das respostas do chat', () => {
     const out = process.env.REPORT_PDF_OUT
     if (out) fs.writeFileSync(out, pdf)
     const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
-    // capa + sumário + 3 seções (uma por página) + metodologia
-    expect(pages).toBeGreaterThanOrEqual(6)
+    // abertura + 3 seções (uma por página; o apêndice com o SQL segue a última)
+    expect(pages).toBeGreaterThanOrEqual(4)
 
     // Fechar a impressão devolve o app ao normal
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))

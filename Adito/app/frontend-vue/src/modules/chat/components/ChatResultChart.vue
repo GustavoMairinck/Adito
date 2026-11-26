@@ -202,7 +202,7 @@ const chartTooltipHtml = (label: string, rows: Array<{ name: string; value: numb
         `
 }
 
-const chartOptions = computed<ApexOptions>(() => {
+const baseChartOptions = computed<ApexOptions>(() => {
   const categories = displayedChart.value?.categories || []
   const isHorizontal = isChartAxisSwapped.value
   const seriesCount = displayedChart.value?.series.length || 0
@@ -397,6 +397,53 @@ const chartOptions = computed<ApexOptions>(() => {
     colors: chartColors
   }
 })
+
+/** Cores e tipografia do PDF do relatório: tons de verde sóbrios, valores escritos no gráfico, sem arredondamento. */
+const printColors = ['#1F5F3A', '#6B9F7C', '#A9C7B2', '#3D7F57', '#8FB89C', '#2E4A3A', '#C9DCCF', '#557A63']
+const PRINT_FONT = 'Arial, "Liberation Sans", Helvetica, sans-serif'
+
+const withPrintStyle = (options: ApexOptions): ApexOptions => {
+  const isPie = isPieChart.value
+  const isHorizontal = isChartAxisSwapped.value
+  const textColor = '#222222'
+  const printed: ApexOptions = {
+    ...options,
+    chart: { ...options.chart, fontFamily: PRINT_FONT, foreColor: textColor },
+    colors: printColors,
+    legend: { ...options.legend, labels: { colors: textColor } }
+  }
+  if (isPie) return printed
+  return {
+    ...printed,
+    grid: { ...options.grid, borderColor: '#DDDDDD', strokeDashArray: 0, padding: { top: 18, right: 12 } },
+    fill: { type: 'solid', opacity: 1 },
+    states: { hover: { filter: { type: 'none' } }, active: { filter: { type: 'none' } } },
+    dataLabels: {
+      enabled: true,
+      formatter: (value: number) => formatNumber(Number(value)),
+      offsetY: isLineLikeChart.value ? -6 : (isHorizontal ? 0 : -18),
+      offsetX: isHorizontal ? 22 : 0,
+      style: { fontSize: '10px', fontWeight: 700, colors: [textColor] },
+      background: { enabled: false },
+      dropShadow: { enabled: false }
+    },
+    ...(isLineLikeChart.value
+      ? { stroke: { curve: 'straight' as const, width: 2 }, markers: { size: 4, strokeWidth: 0 } }
+      : {}),
+    plotOptions: {
+      ...options.plotOptions,
+      bar: {
+        ...options.plotOptions?.bar,
+        borderRadius: 0,
+        distributed: false,
+        dataLabels: { position: 'top' }
+      }
+    }
+  }
+}
+
+const chartOptions = computed<ApexOptions>(() => props.print ? withPrintStyle(baseChartOptions.value) : baseChartOptions.value)
+
 // Filtra séries com escalas incompatíveis para evitar gráficos ilegíveis.
 // Mantém apenas séries cujo valor máximo é >= 0.1% do maior valor entre todas.
 const chartSeries = computed(() => {

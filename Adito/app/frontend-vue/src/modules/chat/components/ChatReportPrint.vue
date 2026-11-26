@@ -4,13 +4,13 @@ import ChatResultChart from '@/modules/chat/components/ChatResultChart.vue'
 import ChatResultTable from '@/modules/chat/components/ChatResultTable.vue'
 import type { ChatReport } from '@/modules/chat/types'
 import { SECTION_EMPTY_TEXT, formatDateTime, type SectionView } from '@/modules/chat/utils/report'
-import { formatFieldValue } from '@/modules/chat/utils/format'
 
 /**
  * Página de impressão do relatório (FR12–FR18). Fica fora da tela até a impressão; ao imprimir,
  * `html.adito-printing` esconde o app e mostra só esta página, sempre em tema claro.
- * Capa sem cabeçalho/rodapé; nas demais páginas, cabeçalho e rodapé repetidos (thead/tfoot) e
- * "Página X de Y" na margem da página (`@page`).
+ * Visual de documento formal (fonte Arial, margens ABNT): marca pequena do Adito no topo de toda
+ * página (thead repetido), número da página no canto superior direito (`@page`), sem rodapé.
+ * Cada pergunta vira uma seção com Tabela N e Figura N (ou Quadro N para número único), com a fonte.
  */
 const props = defineProps<{
   messageId: string
@@ -23,150 +23,124 @@ const props = defineProps<{
 const generatedAt = computed(() => formatDateTime(props.report.generatedAt))
 const shortId = computed(() => props.messageId.replace(/-/g, '').slice(0, 12).toUpperCase())
 
+const baseLabel = computed(() => {
+  const nome = props.report.contextoNome || 'base do Adito'
+  return props.dataVersion ? `${nome}, versão ${props.dataVersion}` : nome
+})
+const sourceText = computed(() => `Fonte: Adito, ${baseLabel.value}.`)
+
+/** Numeração própria de tabelas, figuras e quadros, como em documento formal. */
 const entries = computed(() => {
+  let table = 0
   let figure = 0
+  let quadro = 0
   return props.report.sections.map((section, index) => {
     const view = props.views[index]
-    const hasChart = view.kind === 'data' && !!view.chart && !!view.chartType
-    if (hasChart) figure += 1
-    return { section, view, number: index + 1, figure: hasChart ? figure : null }
+    const isData = view.kind === 'data'
+    const hasChart = isData && !!view.chart && !!view.chartType
+    return {
+      section,
+      view,
+      number: index + 1,
+      table: isData ? ++table : null,
+      figure: hasChart ? ++figure : null,
+      quadro: view.kind === 'scalar' ? ++quadro : null,
+    }
   })
 })
-
-/** Destaques da seção: total de registros e a maior categoria da primeira série (sem somar médias). */
-const highlights = (view: SectionView, formats: Record<string, any>) => {
-  if (view.kind !== 'data') return []
-  const cards = [{ label: 'Registros', value: view.total.toLocaleString('pt-BR') }]
-  const chart = view.chart
-  const serie = chart?.series?.[0]
-  if (chart && serie && serie.data.length) {
-    let best = 0
-    serie.data.forEach((value, i) => { if (Number(value) > Number(serie.data[best])) best = i })
-    const metricKey = Object.keys(view.rows[0] || {}).find(key => key.replace(/_/g, ' ').toLowerCase() === serie.name.toLowerCase())
-    const value = metricKey ? formatFieldValue(formats, metricKey, serie.data[best]) : Number(serie.data[best]).toLocaleString('pt-BR')
-    cards.push({ label: `Maior ${serie.name.toLowerCase()}`, value: `${chart.categories[best]} · ${value}` })
-  }
-  return cards
-}
 </script>
 
 <template>
   <Teleport to="body">
     <div class="report-print-root" :data-report-print="messageId" aria-hidden="true">
-      <!-- Capa -->
-      <section class="rp-cover">
-        <div class="rp-cover-band" />
-        <img src="/brand/adito-light.png" alt="Adito" class="rp-cover-logo">
-        <p class="rp-kicker">Relatório</p>
-        <h1 class="rp-cover-title">{{ report.title }}</h1>
-        <p v-if="report.contextoNome" class="rp-cover-context">{{ report.contextoNome }}</p>
-
-        <dl class="rp-cover-meta">
-          <div><dt>Gerado em</dt><dd>{{ generatedAt }}</dd></div>
-          <div v-if="dataVersion"><dt>Versão dos dados</dt><dd>{{ dataVersion }}</dd></div>
-          <div v-if="appVersion"><dt>Versão do Adito</dt><dd>{{ appVersion }}</dd></div>
-          <div><dt>Seções</dt><dd>{{ report.sections.length }}</dd></div>
-          <div><dt>Identificador</dt><dd class="rp-mono">{{ shortId }}</dd></div>
-        </dl>
-
-        <div class="rp-seal">
-          <img src="/brand/adito-light.png" alt="" class="rp-seal-logo">
-          <div>
-            <strong>Documento gerado pelo Adito</strong>
-            <p>Números calculados diretamente dos dados de pesquisa e extensão do Ifes, sem uso de IA. A metodologia e o SQL de cada seção estão no anexo.</p>
-          </div>
-        </div>
-      </section>
-
       <table class="rp-layout">
         <thead>
           <tr>
             <td>
               <div class="rp-header">
                 <img src="/brand/adito-light.png" alt="" class="rp-header-logo">
-                <span class="rp-header-title">{{ report.title }}</span>
-                <span class="rp-header-tag">Relatório · Adito</span>
+                <span class="rp-header-name">Adito</span>
               </div>
             </td>
           </tr>
         </thead>
-        <tfoot>
-          <tr>
-            <td>
-              <div class="rp-footer">
-                <span class="rp-footer-seal">Gerado pelo Adito</span>
-                <span>{{ generatedAt }}</span>
-                <span class="rp-mono">ID {{ shortId }}</span>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
         <tbody>
           <tr>
             <td>
-              <!-- Sumário -->
-              <section class="rp-toc">
-                <h2 class="rp-h2">Sumário</h2>
-                <ol>
-                  <li v-for="entry in entries" :key="`toc-${entry.number}`">
-                    <span class="rp-toc-number">{{ entry.number }}</span>
-                    <span class="rp-toc-title">{{ entry.section.title }}</span>
-                  </li>
-                  <li>
-                    <span class="rp-toc-number">A</span>
-                    <span class="rp-toc-title">Metodologia</span>
-                  </li>
-                </ol>
+              <!-- Abertura: título, dados do relatório e conteúdo -->
+              <section class="rp-cover">
+                <p v-if="report.contextoNome" class="rp-org">{{ report.contextoNome }}</p>
+                <h1 class="rp-cover-title">{{ report.title }}</h1>
+                <table class="rp-info">
+                  <tbody>
+                    <tr><th>Base de dados</th><td>{{ baseLabel }}</td></tr>
+                    <tr><th>Gerado em</th><td>{{ generatedAt }}</td></tr>
+                    <tr v-if="appVersion"><th>Versão do Adito</th><td>{{ appVersion }}</td></tr>
+                    <tr><th>Identificador</th><td>{{ shortId }}</td></tr>
+                  </tbody>
+                </table>
+
+                <section class="rp-toc">
+                  <p class="rp-toc-title">Conteúdo</p>
+                  <ol>
+                    <li v-for="entry in entries" :key="`toc-${entry.number}`">
+                      <span class="rp-toc-number">{{ entry.number }}</span>
+                      <span>{{ entry.section.title }}</span>
+                    </li>
+                    <li>
+                      <span class="rp-toc-number">A</span>
+                      <span>Consultas utilizadas</span>
+                    </li>
+                  </ol>
+                </section>
               </section>
 
-              <!-- Seções -->
+              <!-- Uma seção por pergunta -->
               <section v-for="entry in entries" :key="`sec-${entry.number}`" class="rp-section">
-                <div class="rp-section-divider">
-                  <span class="rp-section-number">{{ String(entry.number).padStart(2, '0') }}</span>
-                  <h2 class="rp-section-title">{{ entry.section.title }}</h2>
-                </div>
+                <h2 class="rp-h2">{{ entry.number }} {{ entry.section.title }}</h2>
 
                 <p v-if="entry.view.kind === 'error'" class="rp-note rp-note-warn">{{ entry.view.message }}</p>
                 <p v-else-if="entry.view.kind === 'empty'" class="rp-note">{{ SECTION_EMPTY_TEXT }}</p>
-                <div v-else-if="entry.view.kind === 'scalar'" class="rp-cards">
-                  <div class="rp-card rp-card-main">
-                    <span class="rp-card-label">{{ entry.view.label }}</span>
-                    <span class="rp-card-value">{{ entry.view.value }}</span>
-                  </div>
+
+                <div v-else-if="entry.view.kind === 'scalar'" class="rp-float">
+                  <p class="rp-caption">Quadro {{ entry.quadro }} – {{ entry.section.title }}</p>
+                  <table class="rp-quadro">
+                    <thead><tr><th>Indicador</th><th class="rp-num">Valor</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td class="rp-quadro-label">{{ entry.view.label }}</td>
+                        <td class="rp-num rp-card-value">{{ entry.view.value }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p class="rp-source">{{ sourceText }}</p>
                 </div>
+
                 <template v-else-if="entry.view.kind === 'data'">
-                  <div class="rp-cards">
-                    <div v-for="card in highlights(entry.view, entry.section.fieldFormats)" :key="card.label" class="rp-card">
-                      <span class="rp-card-label">{{ card.label }}</span>
-                      <span class="rp-card-value rp-card-value-sm">{{ card.value }}</span>
-                    </div>
+                  <div class="rp-float">
+                    <p class="rp-caption">Tabela {{ entry.table }} – {{ entry.section.title }}</p>
+                    <ChatResultTable :rows="entry.view.rows" :field-formats="entry.section.fieldFormats" print />
+                    <p class="rp-source">{{ sourceText }}</p>
+                    <p v-if="entry.view.total > entry.view.rows.length" class="rp-source rp-table-note">
+                      Nota: mostrando {{ entry.view.rows.length }} de {{ entry.view.total }} registros.
+                    </p>
                   </div>
-                  <figure v-if="entry.view.chart && entry.view.chartType" class="rp-figure">
+                  <figure v-if="entry.view.chart && entry.view.chartType" class="rp-float rp-figure">
+                    <figcaption class="rp-caption">Figura {{ entry.figure }} – {{ entry.section.title }}</figcaption>
                     <ChatResultChart :chart="entry.view.chart" :type="entry.view.chartType" :row-limit="10" print />
-                    <figcaption>Figura {{ entry.figure }} — {{ entry.section.title }}</figcaption>
+                    <p class="rp-source">{{ sourceText }}</p>
                   </figure>
-                  <ChatResultTable :rows="entry.view.rows" :field-formats="entry.section.fieldFormats" print />
-                  <p class="rp-table-note">Mostrando {{ entry.view.rows.length }} de {{ entry.view.total }} registros.</p>
                 </template>
               </section>
 
-              <!-- Metodologia -->
+              <!-- Apêndice com o SQL de cada seção -->
               <section class="rp-method">
-                <div class="rp-section-divider">
-                  <span class="rp-section-number">A</span>
-                  <h2 class="rp-section-title">Metodologia</h2>
-                </div>
-                <ul class="rp-method-list">
-                  <li v-if="report.contextoNome"><strong>Contexto de dados:</strong> {{ report.contextoNome }}</li>
-                  <li v-if="dataVersion"><strong>Versão dos dados:</strong> {{ dataVersion }}</li>
-                  <li><strong>Gerado em:</strong> {{ generatedAt }}</li>
-                  <li><strong>Identificador do relatório:</strong> <span class="rp-mono">{{ messageId }}</span></li>
-                  <li>Cada seção corresponde a uma pergunta feita no chat do Adito. O SQL abaixo foi reexecutado sobre os dados na geração deste documento; os números, gráficos e tabelas foram calculados diretamente dos dados, sem uso de IA.</li>
-                </ul>
+                <h2 class="rp-h2">Apêndice A – Consultas utilizadas</h2>
                 <div v-for="entry in entries" :key="`sql-${entry.number}`" class="rp-sql">
-                  <p class="rp-sql-title">{{ entry.number }}. {{ entry.section.title }}</p>
+                  <p class="rp-sql-title">{{ entry.number }} {{ entry.section.title }}</p>
                   <pre>{{ entry.section.sql }}</pre>
                 </div>
+                <p class="rp-method-note">Números calculados diretamente da base, sem uso de IA.</p>
               </section>
             </td>
           </tr>
@@ -182,33 +156,29 @@ const highlights = (view: SectionView, formats: Record<string, any>) => {
   position: fixed;
   left: -10000px;
   top: 0;
-  width: 182mm;
+  width: 160mm;
   background: #ffffff;
-  color: #1f2a24;
-  font-family: var(--font-sans, 'IBM Plex Sans', system-ui, sans-serif);
-  font-size: 10pt;
-  line-height: 1.45;
+  color: #000000;
+  font-family: Arial, 'Liberation Sans', Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 @media print {
+  /* Margens no padrão ABNT (3 cm em cima e à esquerda, 2 cm embaixo e à direita). */
   @page {
     size: A4;
-    margin: 14mm 14mm 16mm;
+    margin: 2cm 2cm 2cm 3cm;
 
-    @bottom-right {
-      content: "Página " counter(page) " de " counter(pages);
-      font-size: 8pt;
-      color: #6b7a70;
-    }
-  }
-
-  @page :first {
-    margin: 0;
-
-    @bottom-right {
-      content: none;
+    @top-right {
+      content: counter(page);
+      font-family: Arial, 'Liberation Sans', Helvetica, sans-serif;
+      font-size: 10pt;
+      color: #000000;
+      vertical-align: bottom;
+      padding-bottom: 4mm;
     }
   }
 
@@ -230,181 +200,99 @@ const highlights = (view: SectionView, formats: Record<string, any>) => {
   }
 }
 
-.report-print-root .rp-mono { font-family: var(--font-mono, ui-monospace, monospace); }
+/* Fonte única do documento (o app usa outra fonte nos títulos). */
+.report-print-root,
+.report-print-root :where(h1, h2, p, span, th, td, li, figcaption, div) {
+  font-family: Arial, 'Liberation Sans', Helvetica, sans-serif;
+}
 
-/* Capa: página inteira, sem cabeçalho nem rodapé */
-.report-print-root .rp-cover {
-  position: relative;
-  box-sizing: border-box;
-  height: 297mm;
-  padding: 38mm 22mm 24mm;
-  break-after: page;
-  page-break-after: always;
-  display: flex;
-  flex-direction: column;
-}
-.report-print-root .rp-cover-band {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 14mm;
-  background: linear-gradient(90deg, #16462b 0%, #2b7a42 60%, #749e30 100%);
-}
-.report-print-root .rp-cover-logo { width: 34mm; height: auto; }
-.report-print-root .rp-kicker {
-  margin-top: 26mm;
-  font-size: 10pt;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #2b7a42;
-}
-.report-print-root .rp-cover-title {
-  margin: 4mm 0 0;
-  font-size: 26pt;
-  line-height: 1.15;
-  font-weight: 700;
-  color: #16462b;
-  border-left: 3mm solid #749e30;
-  padding-left: 5mm;
-}
-.report-print-root .rp-cover-context { margin-top: 4mm; font-size: 12pt; color: #465249; }
-.report-print-root .rp-cover-meta {
-  margin: 14mm 0 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4mm 10mm;
-  border-top: 0.4mm solid #d9e3db;
-  padding-top: 6mm;
-}
-.report-print-root .rp-cover-meta dt { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7a70; }
-.report-print-root .rp-cover-meta dd { margin: 1mm 0 0; font-size: 11pt; font-weight: 600; color: #1f2a24; }
-.report-print-root .rp-seal {
-  margin-top: auto;
-  display: flex;
-  gap: 5mm;
-  align-items: center;
-  border: 0.4mm solid #2b7a42;
-  border-radius: 3mm;
-  padding: 5mm 6mm;
-  background: #f3f8f4;
-}
-.report-print-root .rp-seal-logo { width: 14mm; height: auto; }
-.report-print-root .rp-seal strong { font-size: 11pt; color: #16462b; }
-.report-print-root .rp-seal p { margin: 1mm 0 0; font-size: 9pt; color: #465249; }
-
-/* Cabeçalho e rodapé repetidos em todas as páginas depois da capa */
+/* Marca pequena do Adito no topo de toda página (thead se repete no Chromium e no WebKit). */
 .report-print-root .rp-layout { width: 100%; border-collapse: collapse; }
 .report-print-root .rp-layout > thead > tr > td,
-.report-print-root .rp-layout > tfoot > tr > td,
 .report-print-root .rp-layout > tbody > tr > td { padding: 0; }
-.report-print-root .rp-header {
-  display: flex;
-  align-items: center;
-  gap: 3mm;
-  padding-bottom: 2.5mm;
-  margin-bottom: 6mm;
-  border-bottom: 0.6mm solid #2b7a42;
-}
-.report-print-root .rp-header-logo { width: 8mm; height: auto; }
-.report-print-root .rp-header-title { flex: 1; font-size: 9pt; font-weight: 600; color: #16462b; }
-.report-print-root .rp-header-tag { font-size: 8pt; color: #6b7a70; text-transform: uppercase; letter-spacing: 0.08em; }
-.report-print-root .rp-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 4mm;
-  margin-top: 6mm;
-  padding-top: 2mm;
-  border-top: 0.3mm solid #d9e3db;
-  font-size: 8pt;
-  color: #6b7a70;
-}
-.report-print-root .rp-footer-seal { font-weight: 700; color: #2b7a42; }
+.report-print-root .rp-header { display: flex; align-items: center; gap: 1.5mm; margin-bottom: 8mm; }
+.report-print-root .rp-header-logo { width: 4.5mm; height: auto; }
+.report-print-root .rp-header-name { font-size: 9pt; font-weight: 700; color: #1f5f3a; }
 
-.report-print-root .rp-h2 { font-size: 14pt; color: #16462b; margin: 0 0 4mm; }
-.report-print-root .rp-toc { break-after: page; page-break-after: always; }
+/* Abertura */
+.report-print-root .rp-cover { break-after: page; page-break-after: always; padding-top: 12mm; }
+.report-print-root .rp-org { margin: 0; font-size: 10pt; letter-spacing: 0.04em; text-transform: uppercase; color: #333333; }
+.report-print-root .rp-cover-title {
+  margin: 2mm 0 6mm;
+  padding-bottom: 3.5mm;
+  border-bottom: 0.5mm solid #1f5f3a;
+  font-size: 18pt;
+  line-height: 1.25;
+  font-weight: 700;
+}
+.report-print-root .rp-info { border-collapse: collapse; font-size: 11pt; margin-bottom: 10mm; }
+.report-print-root .rp-info th { text-align: left; font-weight: 700; padding: 0.6mm 6mm 0.6mm 0; vertical-align: top; }
+.report-print-root .rp-info td { padding: 0.6mm 0; }
+.report-print-root .rp-toc-title { margin: 0 0 1.5mm; font-weight: 700; }
 .report-print-root .rp-toc ol { list-style: none; margin: 0; padding: 0; }
-.report-print-root .rp-toc li {
-  display: flex;
-  gap: 4mm;
-  padding: 2.5mm 0;
-  border-bottom: 0.3mm dashed #d9e3db;
-  font-size: 11pt;
-}
-.report-print-root .rp-toc-number { width: 8mm; font-weight: 700; color: #2b7a42; }
+.report-print-root .rp-toc li { display: flex; gap: 6mm; padding: 1mm 0; border-bottom: 0.25mm solid #dddddd; }
+.report-print-root .rp-toc-number { width: 6mm; }
 
-/* Seções */
-.report-print-root .rp-section { margin-bottom: 10mm; }
+/* Seções: uma por página */
 .report-print-root .rp-section + .rp-section { break-before: page; page-break-before: always; }
-.report-print-root .rp-section-divider {
-  display: flex;
-  align-items: stretch;
-  margin-bottom: 5mm;
-  background: #f3f8f4;
-  border-left: 2mm solid #2b7a42;
+.report-print-root .rp-h2 {
+  margin: 0 0 4mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.3mm solid #1f5f3a;
+  font-size: 13pt;
+  font-weight: 700;
   break-after: avoid;
 }
-.report-print-root .rp-section-number {
-  display: flex;
-  align-items: center;
-  padding: 0 4mm;
-  font-size: 16pt;
-  font-weight: 700;
-  color: #ffffff;
-  background: #2b7a42;
-}
-.report-print-root .rp-section-title { margin: 0; padding: 3mm 4mm; font-size: 13pt; color: #16462b; }
-.report-print-root .rp-cards { display: flex; gap: 4mm; margin-bottom: 5mm; break-inside: avoid; }
-.report-print-root .rp-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1mm;
-  border: 0.3mm solid #d9e3db;
-  border-top: 1mm solid #749e30;
-  border-radius: 2mm;
-  padding: 3mm 4mm;
-}
-.report-print-root .rp-card-main { flex: 0 0 auto; min-width: 60mm; }
-.report-print-root .rp-card-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7a70; }
-.report-print-root .rp-card-value { font-size: 20pt; font-weight: 700; color: #16462b; }
-.report-print-root .rp-card-value-sm { font-size: 12pt; }
-.report-print-root .rp-figure { margin: 0 0 5mm; break-inside: avoid; page-break-inside: avoid; }
-.report-print-root .rp-figure figcaption { margin-top: 1.5mm; font-size: 8.5pt; font-style: italic; color: #6b7a70; text-align: center; }
-.report-print-root .report-print-chart { border: 0.3mm solid #e2e8df; border-radius: 2mm; padding: 2mm; }
-.report-print-root .report-print-table table { width: 100%; }
+.report-print-root .rp-float { margin: 0 0 8mm; break-inside: avoid; page-break-inside: avoid; }
+.report-print-root .rp-caption { margin: 0 0 1.5mm; font-size: 10pt; line-height: 1.2; text-align: center; }
+.report-print-root .rp-source { margin: 1.5mm 0 0; font-size: 10pt; line-height: 1.2; }
+.report-print-root .rp-table-note { margin-top: 0.5mm; color: #444444; }
+.report-print-root .rp-figure figcaption { font-style: normal; color: #000000; }
+.report-print-root .report-print-chart { height: 260px; }
+
+/* Tabelas no padrão IBGE: traço grosso em cima e embaixo, sem linhas verticais */
+.report-print-root .report-print-table table,
+.report-print-root .rp-quadro { width: 100%; border-collapse: collapse; font-size: 10pt; line-height: 1.3; }
 .report-print-root .report-print-table thead { display: table-header-group; }
-.report-print-root .report-print-th {
-  background: #16462b;
-  color: #ffffff;
-  font-size: 8pt;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 2mm 3mm;
+.report-print-root .report-print-th,
+.report-print-root .rp-quadro th {
+  background: transparent;
+  color: #000000;
+  font-size: 10pt;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 1.4mm 2mm;
+  border-top: 0.5mm solid #000000;
+  border-bottom: 0.3mm solid #000000;
 }
-.report-print-root .report-print-tr { break-inside: avoid; page-break-inside: avoid; }
-.report-print-root .report-print-tr:nth-child(even) { background: #f3f8f4; }
-.report-print-root .report-print-td { padding: 1.6mm 3mm; border-bottom: 0.2mm solid #e2e8df; color: #1f2a24; }
-.report-print-root .rp-table-note { margin-top: 1.5mm; font-size: 8pt; color: #6b7a70; }
-.report-print-root .rp-note { padding: 3mm 4mm; border-radius: 2mm; background: #f5f6f5; color: #465249; }
+.report-print-root .report-print-th::first-letter,
+.report-print-root .rp-quadro-label::first-letter { text-transform: uppercase; }
+.report-print-root .report-print-tr { break-inside: avoid; page-break-inside: avoid; background: transparent; }
+.report-print-root .report-print-td,
+.report-print-root .rp-quadro td { padding: 1mm 2mm; border-bottom: none; color: #000000; }
+.report-print-root .report-print-table tbody tr:last-child td,
+.report-print-root .rp-quadro tbody tr:last-child td { border-bottom: 0.5mm solid #000000; }
+.report-print-root .rp-num { text-align: right !important; }
+.report-print-root .rp-card-value { font-size: 16pt; font-weight: 700; }
+
+.report-print-root .rp-note { padding: 3mm 4mm; background: #f5f5f5; color: #333333; font-size: 11pt; }
 .report-print-root .rp-note-warn { background: #fff7e6; color: #8a5a00; border: 0.3mm solid #f2d39a; }
 
-/* Metodologia */
-.report-print-root .rp-method { break-before: page; page-break-before: always; }
-.report-print-root .rp-method-list { margin: 0 0 5mm; padding-left: 5mm; }
-.report-print-root .rp-method-list li { margin-bottom: 1.5mm; }
-.report-print-root .rp-sql { margin-bottom: 4mm; break-inside: avoid; }
-.report-print-root .rp-sql-title { margin: 0 0 1mm; font-weight: 600; color: #16462b; }
+/* Apêndice */
+.report-print-root .rp-method { margin-top: 12mm; }
+.report-print-root .rp-sql { margin-bottom: 3mm; break-inside: avoid; }
+.report-print-root .rp-sql-title { margin: 0 0 1mm; font-size: 11pt; font-weight: 700; }
 .report-print-root .rp-sql pre {
   margin: 0;
-  padding: 3mm;
+  padding: 2mm 3mm;
   white-space: pre-wrap;
   word-break: break-word;
-  background: #f5f6f5;
-  border: 0.3mm solid #e2e8df;
-  border-radius: 2mm;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 8pt;
-  color: #1f2a24;
+  background: #f4f4f4;
+  font-family: 'DejaVu Sans Mono', Consolas, ui-monospace, monospace;
+  font-size: 8.5pt;
+  line-height: 1.35;
+  color: #000000;
 }
+.report-print-root .rp-method-note { margin: 4mm 0 0; font-size: 10pt; color: #444444; }
 </style>

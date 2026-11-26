@@ -25,11 +25,11 @@ O relatório já existe no chat (US-REL-01) e o caminho de geração do PDF foi 
 ## ✅ Critérios de Aceitação
 
 - [ ] **Critério 1 — Ação:** a mensagem de relatório tem "Exportar PDF", que gera o PDF a partir dos dados mostrados no momento, sem chamar nenhum provedor de IA.
-- [ ] **Critério 2 — Capa:** a primeira página tem a logo do Adito, o título, o contexto, a data e hora de geração, a versão dos dados, a versão do app e o identificador do relatório (id da mensagem).
-- [ ] **Critério 3 — Sumário:** depois da capa, o sumário lista o número e o título de cada seção.
-- [ ] **Critério 4 — Cabeçalho e rodapé:** toda página, exceto a capa, tem cabeçalho (logo e título) e rodapé (selo "Gerado pelo Adito", data de geração e "Página X de Y").
-- [ ] **Critério 5 — Seções:** cada seção começa com uma divisão visual (número da seção e faixa de destaque) e mostra o cartão do número principal, o gráfico no tipo da seção com legenda "Figura N — título" e a tabela com cabeçalho destacado e linhas alternadas; seções com erro ou sem linhas mostram o mesmo aviso do chat.
-- [ ] **Critério 6 — Metodologia:** o PDF termina com o anexo "Metodologia": contexto e views usadas, versão dos dados, data de geração, o SQL de cada seção e a frase de que os números foram calculados diretamente dos dados, sem uso de IA.
+- [ ] **Critério 2 — Primeira página:** contexto, título, base de dados com a versão, data e hora de geração, versão do app e identificador do relatório (id da mensagem).
+- [ ] **Critério 3 — Conteúdo:** a primeira página lista o número e o título de cada seção e o apêndice.
+- [ ] **Critério 4 — Cabeçalho:** toda página tem a logo pequena com o nome "Adito" no canto superior esquerdo e o número da página no canto superior direito; sem rodapé e sem selo.
+- [ ] **Critério 5 — Seções:** cada seção começa em página nova com o título numerado, a "Tabela N – título" e a "Figura N – título" no tipo da seção, cada uma com a linha "Fonte:"; resultado escalar vira "Quadro N"; seções com erro ou sem linhas mostram o mesmo aviso do chat. Arial, margens ABNT e tabelas no padrão IBGE.
+- [ ] **Critério 6 — Apêndice:** o PDF termina com o "Apêndice A – Consultas utilizadas", com o SQL de cada seção e a frase de que os números foram calculados diretamente da base, sem uso de IA.
 - [ ] **Critério 7 — Layout:** A4 retrato; gráficos e tabelas não são cortados no meio; o cabeçalho da tabela se repete quando ela continua; fontes do app embutidas; sem animações; tema claro mesmo com o app no tema escuro.
 - [ ] **Critério 8 — Nome do arquivo:** o nome sugerido é `Relatório - <título> - <AAAA-MM-DD>.pdf`.
 - [ ] **Critério 9 — Plataformas e tempo:** funciona no Windows e no Linux; com 10 seções, o PDF fica pronto para salvar em até 5 s.
@@ -91,7 +91,7 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 
 ### Riscos Identificados
 - Diferenças de renderização entre WebView2 e WebKitGTK (fontes, quebras de página).
-- O selo e a logo podem ser lidos como garantia de autenticidade; o PDF não é assinado (BR09).
+- A logo pode ser lida como garantia de autenticidade; o PDF não é assinado (BR09).
 
 ### Alternativas Consideradas
 - Verificação de autenticidade (código ou hash no rodapé): fica para depois (LATER do Discovery).
@@ -101,6 +101,7 @@ Estrutura definida em FR13–FR17; protótipo da US-REL-03 como base visual.
 ## 📝 Notas e Comentários
 
 - 2026-11-25: implementada na branch `feat/relatorios-chat`, junto com as outras stories do EPIC-14, a pedido do usuário (sem sprint planning). Nota do spike de PDF: [`docs/resultados/spike-pdf-relatorio-2026-11-25.md`](../resultados/spike-pdf-relatorio-2026-11-25.md).
+- 2026-11-26: visual refeito a pedido do usuário (documento formal, sem capa com logo grande, sem selo e sem rodapé; só tabelas, gráficos e títulos). Critérios 2 a 6 ajustados.
 
 ---
 

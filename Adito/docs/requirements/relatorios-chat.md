@@ -34,11 +34,11 @@ O usuário reúne respostas que já recebeu no chat em um **relatório por model
 
 ### Exportação em PDF
 - **FR12** — A mensagem de relatório tem a ação **Exportar PDF**, que gera um PDF com o mesmo conteúdo, a partir dos dados mostrados no momento.
-- **FR13** — O PDF tem **capa** com a logo do Adito, título, contexto, data e hora de geração, versão dos dados, versão do app e o identificador do relatório.
-- **FR14** — O PDF tem **sumário** com o número e o título de cada seção.
-- **FR15** — Toda página do PDF, exceto a capa, tem **cabeçalho** (logo e título do relatório) e **rodapé** (selo "Gerado pelo Adito", data de geração e "Página X de Y").
-- **FR16** — Cada seção no PDF começa com uma **divisão visual** (número da seção e faixa de destaque) e mostra o cartão do número principal, o gráfico com legenda numerada ("Figura N — título") e a tabela com cabeçalho destacado e linhas alternadas.
-- **FR17** — O PDF termina com o anexo **Metodologia**: fonte (contexto e views), versão dos dados, data de geração, o SQL de cada seção e a observação de que os números foram calculados diretamente dos dados, sem uso de IA.
+- **FR13** — O PDF abre com uma **primeira página** com o contexto, o título, a base de dados (contexto e versão dos dados), a data e hora de geração, a versão do app e o identificador do relatório.
+- **FR14** — A primeira página lista o **conteúdo**: número e título de cada seção e o apêndice.
+- **FR15** — Toda página do PDF tem, no canto superior esquerdo, a **logo pequena com o nome "Adito"** e, no canto superior direito, o número da página. Não há rodapé nem selo.
+- **FR16** — Cada seção começa em página nova com o título numerado e mostra a tabela ("Tabela N – título") e o gráfico ("Figura N – título"), cada um com a linha "Fonte:" embaixo; resultado escalar vira "Quadro N" com o valor em destaque. Visual de documento formal: Arial, margens ABNT, tabelas no padrão IBGE (traços horizontais, sem linhas verticais).
+- **FR17** — O PDF termina com o **Apêndice A – Consultas utilizadas**: o SQL de cada seção e a observação de que os números foram calculados diretamente da base, sem uso de IA.
 - **FR18** — O nome sugerido do arquivo é `Relatório - <título> - <AAAA-MM-DD>.pdf`.
 
 ## Business / Domain Rules
@@ -50,7 +50,7 @@ O usuário reúne respostas que já recebeu no chat em um **relatório por model
 - **BR06** — Um relatório gerado **não muda**: para alterar seções, títulos ou ordem, o usuário gera um novo relatório, que vira nova mensagem.
 - **BR07** — A mensagem de relatório **não entra no histórico dos agentes** (checkpointer do LangGraph) e não altera o contexto das próximas perguntas.
 - **BR08** — O relatório só lê dados pelo mesmo caminho do chat: views do contexto da conversa, colunas sensíveis bloqueadas, banco só leitura.
-- **BR09** — Logo, selo e identificador **identificam a origem**; o app não afirma que o PDF é à prova de edição (sem assinatura digital nesta iniciativa).
+- **BR09** — Logo e identificador **identificam a origem**; o app não afirma que o PDF é à prova de edição (sem assinatura digital nesta iniciativa).
 - **BR10** — O PDF sai sempre em **tema claro**, independentemente do tema do app.
 
 ## Non-Functional Requirements
@@ -158,6 +158,7 @@ O usuario pode **aprovar, editar, adicionar, remover ou reclassificar** qualquer
 
 ### User adjustments
 - 2026-11-25: proposta aprovada sem alterações.
+- 2026-11-26: o usuário pediu um PDF com cara de documento formal e menos enfeite: sem capa com logo grande, sem selo "Gerado pelo Adito" e sem rodapé; logo pequena com o nome no topo de toda página; só tabelas, gráficos e títulos, sem texto corrido. FR13–FR17 e BR09 ajustados.
 
 ## Gate G1 — REQUIREMENTS READY
 
