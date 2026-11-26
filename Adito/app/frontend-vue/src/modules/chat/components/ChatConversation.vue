@@ -11,6 +11,7 @@ import {
   ArrowRight
 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
+import type { ExportFormat } from '@/common/utils/exportData'
 import type { ChatMessage, Conversation } from '@/modules/chat/types'
 import ChatMessageBubble from '@/modules/chat/components/ChatMessageBubble.vue'
 
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   (e: 'open-conversations'): void
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
+  (e: 'export', payload: { message: ChatMessage; format: ExportFormat }): void
   (e: 'suggest', question: string): void
 }>()
 
@@ -176,6 +178,7 @@ function select(key: string) {
           :message="message"
           @toggle-sql="emit('toggle-sql', $event)"
           @pin="emit('pin', $event)"
+          @export="emit('export', $event)"
           @suggest="emit('suggest', $event)"
         />
       </div>

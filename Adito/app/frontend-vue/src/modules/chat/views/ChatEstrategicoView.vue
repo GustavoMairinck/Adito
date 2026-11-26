@@ -4,7 +4,9 @@ import { useRoute } from 'vue-router'
 import { AlertCircle, CheckCircle2 } from 'lucide-vue-next'
 
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
+import { exportarTabela } from '@/common/api/export'
 import { useToast } from '@/common/composables/useToast'
+import type { ExportFormat } from '@/common/utils/exportData'
 import ChatConversation from '@/modules/chat/components/ChatConversation.vue'
 import ChatInputArea from '@/modules/chat/components/ChatInputArea.vue'
 import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialog.vue'
@@ -334,24 +336,54 @@ const toggleSql = (messageId: string) => {
   }))
 }
 
-const openPinModal = (message: ChatMessage) => {
-  let questionOriginal = ''
+const findQuestionForMessage = (message: ChatMessage): string => {
   if (message.userMessageId) {
     const userMsg = messages.value.find(m => m.id === message.userMessageId)
-    if (userMsg) {
-      questionOriginal = userMsg.text
-    }
+    if (userMsg) return userMsg.text
   }
-  if (!questionOriginal) {
-    const index = messages.value.findIndex(m => m.id === message.id)
-    if (index > 0) {
-      const prevMsg = messages.value[index - 1]
-      if (prevMsg && prevMsg.type === 'user') {
-        questionOriginal = prevMsg.text
-      }
-    }
+  const index = messages.value.findIndex(m => m.id === message.id)
+  if (index > 0) {
+    const prevMsg = messages.value[index - 1]
+    if (prevMsg && prevMsg.type === 'user') return prevMsg.text
   }
+  return ''
+}
+
+const openPinModal = (message: ChatMessage) => {
+  const questionOriginal = findQuestionForMessage(message)
   openPinModalBase(message, questionOriginal, currentConversation.value?.contextoId)
+}
+
+const isExporting = ref(false)
+
+const extractFolderName = (caminho: string | null): string => {
+  if (!caminho) return ''
+  const parts = caminho.split(/[\\/]+/).filter(Boolean)
+  return parts.length >= 2 ? parts[parts.length - 2] : ''
+}
+
+const handleExport = async ({ message, format }: { message: ChatMessage; format: ExportFormat }) => {
+  if (isExporting.value || !message.table?.length) return
+  isExporting.value = true
+  try {
+    const label = findQuestionForMessage(message) || currentConversation.value?.title
+    const res = await exportarTabela(message.table, format, {
+      fieldFormats: message.fieldFormats,
+      label,
+    })
+    if (res.cancelado) return
+    if (res.modo === 'tauri') {
+      const folder = extractFolderName(res.caminho)
+      showToast(folder ? `Arquivo salvo em ${folder}: ${res.nome}` : `Arquivo salvo: ${res.nome}`, 'success')
+    } else {
+      showToast(`Arquivo salvo: ${res.nome}`, 'success')
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    showToast(`Não foi possível exportar os dados: ${detail}`, 'error')
+  } finally {
+    isExporting.value = false
+  }
 }
 
 const requestDeleteConversation = (id: string) => {
@@ -405,6 +437,8 @@ const confirmDeleteConversation = async () => {
     >
       <div
         v-if="toast"
+        role="status"
+        data-testid="chat-toast"
         :class="[
           'fixed right-4 bottom-4 z-[70] max-w-sm rounded-2xl px-4 py-3 shadow-2xl border flex items-start gap-3',
           toast.type === 'success'
@@ -446,6 +480,7 @@ const confirmDeleteConversation = async () => {
           @open-conversations="isConvSidebarOpen = true"
           @toggle-sql="toggleSql"
           @pin="openPinModal"
+          @export="handleExport"
           @suggest="sendQuestion($event)"
         />
         <RouterLink

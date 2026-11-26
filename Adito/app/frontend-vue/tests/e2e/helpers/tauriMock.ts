@@ -33,6 +33,10 @@ export interface TauriMockOptions {
   chatData?: Array<Record<string, unknown>>
   /** Tipo de gráfico sugerido pelo agente de painéis na resposta do chat (padrão: nenhum). */
   chatChartType?: string
+  /** Pasta simulada escolhida no diálogo "Salvar como..." durante a exportação. */
+  exportDir?: string
+  /** Simula o usuário cancelando o diálogo "Salvar como..." na exportação. */
+  exportCancel?: boolean
 }
 
 /**
@@ -55,6 +59,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     autoUpdateEnabled: options.autoUpdateEnabled ?? false,
     chatData: options.chatData ?? null,
     chatChartType: options.chatChartType ?? null,
+    exportDir: options.exportDir ?? '/mock/Documentos',
+    exportCancel: options.exportCancel ?? false,
   }
 
   await page.addInitScript((cfg) => {
@@ -78,6 +84,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       dadosInstalls: 0,
     }
     ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_UPDATER__ = updaterTelemetry
+    const exportedFiles: Array<{ nome: string; bytes: number[] }> = []
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_EXPORTS__ = exportedFiles
 
     const PROVIDERS = [
       { id: 'gemini', label: 'Gemini', protocol: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', default_model: 'gemini-3.5-flash-lite', supports_embeddings: true, default_embedding_model: 'gemini-embedding-2', requires_key: true, allow_custom_base_url: false },
@@ -565,6 +573,15 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         if (cmd === 'plugin:process|restart') {
           updaterTelemetry.relaunches += 1
           return undefined
+        }
+        if (cmd === 'exportar_arquivo') {
+          if (cfg.exportCancel) {
+            return { nome: '', caminho: '', cancelado: true }
+          }
+          const nome = String(args.nome || 'adito-dados.csv')
+          const bytes = Array.isArray(args.bytes) ? (args.bytes as number[]) : []
+          exportedFiles.push({ nome, bytes })
+          return { nome, caminho: `${cfg.exportDir}/${nome}`, cancelado: false }
         }
         if (cmd === 'core_call') {
           return handleRpc(String(args.method), (args.params as Record<string, unknown>) || {})
