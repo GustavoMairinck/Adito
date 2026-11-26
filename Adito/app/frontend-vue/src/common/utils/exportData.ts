@@ -69,9 +69,18 @@ function formatIsoDatePtBr(value: unknown): string {
   return text
 }
 
+const MAX_SAFE_SIGNIFICANT_DIGITS = 15
+
+function countSignificantDigits(numericStr: string): number {
+  const unsigned = numericStr.startsWith('-') ? numericStr.slice(1) : numericStr
+  const digitsOnly = unsigned.replace('.', '').replace(/^0+/, '')
+  return digitsOnly.length
+}
+
 /**
  * Converte valores numéricos legítimos para `number`, preservando strings com zeros à esquerda
- * (ex.: códigos/CEPs `"00123"`) ou colunas explicitamente declaradas como `text` ou `date`.
+ * (ex.: códigos/CEPs `"00123"`), identificadores/chaves longas (> 15 dígitos significativos)
+ * ou colunas explicitamente declaradas como `text` ou `date`.
  */
 function parseRealNumber(value: unknown, format: NormalizedFormat): number | null {
   if (value === null || value === undefined || typeof value === 'boolean') return null
@@ -82,8 +91,15 @@ function parseRealNumber(value: unknown, format: NormalizedFormat): number | nul
   if (typeof value === 'string') {
     const trimmed = value.trim()
     if (!trimmed || !STRICT_NUMBER_RE.test(trimmed)) return null
-    const parsed = Number(trimmed)
-    return Number.isFinite(parsed) ? parsed : null
+    const normalized = trimmed.includes('.')
+      ? trimmed.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '')
+      : trimmed
+    if (countSignificantDigits(normalized) > MAX_SAFE_SIGNIFICANT_DIGITS) return null
+    const parsed = Number(normalized)
+    if (!Number.isFinite(parsed)) return null
+    if (parsed === 0) return 0
+    if (String(parsed) !== normalized) return null
+    return parsed
   }
   return null
 }
@@ -357,11 +373,11 @@ function buildWorksheetXml(rows: ExportRow[], fieldFormats?: FieldFormatsMap): s
 
   const rowXmls: string[] = []
 
-  // Linha 1: Cabeçalhos em negrito
+  // Linha 1: Cabeçalhos em negrito (t="inlineStr" nunca é avaliado como fórmula no OOXML)
   if (columns.length > 0) {
     const headerCells = headers.map((label, c) => {
       const ref = `${colIndexToLetters(c)}1`
-      const safe = escapeXml(neutralizeFormulaText(label))
+      const safe = escapeXml(label)
       return `<c r="${ref}" s="1" t="inlineStr"><is><t xml:space="preserve">${safe}</t></is></c>`
     })
     rowXmls.push(`<row r="1">${headerCells.join('')}</row>`)
@@ -388,7 +404,7 @@ function buildWorksheetXml(rows: ExportRow[], fieldFormats?: FieldFormatsMap): s
       }
 
       if (format === 'date') {
-        const text = neutralizeFormulaText(formatIsoDatePtBr(raw))
+        const text = formatIsoDatePtBr(raw)
         widths[c] = Math.max(widths[c], Math.min(48, text.length + 3))
         cells.push(`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`)
         continue
@@ -403,7 +419,7 @@ function buildWorksheetXml(rows: ExportRow[], fieldFormats?: FieldFormatsMap): s
         continue
       }
 
-      const text = neutralizeFormulaText(String(raw))
+      const text = String(raw)
       widths[c] = Math.max(widths[c], Math.min(48, text.length + 3))
       cells.push(`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`)
     }

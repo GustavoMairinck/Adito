@@ -165,9 +165,42 @@ describe('common/utils/exportData', () => {
     expect(sheet).toContain('<c r="C2" s="4"><v>320000.75</v></c>')
     expect(sheet).toContain('<c r="D2" s="5"><v>45.5</v></c>')
     expect(sheet).toContain('<c r="C3" s="4"><v>-10.25</v></c>')
-    // Data formatada e fórmula neutralizada
+    // Data formatada e inlineStr sem prefixo de apóstrofo (inlineStr nunca é avaliado como fórmula no OOXML)
     expect(sheet).toContain('26/11/2026')
-    expect(sheet).toContain('&apos;=HYPERLINK(&quot;http://evil&quot;)')
+    expect(sheet).toContain('<t xml:space="preserve">=HYPERLINK(&quot;http://evil&quot;)</t>')
+    expect(sheet).not.toContain('&apos;=HYPERLINK')
+  })
+
+  it('preserva textos iniciados por + ou - sem apóstrofo no .xlsx e mantém números longos (>15 dígitos) como texto em CSV e .xlsx', () => {
+    const id20 = '12345678901234567891'
+    const chaveNfe44 = '32261112345678000195550010000001231234567890'
+    const rows = [
+      {
+        telefone: '+55 27 3333-4444',
+        placeholder: '-',
+        id_longo: id20,
+        chave_nfe: chaveNfe44,
+        valor_str: '1500.50',
+      },
+    ]
+
+    // XLSX: inlineStr sem apóstrofo extra e IDs longos preservados integralmente como texto
+    const entries = parseZipEntries(buildXlsxBytes(rows, { valor_str: 'currency' }))
+    const sheet = entries.get('xl/worksheets/sheet1.xml')!
+    expect(sheet).toContain('<t xml:space="preserve">+55 27 3333-4444</t>')
+    expect(sheet).not.toContain('&apos;+55')
+    expect(sheet).toContain('<t xml:space="preserve">-</t>')
+    expect(sheet).not.toContain('&apos;-</t>')
+    expect(sheet).toContain(`<t xml:space="preserve">${id20}</t>`)
+    expect(sheet).toContain(`<t xml:space="preserve">${chaveNfe44}</t>`)
+    // String numérica normal (<= 15 dígitos) continua gravada como número real
+    expect(sheet).toContain('<c r="E2" s="4"><v>1500.5</v></c>')
+
+    // CSV: mantém proteção de Formula Injection para + / -, e preserva IDs longos sem corromper dígitos
+    const csv = buildCsvString(rows, { valor_str: 'currency' })
+    expect(csv).toContain("'+55 27 3333-4444")
+    expect(csv).toContain("'-;")
+    expect(csv).toContain(`;${id20};${chaveNfe44};1500,50`)
   })
 
   it('buildExportFilename sanitiza acentos, caracteres inválidos e nomes reservados do Windows', () => {

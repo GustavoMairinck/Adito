@@ -1164,31 +1164,56 @@ fn gravar_exportacao_destino(
     bytes: &[u8],
 ) -> Result<ExportResultado, String> {
     validar_payload_exportacao(bytes)?;
-    let destino_final = garantir_extensao_exportacao(destino, ext);
+    let destino_final = garantir_extensao_exportacao(destino.clone(), ext);
+    let extensao_acrescentada = destino_final != destino;
     let parent = destino_final
         .parent()
         .ok_or_else(|| "Pasta de destino inválida para exportação.".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|e| format!("Não foi possível acessar a pasta de destino: {e}"))?;
 
-    let seq = EXPORT_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    let tmp = parent.join(format!(".adito-export-{}-{seq}.tmp", std::process::id()));
-    let gravacao = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)
-        .and_then(|mut arquivo| arquivo.write_all(bytes).and_then(|_| arquivo.sync_all()))
-        .and_then(|_| fs::rename(&tmp, &destino_final));
-    if let Err(e) = gravacao {
-        let _ = fs::remove_file(&tmp);
-        return Err(format!("Falha ao gravar o arquivo exportado: {e}"));
-    }
-
     let nome = destino_final
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
+
+    if extensao_acrescentada {
+        // O diálogo nativo não confirmou sobrescrita quando o usuário omitiu a extensão:
+        // usa `create_new(true)` para nunca sobrescrever silenciosamente um arquivo já existente.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destino_final)
+        {
+            Ok(mut arquivo) => {
+                if let Err(e) = arquivo.write_all(bytes).and_then(|_| arquivo.sync_all()) {
+                    let _ = fs::remove_file(&destino_final);
+                    return Err(format!("Falha ao gravar o arquivo exportado: {e}"));
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                return Err(format!(
+                    "Já existe um arquivo \"{nome}\" nesta pasta. Escolha outro nome ou informe a extensão .{ext} no diálogo para confirmar a substituição."
+                ));
+            }
+            Err(e) => return Err(format!("Falha ao gravar o arquivo exportado: {e}")),
+        }
+    } else {
+        let seq = EXPORT_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let tmp = parent.join(format!(".adito-export-{}-{seq}.tmp", std::process::id()));
+        let gravacao = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .and_then(|mut arquivo| arquivo.write_all(bytes).and_then(|_| arquivo.sync_all()))
+            .and_then(|_| fs::rename(&tmp, &destino_final));
+        if let Err(e) = gravacao {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("Falha ao gravar o arquivo exportado: {e}"));
+        }
+    }
+
     Ok(ExportResultado {
         nome,
         caminho: destino_final.to_string_lossy().into_owned(),
@@ -1564,7 +1589,12 @@ mod testes_migracao {
         assert_eq!(r2.nome, "relatorio.2026.csv");
         assert_eq!(fs::read(dir.join("relatorio.2026.csv")).unwrap(), b"a;b\n1;2");
 
-        // Quando o usuário confirma sobrescrita no diálogo, substitui atomicamente
+        // Se o usuário omitiu a extensão e já existe um arquivo com essa extensão, NÃO sobrescreve
+        let err_sobrescrita = gravar_exportacao_destino(dir.join("meus-projetos"), "xlsx", b"PK-NAO-SOBRESCREVER");
+        assert!(err_sobrescrita.is_err());
+        assert_eq!(fs::read(dir.join("meus-projetos.xlsx")).unwrap(), b"PK-1");
+
+        // Quando o usuário confirma sobrescrita no diálogo (caminho já com extensão), substitui atomicamente
         let r3 = gravar_exportacao_destino(dir.join("meus-projetos.xlsx"), "xlsx", b"PK-2").unwrap();
         assert_eq!(r3.nome, "meus-projetos.xlsx");
         assert_eq!(fs::read(dir.join("meus-projetos.xlsx")).unwrap(), b"PK-2");
