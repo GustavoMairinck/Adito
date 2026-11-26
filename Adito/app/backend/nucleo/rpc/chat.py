@@ -458,9 +458,23 @@ def message_rows(params):
     if conversation is None:
         raise not_found("Conversation")
     rows = execute_query(sql, contexto_id=conversation.contexto_id)
-    if rows and isinstance(rows[0], dict) and "error" in rows[0]:
+    if _query_failed(rows):
         raise ApiError(409, {"message": "os dados mudaram desde esta pergunta; refaça a pergunta", "error": rows[0]["error"]})
     return {"data": _json_safe(rows)}
+
+
+def _query_failed(rows) -> bool:
+    """`execute_query` sinaliza falha devolvendo exatamente `[{"error": "<mensagem>"}]`.
+
+    Mesma regra para `chat.message_rows` e `chat.report_rows`: um resultado legítimo que tenha uma
+    coluna `error` ao lado de outras, ou mais de uma linha, continua sendo dado.
+    """
+    return (
+        isinstance(rows, list)
+        and len(rows) == 1
+        and isinstance(rows[0], dict)
+        and set(rows[0]) == {"error"}
+    )
 
 
 # ── Relatórios (EPIC-14) ────────────────────────────────────────────────────
@@ -556,7 +570,7 @@ def report_rows(params):
         except Exception:  # noqa: BLE001 - uma seção quebrada não derruba o relatório
             logger.exception("Falha ao reexecutar seção do relatório %s", message.id)
             rows = [{"error": "falha ao executar"}]
-        if rows and isinstance(rows[0], dict) and set(rows[0]) == {"error"}:
+        if _query_failed(rows):
             results.append({"data": [], "error": "os dados mudaram desde a pergunta"})
         else:
             results.append({"data": _json_safe(rows), "error": None})

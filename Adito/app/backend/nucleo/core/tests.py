@@ -2651,6 +2651,26 @@ class RelatorioTests(AppDbTestCase):
         self.assertEqual(call("chat.report_rows", {"id": self.analise})[0], 404)
         self.assertEqual(call("chat.report_rows", {"id": "x"})[0], 404)
 
+    def test_message_rows_e_report_rows_usam_a_mesma_regra_de_erro(self) -> None:
+        _, rel = self.criar([{"message_id": self.analise, "title": "Área"}])
+        legitimo = [{"area": "Engenharias", "error": "nenhum"}, {"area": "Humanas", "error": "nenhum"}]
+
+        with patch("rpc.chat.execute_query", return_value=legitimo):
+            status_msg, body_msg = call("chat.message_rows", {"id": self.analise})
+            status_rel, body_rel = call("chat.report_rows", {"id": rel["id"]})
+        # Coluna "error" ao lado de outras é dado nos dois métodos
+        self.assertEqual(status_msg, 200, body_msg)
+        self.assertEqual(body_msg["data"], legitimo)
+        self.assertEqual(status_rel, 200, body_rel)
+        self.assertEqual(body_rel["sections"][0], {"data": legitimo, "error": None})
+
+        falha = [{"error": "no such table: v1"}]
+        with patch("rpc.chat.execute_query", return_value=falha):
+            self.assertEqual(call("chat.message_rows", {"id": self.analise})[0], 409)
+            status_rel, body_rel = call("chat.report_rows", {"id": rel["id"]})
+        self.assertEqual(body_rel["sections"][0]["data"], [])
+        self.assertTrue(body_rel["sections"][0]["error"])
+
     def test_relatorio_aparece_no_historico_da_conversa(self) -> None:
         _, rel = self.criar([{"message_id": self.analise, "title": "Área"}])
         status, conversas = call("chat.conversations.list")
