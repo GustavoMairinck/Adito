@@ -2,12 +2,13 @@
 import { computed } from 'vue'
 import type { FieldFormat } from '@/modules/chat/types'
 import { formatFieldValue } from '@/modules/chat/utils/format'
+import { isTimeKey } from '@/common/utils/chartKeys'
 
 /** Tabela de uma resposta, com a formatação de cada coluna. Usada no chat, no relatório e na impressão. */
 const props = withDefaults(defineProps<{
   rows: Array<Record<string, any>>
   fieldFormats?: Record<string, FieldFormat | string>
-  /** Página de impressão: sem rolagem, cabeçalho repetido a cada página e linhas alternadas. */
+  /** Página de impressão: sem rolagem e com o cabeçalho repetido a cada página (estilo no ChatReportPrint). */
   print?: boolean
 }>(), {
   fieldFormats: () => ({}),
@@ -17,6 +18,22 @@ const props = withDefaults(defineProps<{
 const columns = computed(() => Object.keys(props.rows[0] || {}))
 const isNumeric = (value: unknown) => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value))
 const format = (key: string | number, value: unknown) => formatFieldValue(props.fieldFormats, key, value)
+
+/**
+ * Alinhamento por coluna, igual no cabeçalho e nas linhas: à direita só quantidades. Texto, data e
+ * colunas de tempo (ano, mês…) ficam à esquerda, como o formatFieldValue as trata. O tipo vem do
+ * primeiro valor não nulo da coluna, não só da primeira linha.
+ */
+const numericColumns = computed(() => {
+  const result: Record<string, boolean> = {}
+  for (const key of columns.value) {
+    const fieldFormat = String(props.fieldFormats?.[key] || '').replace(/^FieldFormat\./, '').toLowerCase()
+    const sample = props.rows.find(row => row[key] !== null && row[key] !== undefined && row[key] !== '')?.[key]
+    const quantity = ['currency', 'decimal', 'percent', 'integer'].includes(fieldFormat)
+    result[key] = fieldFormat !== 'text' && fieldFormat !== 'date' && (quantity || !isTimeKey(key)) && isNumeric(sample)
+  }
+  return result
+})
 </script>
 
 <template>
@@ -33,7 +50,7 @@ const format = (key: string | number, value: unknown) => formatFieldValue(props.
             :key="key"
             :class="[
               print ? 'report-print-th' : 'py-2.5 px-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted select-none',
-              isNumeric(rows[0]?.[key]) ? 'text-right' : 'text-left'
+              numericColumns[key] ? 'text-right' : 'text-left'
             ]"
           >
             {{ key.replace(/_/g, ' ') }}
@@ -47,17 +64,17 @@ const format = (key: string | number, value: unknown) => formatFieldValue(props.
           :class="print ? 'report-print-tr' : 'transition-colors hover:bg-accent/[0.06] dark:hover:bg-accent/[0.08]'"
         >
           <td
-            v-for="(value, key) in row"
+            v-for="key in columns"
             :key="key"
             :class="[
               print ? 'report-print-td' : 'py-2.5 px-4 whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-sm transition-colors',
-              isNumeric(value)
+              numericColumns[key]
                 ? (print ? 'text-right tabular-nums' : 'text-right tabular-nums text-text-primary font-medium')
                 : (print ? 'text-left' : 'text-left text-text-secondary')
             ]"
-            :title="print ? undefined : format(key, value)"
+            :title="print ? undefined : format(key, row[key])"
           >
-            {{ format(key, value) }}
+            {{ format(key, row[key]) }}
           </td>
         </tr>
       </tbody>
