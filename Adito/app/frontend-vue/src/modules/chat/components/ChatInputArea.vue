@@ -1,18 +1,52 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
-import { Send, Square, Mic, MicOff } from 'lucide-vue-next'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { Send, Square, Mic, MicOff, Plus, FileText } from 'lucide-vue-next'
 
 const props = defineProps<{
   modelValue: string
   loading: boolean
   disableEscape?: boolean
+  /** A conversa tem ao menos uma resposta com dados: mostra o botão "Mais" com "Criar relatório". */
+  canCreateReport?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'send'): void
   (e: 'cancel'): void
+  (e: 'create-report'): void
 }>()
+
+const moreMenuOpen = ref(false)
+const moreRef = ref<HTMLElement | null>(null)
+
+const closeMoreMenu = (event: MouseEvent) => {
+  if (moreMenuOpen.value && moreRef.value && !moreRef.value.contains(event.target as Node)) {
+    moreMenuOpen.value = false
+  }
+}
+
+const chooseCreateReport = () => {
+  moreMenuOpen.value = false
+  emit('create-report')
+}
+
+// Esc fecha o menu de qualquer lugar da tela. Os ouvintes globais só existem com o menu aberto.
+const closeMoreMenuOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') moreMenuOpen.value = false
+}
+const toggleMenuListeners = (open: boolean) => {
+  if (open) {
+    document.addEventListener('mousedown', closeMoreMenu)
+    document.addEventListener('keydown', closeMoreMenuOnEscape)
+  } else {
+    document.removeEventListener('mousedown', closeMoreMenu)
+    document.removeEventListener('keydown', closeMoreMenuOnEscape)
+  }
+}
+watch(moreMenuOpen, toggleMenuListeners)
+watch(() => props.canCreateReport, (can) => { if (!can) moreMenuOpen.value = false })
+onBeforeUnmount(() => toggleMenuListeners(false))
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isRecording = ref(false)
@@ -91,6 +125,38 @@ const handleKeydown = (event: KeyboardEvent) => {
   <div class="px-4 py-5 bg-transparent">
     <div class="mx-auto flex max-w-3xl flex-col">
       <div class="relative flex items-end rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-card transition-all focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/20">
+        <div v-if="canCreateReport" ref="moreRef" class="relative pl-2 pb-2 pt-2">
+          <button
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-surface-elevated hover:text-[var(--neutral-dark)] transition-colors"
+            :class="{ 'bg-surface-elevated text-[var(--neutral-dark)]': moreMenuOpen }"
+            aria-label="Mais opções"
+            aria-haspopup="menu"
+            :aria-expanded="moreMenuOpen"
+            title="Mais opções"
+            @click="moreMenuOpen = !moreMenuOpen"
+            @keydown.escape.stop="moreMenuOpen = false"
+          >
+            <Plus class="h-5 w-5" />
+          </button>
+          <div
+            v-if="moreMenuOpen"
+            role="menu"
+            aria-label="Mais opções"
+            class="absolute bottom-full left-2 z-30 mb-2 w-56 overflow-hidden rounded-xl border border-border-subtle bg-surface p-1 shadow-premium"
+            @keydown.escape.stop="moreMenuOpen = false"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-[var(--neutral-dark)]"
+              @click="chooseCreateReport"
+            >
+              <FileText class="h-4 w-4" />
+              Criar relatório
+            </button>
+          </div>
+        </div>
         <textarea
           ref="textareaRef"
           :value="modelValue"

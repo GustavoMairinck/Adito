@@ -2,6 +2,7 @@ import { call } from "@/common/api/core";
 import { buildChart, cancelChatStream, isChatConversationLoading, isScalarResultData } from "@/modules/chat/composables/useChatApi";
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
 import { isChatChartType } from "@/modules/chat/utils/chartType";
+import { mapReportMetadata } from "@/modules/chat/utils/report";
 import { computed, ref } from "vue";
 
 const STORAGE_PREFIX = "adito_chat_history";
@@ -29,8 +30,18 @@ export function createConversation(): Conversation {
   };
 }
 
-function mapBackendMessage(message: any): ChatMessage {
+export function mapBackendMessage(message: any): ChatMessage {
   const metadata = message.metadata || {};
+  if (message.role !== "user" && metadata.type === "report") {
+    // Relatório: só a definição vem do núcleo; loadRows() busca as linhas de cada seção.
+    return {
+      id: String(message.id),
+      type: "ai",
+      text: "",
+      timestamp: message.created_at,
+      report: mapReportMetadata(metadata, message.created_at),
+    };
+  }
   // O histórico não guarda linhas; loadRows() reexecuta o SQL no dados.db.
   const table: Array<Record<string, any>> = [];
   const isScalarResult = false;
@@ -123,10 +134,53 @@ export function useChatHistory() {
     );
   };
 
+  /** Reexecuta o SQL de cada seção de um relatório (números sempre atuais; uma seção com erro não derruba as outras). */
+  const loadReportRows = async (convId: string, message: ChatMessage) => {
+    if (!message.report) return;
+    try {
+      const data = await call("chat.report_rows", { id: message.id });
+      const results: Array<{ data?: any[]; error?: string | null }> = data?.sections || [];
+      updateMessage(convId, message.id, {
+        report: {
+          ...message.report,
+          loaded: true,
+          sections: message.report.sections.map((section, index) => ({
+            ...section,
+            data: results[index]?.data || [],
+            error: results[index]?.error || null,
+          })),
+        },
+      });
+    } catch {
+      updateMessage(convId, message.id, {
+        report: {
+          ...message.report,
+          loaded: true,
+          sections: message.report.sections.map((section) => ({ ...section, data: [], error: "falha ao carregar" })),
+        },
+      });
+    }
+  };
+
+  /** Reexecuta todos os relatórios da conversa (ex.: o dados.db foi atualizado em segundo plano). */
+  const reloadReports = async (convId: string | null) => {
+    const conversation = conversations.value.find((c) => c.id === convId);
+    if (!conversation || !convId || convId.startsWith("local-")) return;
+    await Promise.all(
+      conversation.messages.filter((m) => m.report).map((m) => loadReportRows(convId, m)),
+    );
+  };
+
   /** Recarrega as linhas das respostas da conversa aberta (o histórico só guarda o SQL). */
   const loadRows = async (convId: string | null) => {
     const conversation = conversations.value.find((c) => c.id === convId);
     if (!conversation || convId?.startsWith("local-")) return;
+
+    await Promise.all(
+      conversation.messages
+        .filter((m) => m.report && !m.report.loaded)
+        .map((m) => loadReportRows(convId!, m)),
+    );
 
     const pending = conversation.messages.filter((m) => m.needsRows);
     await Promise.all(
@@ -271,9 +325,28 @@ export function useChatHistory() {
       conversations.value[0],
   );
 
+  /** Grava o relatório no núcleo (mensagem da conversa) e carrega as linhas das seções. Não chama LLM. */
+  const createReport = async (
+    convId: string,
+    title: string,
+    sections: Array<{ message_id: string; title: string; chart_type?: string | null }>,
+  ): Promise<ChatMessage> => {
+    const created = await call("chat.reports.create", { conversation_id: convId, title, sections });
+    const message = mapBackendMessage(created);
+    updateConversationById(convId, (conversation) => ({
+      ...conversation,
+      messages: [...conversation.messages, message],
+      updatedAt: message.timestamp || new Date().toISOString(),
+    }));
+    await loadReportRows(convId, message);
+    return message;
+  };
+
   return {
     conversations,
     currentConvId,
+    createReport,
+    reloadReports,
     setCurrentConvId,
     handleNewConversation,
     handleDeleteConversation,

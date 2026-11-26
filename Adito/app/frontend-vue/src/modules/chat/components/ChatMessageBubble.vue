@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
-import VueApexCharts from 'vue3-apexcharts'
 import {
   AreaChart,
   BarChart2,
@@ -10,17 +9,18 @@ import {
   Copy,
   Database,
   Lightbulb,
-  Minimize2,
   PieChart,
   Pin,
   Square,
   TrendingUp
 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
-import type { ApexOptions } from 'apexcharts'
-import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
+import type { ChatMessage } from '@/modules/chat/types'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
-import { apexChartType, CHAT_CHART_TYPES, canUsePie, initialChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
+import { CHAT_CHART_TYPES, canUsePie, initialChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
+import { formatFieldValue } from '@/modules/chat/utils/format'
+import ChatResultChart from '@/modules/chat/components/ChatResultChart.vue'
+import ChatResultTable from '@/modules/chat/components/ChatResultTable.vue'
 
 const props = defineProps<{
   message: ChatMessage
@@ -30,18 +30,17 @@ const emit = defineEmits<{
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
   (e: 'suggest', question: string): void
+  (e: 'chart-type', payload: { id: string; type: ChatChartType }): void
 }>()
 
 const hasRenderableTable = computed(() => {
   return !!(props.message.table && props.message.table.length > 0 && Object.values(props.message.table[0])[0] !== 'null')
 })
 
-const isDark = ref(false)
 const rowLimit = ref<number | 'all'>(10)
 const rowLimitOptions: Array<number | 'all'> = [5, 10, 15, 'all']
 const isCopied = ref(false)
 const isSqlCopied = ref(false)
-let observer: MutationObserver | null = null
 
 const bubbleRef = ref<HTMLElement | null>(null)
 const isVisible = ref(false)
@@ -122,63 +121,8 @@ const copySqlToClipboard = async () => {
   }
 }
 
-const fmt = (n: number, dec = 1) =>
-  new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: dec }).format(n)
-
-const formatNumber = (value: number) => {
-  if (value === undefined || value === null || Number.isNaN(value)) return '0'
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000_000) return `${fmt(value / 1_000_000_000)}B`
-  if (abs >= 1_000_000)     return `${fmt(value / 1_000_000)}M`
-  if (abs >= 1_000)         return `${fmt(value / 1_000)}K`
-  return fmt(value, 2)
-}
-
-function formatDateValue(value: unknown) {
-  if (value === null || value === undefined || value === '') return 'nulo'
-  const text = String(value)
-  const datePart = text.split('T')[0]
-  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-    const [year, month, day] = datePart.split('-')
-    return `${day}/${month}/${year}`
-  }
-  return text
-}
-
-function formatTableValue(key: string | number, value: unknown) {
-  if (value === null || value === undefined) return 'nulo'
-
-  const rawFormat = props.message.fieldFormats?.[String(key)]
-  const format = String(rawFormat || '').replace(/^FieldFormat\./, '').toLowerCase() as FieldFormat | ''
-
-  if (format === 'text') return String(value)
-  if (format === 'date') return formatDateValue(value)
-
-  const numericValue = Number(value)
-
-  if (format === 'currency') {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericValue)
-  }
-  if (format === 'integer') {
-    return new Intl.NumberFormat('pt-BR', { useGrouping: true, maximumFractionDigits: 0 }).format(numericValue)
-  }
-  if (format === 'percent') {
-    return `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)}%`
-  }
-  if (format === 'decimal') {
-    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)
-  }
-
-  // Sem formato definido: tenta auto-detectar pelo valor
-  if (!Number.isFinite(numericValue)) return String(value)
-
-  // Número inteiro
-  if (Number.isInteger(numericValue)) {
-    return new Intl.NumberFormat('pt-BR').format(numericValue)
-  }
-  // Número com decimais — formata com separadores pt-BR
-  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)
-}
+const formatTableValue = (key: string | number, value: unknown) =>
+  formatFieldValue(props.message.fieldFormats, key, value)
 
 const renderedText = computed(() => renderMarkdown(props.message.text || ''))
 
@@ -191,8 +135,6 @@ const displayedRowLimit = computed(() => {
 const displayedRows = computed(() => {
   return (props.message.table || []).slice(0, displayedRowLimit.value)
 })
-
-const showOriginalChart = ref(false)
 
 const chartTypeIcons = {
   bar: BarChart2,
@@ -213,13 +155,11 @@ const chartType = computed<ChatChartType>(() => {
   return type === 'pie' && !isPieAvailable.value ? 'bar' : type
 })
 
-const isChartAxisSwapped = computed(() => chartType.value === 'horizontal_bar')
-const isPieChart = computed(() => chartType.value === 'pie')
-const isLineLikeChart = computed(() => chartType.value === 'line' || chartType.value === 'area')
-
 const selectChartType = (type: ChatChartType) => {
   if (type === 'pie' && !isPieAvailable.value) return
   selectedChartType.value = type
+  // O relatório usa o tipo que está na tela (FR08).
+  emit('chart-type', { id: props.message.id, type })
 }
 
 const chartTypeTitle = (type: ChatChartType, label: string) => {
@@ -227,142 +167,12 @@ const chartTypeTitle = (type: ChatChartType, label: string) => {
   return `Mostrar em ${label.toLowerCase()}`
 }
 
-const othersHint = computed(() => {
-  if (isPieChart.value) return 'na fatia'
-  if (isLineLikeChart.value) return 'no ponto'
-  return chartType.value === 'horizontal_bar' ? 'na barra' : 'na coluna'
-})
-
 const pinMessage = () => {
   emit('pin', { ...props.message, chartType: chartType.value })
 }
 
-const expandOthersIfClicked = (label: unknown) => {
-  if (label === 'Outros') {
-    showOriginalChart.value = true
-  }
-}
-
-const hasOthersOption = computed(() => {
-  if (!props.message.chart) return false
-  const chartData = props.message.chart
-  if (!chartData.series || chartData.series.length === 0) return false
-  
-  // Garantir que todos os valores sejam convertidos para números reais (NaN ou undefined viram 0)
-  const data = chartData.series[0].data.map(v => {
-    const n = Number.parseFloat(String(v))
-    return Number.isNaN(n) ? 0 : n
-  })
-
-  if (data.length <= 1) return false
-
-  // Se a quantidade de dados for menor ou igual à quantidade limitadora (5, 10, 15 ou todos), não precisa agrupar
-  const limit = typeof rowLimit.value === 'number' ? rowLimit.value : Infinity
-  if (data.length <= limit) return false
-  
-  const maxVal = Math.max(...data)
-  if (maxVal <= 0) return false
-  
-  // Considera "pequeno" o que for menor que 5% do valor máximo
-  const threshold = maxVal * 0.05
-  const smallCount = data.filter(v => v > 0 && v < threshold).length
-  
-  // Para agrupar, vamos exigir que haja pelo menos 2 categorias pequenas 
-  // (se houver apenas 1, não faz muito sentido agrupá-la em 'Outros')
-  // Nota: Se preferir agrupar mesmo sendo 1, podemos mudar para >= 1. O ideal para "Outros" é > 1.
-  return smallCount >= 1 || data.filter(v => v === 0).length > 0
-})
-
-const displayedChart = computed(() => {
-  if (!props.message.chart) return null
-
-  const original = props.message.chart
-  if (showOriginalChart.value || !hasOthersOption.value) {
-    return {
-      categories: original.categories.slice(0, displayedRowLimit.value),
-      series: original.series.map(series => ({
-        ...series,
-        data: series.data.slice(0, displayedRowLimit.value)
-      }))
-    }
-  }
-
-  // Agrupar pequenos em "Outros"
-  const categories = original.categories
-  const seriesList = original.series
-
-  // Somar totais por categoria para suportar multi-series de forma robusta
-  const categoryTotals = categories.map((_, i) => {
-    return seriesList.reduce((sum, series) => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return sum + (Number.isNaN(val) ? 0 : val)
-    }, 0)
-  })
-
-  const maxTotal = Math.max(...categoryTotals)
-  const threshold = maxTotal * 0.05
-
-  const largeIndices: number[] = []
-  const smallIndices: number[] = []
-
-  categoryTotals.forEach((val, i) => {
-    if (val >= threshold) {
-      largeIndices.push(i)
-    } else {
-      smallIndices.push(i)
-    }
-  })
-
-  if (smallIndices.length === 0 || largeIndices.length === 0) {
-    return {
-      categories: categories.slice(0, displayedRowLimit.value),
-      series: seriesList.map(series => ({
-        ...series,
-        data: series.data.slice(0, displayedRowLimit.value)
-      }))
-    }
-  }
-
-  const newCategories = largeIndices.map(i => categories[i])
-  newCategories.push('Outros')
-
-  const newSeries = seriesList.map(series => {
-    const newData = largeIndices.map(i => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return Number.isNaN(val) ? 0 : val
-    })
-    const smallSum = smallIndices.reduce((sum, i) => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return sum + (Number.isNaN(val) ? 0 : val)
-    }, 0)
-    newData.push(smallSum)
-    return {
-      ...series,
-      data: newData
-    }
-  })
-
-  return {
-    categories: newCategories.slice(0, displayedRowLimit.value),
-    series: newSeries.map(series => ({
-      ...series,
-      data: series.data.slice(0, displayedRowLimit.value)
-    }))
-  }
-})
-
-const displayedChartHasOthersBar = computed(() => {
-  return displayedChart.value?.categories.includes('Outros') ?? false
-})
-
 onMounted(() => {
   if (typeof document !== 'undefined') {
-    isDark.value = document.documentElement.classList.contains('dark')
-    observer = new MutationObserver(() => {
-      isDark.value = document.documentElement.classList.contains('dark')
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-
     // Setup scroll reveal animation observer
     scrollObserver = new IntersectionObserver(
       (entries) => {
@@ -382,253 +192,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  observer?.disconnect()
   scrollObserver?.disconnect()
-})
-const chartColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
-
-const chartTooltipHtml = (label: string, rows: Array<{ name: string; value: number; color: string }>) => {
-  const background = isDark.value ? '#1A221D' : '#ffffff'
-  const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
-  const textColor = isDark.value ? '#F0F4F1' : '#241920'
-  const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-
-  const seriesRows = rows
-    .map(({ name, value, color }) => `
-              <div class="flex items-center justify-between gap-4 mt-1.5">
-                <div class="flex items-center gap-1.5">
-                  <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0;"></span>
-                  <span style="color:${muted};" class="text-xs font-medium">${name}</span>
-                </div>
-                <span class="font-bold text-sm" style="color:${color}">${formatNumber(value)}</span>
-              </div>
-            `)
-    .join('')
-
-  return `
-          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
-            <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">Categoria</div>
-            <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
-            ${seriesRows}
-          </div>
-        `
-}
-
-const chartOptions = computed<ApexOptions>(() => {
-  const categories = displayedChart.value?.categories || []
-  const isHorizontal = isChartAxisSwapped.value
-  const seriesCount = displayedChart.value?.series.length || 0
-  const labelColor = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-  const baseChart = {
-    type: apexChartType(chartType.value),
-    toolbar: { show: false },
-    background: 'transparent',
-    animations: {
-      enabled: true,
-      easing: 'easeinout',
-      speed: 700
-    }
-  }
-
-  // Pizza: série plana, uma fatia por categoria, com legenda para dar nome às fatias.
-  if (isPieChart.value) {
-    const seriesName = chartSeries.value[0]?.name || 'Total'
-    return {
-      chart: {
-        ...baseChart,
-        events: {
-          dataPointSelection: (_event: any, _chartContext: any, config?: any) => {
-            expandOthersIfClicked(categories[config?.dataPointIndex ?? -1])
-          },
-          legendClick: (_chartContext: any, seriesIndex?: number) => {
-            expandOthersIfClicked(categories[seriesIndex ?? -1])
-          }
-        }
-      },
-      labels: categories,
-      dataLabels: {
-        enabled: true,
-        formatter: (value: number) => `${fmt(Number(value), 1)}%`,
-        style: { fontSize: '11px', fontWeight: 600 },
-        dropShadow: { enabled: false }
-      },
-      stroke: {
-        width: 2,
-        colors: [isDark.value ? '#1A221D' : '#ffffff']
-      },
-      tooltip: {
-        enabled: true,
-        theme: isDark.value ? 'dark' : 'light',
-        custom: ({ series, seriesIndex, w }: any) => chartTooltipHtml(w.globals.labels[seriesIndex], [
-          { name: seriesName, value: series[seriesIndex], color: w.globals.colors[seriesIndex] }
-        ])
-      },
-      legend: {
-        show: true,
-        position: 'bottom',
-        horizontalAlign: 'center',
-        fontSize: '12px',
-        labels: { colors: labelColor }
-      },
-      colors: chartColors
-    }
-  }
-
-  const isBar = !isLineLikeChart.value
-
-  return {
-    chart: {
-      ...baseChart,
-      events: {
-        dataPointSelection: (_event: any, _chartContext: any, config?: any) => {
-          expandOthersIfClicked(config?.w?.globals?.labels?.[config.dataPointIndex])
-        },
-        click: (_event: any, _chartContext: any, config?: any) => {
-          if (config && config.dataPointIndex !== undefined && config.dataPointIndex !== -1) {
-            expandOthersIfClicked(config?.w?.globals?.labels?.[config.dataPointIndex])
-          }
-        },
-        xAxisLabelClick: (_event: any, _chartContext: any, config?: any) => {
-          if (config && config.labelIndex !== undefined) {
-            expandOthersIfClicked(config?.w?.globals?.labels?.[config.labelIndex] || config?.config?.xaxis?.categories?.[config.labelIndex])
-          }
-        }
-      }
-    },
-    dataLabels: { enabled: false },
-    grid: {
-      borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(22,70,43,0.08)',
-      strokeDashArray: 3,
-      xaxis: { lines: { show: false } }
-    },
-    xaxis: isHorizontal
-      ? {
-          categories,
-          labels: {
-            show: true,
-            formatter: (value: number) => formatNumber(Number(value)),
-            style: {
-              fontSize: '11px',
-              fontWeight: 600,
-              colors: labelColor
-            }
-          },
-          axisBorder: { show: false },
-          axisTicks: { show: false }
-        }
-      : {
-          categories,
-          tooltip: { enabled: false },
-          // Linha e área com os pontos no meio de cada categoria, como as colunas: assim o
-          // rótulo da primeira e da última categoria não fica cortado na borda.
-          tickPlacement: 'between',
-          labels: {
-            show: categories.length <= 50,
-            rotate: -45,
-            rotateAlways: categories.length > 8,
-            hideOverlappingLabels: true,
-            trim: true,
-            maxHeight: 100,
-            style: {
-              fontSize: '10px',
-              fontWeight: 600,
-              colors: labelColor
-            }
-          },
-          axisBorder: { show: false },
-          axisTicks: { show: categories.length <= 50 }
-        },
-    yaxis: isHorizontal
-      ? {
-          labels: {
-            formatter: (value: unknown) => String(value ?? ''),
-            style: {
-              fontSize: '10px',
-              fontWeight: 600,
-              colors: labelColor
-            }
-          }
-        }
-      : {
-          // Área começa do zero quando não há negativos, para o tamanho da área não enganar.
-          min: chartType.value === 'area' && chartSeries.value.every(serie => serie.data.every(value => Number(value) >= 0))
-            ? 0
-            : undefined,
-          labels: {
-            formatter: (value: number) => formatNumber(value),
-            style: {
-              fontSize: '11px',
-              fontWeight: 600,
-              colors: labelColor
-            }
-          }
-        },
-    tooltip: {
-      enabled: true,
-      shared: true,
-      intersect: false,
-      theme: isDark.value ? 'dark' : 'light',
-      custom: ({ series, dataPointIndex, w }: any) => chartTooltipHtml(
-        w.globals.labels[dataPointIndex],
-        series.map((serieData: number[], i: number) => ({
-          name: w.globals.seriesNames[i],
-          value: serieData[dataPointIndex],
-          color: chartColors[i % chartColors.length]
-        }))
-      )
-    },
-    // Linha e área: traço suave com marcadores nos pontos.
-    ...(isLineLikeChart.value
-      ? {
-          stroke: { curve: 'smooth' as const, width: 3 },
-          markers: { size: 4, strokeWidth: 0, hover: { size: 6 } },
-          fill: chartType.value === 'area'
-            ? { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.55, opacityTo: 0.12, stops: [0, 90, 100] } }
-            : { type: 'solid' }
-        }
-      : {}),
-    plotOptions: {
-      bar: {
-        borderRadius: 6,
-        borderRadiusApplication: 'end',
-        columnWidth: '58%',
-        barHeight: isHorizontal ? '58%' : undefined,
-        horizontal: isHorizontal,
-        distributed: isBar && seriesCount <= 1
-      }
-    },
-    legend: {
-      show: seriesCount > 1,
-      position: 'top',
-      horizontalAlign: 'left',
-      fontSize: '12px',
-      labels: {
-        colors: labelColor
-      }
-    },
-    colors: chartColors
-  }
-})
-// Filtra séries com escalas incompatíveis para evitar gráficos ilegíveis.
-// Mantém apenas séries cujo valor máximo é >= 0.1% do maior valor entre todas.
-const chartSeries = computed(() => {
-  const series = displayedChart.value?.series || []
-  if (series.length <= 1) return [...series]
-
-  const seriesMaxes = series.map(s =>
-    Math.max(...s.data.map(v => Math.abs(Number(v) || 0)))
-  )
-  const overallMax = Math.max(...seriesMaxes)
-  if (overallMax === 0) return [...series]
-
-  const threshold = overallMax * 0.001
-  return series.filter((_, i) => seriesMaxes[i] >= threshold)
-})
-
-// A pizza recebe uma lista plana de números (uma fatia por categoria).
-const apexSeries = computed(() => {
-  if (isPieChart.value) return (chartSeries.value[0]?.data || []).map(value => Number(value) || 0)
-  return chartSeries.value
 })
 </script>
 
@@ -817,43 +381,6 @@ const apexSeries = computed(() => {
           </button>
         </div>
 
-        <div v-if="displayedChartHasOthersBar && !showOriginalChart && message.chart?.series?.length && hasRenderableTable" class="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 rounded-xl border border-border-subtle bg-surface-elevated/50 text-xs shadow-sm dark:border-white/[0.06] gap-3">
-          <template v-if="showOriginalChart">
-            <span class="text-text-secondary font-semibold flex items-center gap-2">
-              <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-              Exibindo os dados originais expandidos
-            </span>
-            <button 
-              type="button" 
-              class="px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg font-bold transition-all flex items-center gap-1.5 border border-accent/20 hover:border-accent shadow-sm shrink-0"
-              @click="showOriginalChart = false"
-            >
-              <Minimize2 class="w-4 h-4" />
-              Reagrupar 'Outros'
-            </button>
-          </template>
-          <template v-else>
-            <span class="text-text-muted font-medium flex items-center gap-2">
-              <span class="text-base leading-none">💡</span>
-              <span>Categorias pequenas agrupadas. Clique {{ othersHint }} ou na palavra <strong>'Outros'</strong> no gráfico abaixo para expandir.</span>
-            </span>
-          </template>
-        </div>
-
-        <div
-          v-if="showOriginalChart && hasOthersOption && message.chart?.series?.length && hasRenderableTable"
-          class="mt-4 flex justify-end"
-        >
-          <button
-            type="button"
-            class="px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg font-bold transition-all flex items-center gap-1.5 border border-accent/20 hover:border-accent shadow-sm shrink-0"
-            @click="showOriginalChart = false"
-          >
-            <Minimize2 class="w-4 h-4" />
-            Reagrupar 'Outros'
-          </button>
-        </div>
-
         <div
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
           class="mt-4 flex justify-end px-1"
@@ -886,57 +413,18 @@ const apexSeries = computed(() => {
           </div>
         </div>
 
-        <div
+        <ChatResultChart
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
-          class="mt-4 h-[320px] rounded-lg border border-border-subtle bg-surface-elevated/50 p-3 dark:border-white/[0.06] dark:bg-surface-elevated md:h-[360px] md:p-4"
-        >
-          <VueApexCharts :key="`chart-${chartType}`" :type="apexChartType(chartType)" height="100%" :options="chartOptions" :series="apexSeries" />
-        </div>
+          :chart="message.chart"
+          :type="chartType"
+          :row-limit="rowLimit"
+        />
 
-        <div
+        <ChatResultTable
           v-if="hasRenderableTable && !message.isScalarResult"
-          class="mt-4 overflow-auto max-h-[450px] w-full border border-border-subtle rounded-lg bg-surface/30 dark:border-white/[0.06] custom-scrollbar"
-        >
-          <table class="w-full text-sm min-w-[600px] border-collapse">
-            <thead class="sticky top-0 z-10 bg-surface-elevated/95 dark:bg-surface-elevated/95 shadow-[0_1px_0_rgba(0,0,0,0.05)] dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
-              <tr class="border-b border-border-subtle dark:border-white/[0.04]">
-                <th
-                  v-for="key in Object.keys(message.table?.[0] || {})"
-                  :key="key"
-                  :class="[
-                    'py-2.5 px-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted select-none',
-                    Number.isFinite(Number(Object.values(message.table?.[0] || {})[Object.keys(message.table?.[0] || {}).indexOf(key)]))
-                      ? 'text-right'
-                      : 'text-left'
-                  ]"
-                >
-                  {{ key.replace(/_/g, ' ') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/40 dark:divide-white/[0.04]">
-              <tr
-                v-for="(row, i) in displayedRows"
-                :key="i"
-                class="transition-colors hover:bg-accent/[0.06] dark:hover:bg-accent/[0.08]"
-              >
-                <td
-                  v-for="(value, key) in row"
-                  :key="key"
-                  :class="[
-                    'py-2.5 px-4 whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-sm transition-colors',
-                    Number.isFinite(Number(value)) && value !== '' && value !== null
-                      ? 'text-right tabular-nums text-text-primary font-medium'
-                      : 'text-left text-text-secondary'
-                  ]"
-                  :title="formatTableValue(key, value)"
-                >
-                  {{ formatTableValue(key, value) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          :rows="displayedRows"
+          :field-formats="message.fieldFormats"
+        />
         <div v-if="hasRenderableTable && !message.isScalarResult && tableRowCount > 1" class="mt-2 flex items-center justify-between px-1">
           <p class="text-[11px] text-text-muted font-medium">
             Mostrando {{ displayedRows.length }} de {{ tableRowCount }} registros

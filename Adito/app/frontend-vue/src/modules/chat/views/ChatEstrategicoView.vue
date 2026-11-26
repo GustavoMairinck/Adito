@@ -7,6 +7,9 @@ import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import { useToast } from '@/common/composables/useToast'
 import ChatConversation from '@/modules/chat/components/ChatConversation.vue'
 import ChatInputArea from '@/modules/chat/components/ChatInputArea.vue'
+import ChatReportForm, { type ReportOption } from '@/modules/chat/components/ChatReportForm.vue'
+import { isReportEligible, questionFor } from '@/modules/chat/utils/report'
+import type { ChatChartType } from '@/modules/chat/utils/chartType'
 import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialog.vue'
 import ChatSidebar from '@/modules/chat/components/ChatSidebar.vue'
 import ContextoSelector from '@/modules/chat/components/ContextoSelector.vue'
@@ -15,6 +18,7 @@ import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import type { ChatMessage } from '@/modules/chat/types'
 
 const route = useRoute()
@@ -29,8 +33,16 @@ const {
   updateConversationById,
   replaceConversationId,
   setConversationContexto,
-  currentConversation
+  currentConversation,
+  createReport,
+  reloadReports
 } = useChatHistory()
+
+// Relatórios guardam só o SQL: quando o dados.db é atualizado em segundo plano, recalcula os números.
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq > 0) void reloadReports(currentConvId.value)
+})
 
 const {
   askQuestionStream,
@@ -60,6 +72,57 @@ const {
 } = useChatPin(showToast)
 
 const input = ref('')
+
+// ── Relatório (EPIC-14): modelo fixo a partir das respostas da conversa, sem LLM ──
+const reportFormOpen = ref(false)
+const reportSaving = ref(false)
+const reportError = ref('')
+const reportOptions = computed<ReportOption[]>(() => {
+  const all = messages.value
+  return all
+    .filter(isReportEligible)
+    .map(message => ({
+      id: message.id,
+      question: questionFor(all, message),
+      chartType: message.chartType ?? message.suggestedChartType ?? null,
+    }))
+})
+const canCreateReport = computed(() =>
+  reportOptions.value.length > 0
+  && !!currentConvId.value
+  && !currentConvId.value.startsWith('local-')
+  && !isCurrentConvLoading.value
+)
+
+const openReportForm = () => {
+  reportError.value = ''
+  reportFormOpen.value = true
+}
+
+const generateReport = async (payload: { title: string; sections: Array<{ message_id: string; title: string; chart_type?: string | null }> }) => {
+  const convId = currentConvId.value
+  if (!convId) return
+  reportSaving.value = true
+  reportError.value = ''
+  try {
+    await createReport(convId, payload.title, payload.sections)
+    reportFormOpen.value = false
+  } catch (error: any) {
+    reportError.value = error?.data?.sections?.[0] || error?.data?.title?.[0] || 'Não foi possível gerar o relatório. Tente novamente.'
+  } finally {
+    reportSaving.value = false
+  }
+}
+
+const rememberChartType = ({ id, type }: { id: string; type: ChatChartType }) => {
+  if (!currentConvId.value) return
+  updateConversationById(currentConvId.value, conversation => ({
+    ...conversation,
+    messages: conversation.messages.map(message => (message.id === id ? { ...message, chartType: type } : message)),
+  }))
+}
+
+watch(currentConvId, () => { reportFormOpen.value = false })
 const healthOnline = ref<boolean | null>(null)
 const isConvSidebarOpen = ref(false)
 const conversationToDelete = ref<{ id: string; title: string } | null>(null)
@@ -126,6 +189,7 @@ const scrollToBottom = async () => {
 
 watch(messages, scrollToBottom, { deep: true })
 watch(isCurrentConvLoading, scrollToBottom)
+watch(reportFormOpen, open => { if (open) scrollToBottom() })
 
 const cancelCurrentQuestion = () => {
   if (conversationToDelete.value || pinModalOpen.value) return
@@ -447,7 +511,21 @@ const confirmDeleteConversation = async () => {
           @toggle-sql="toggleSql"
           @pin="openPinModal"
           @suggest="sendQuestion($event)"
-        />
+          @chart-type="rememberChartType"
+        >
+          <template #after-messages>
+            <ChatReportForm
+              v-if="reportFormOpen && reportOptions.length"
+              :key="currentConvId ?? 'none'"
+              :options="reportOptions"
+              :default-title="currentConversation?.title || 'Relatório'"
+              :saving="reportSaving"
+              :error="reportError"
+              @cancel="reportFormOpen = false"
+              @generate="generateReport"
+            />
+          </template>
+        </ChatConversation>
         <RouterLink
           v-if="!llmConfigured"
           to="/configuracoes"
@@ -464,6 +542,8 @@ const confirmDeleteConversation = async () => {
           v-model="input"
           :loading="isCurrentConvLoading"
           :disable-escape="!!conversationToDelete || pinModalOpen"
+          :can-create-report="canCreateReport"
+          @create-report="openReportForm"
           @send="sendQuestion()"
           @cancel="cancelCurrentQuestion()"
         />

@@ -200,6 +200,19 @@ async def roteiro(api) -> list[dict]:
         await call(f"message_rows {i}", "chat.message_rows", {"id": m["id"]})
     if msgs:
         await call("message_rows de pergunta", "chat.message_rows", {"id": msgs[0]["id"]})
+
+    # Relatório (EPIC-14): mensagem da conversa por modelo fixo, sem LLM; uma seção boa e uma com SQL quebrado.
+    conversa = next((c for c in convs if c["id"] == conv_id), None) if isinstance(convs, list) else None
+    analises = [m for m in (conversa or {}).get("messages", [])
+                if m["role"] == "assistant" and (m.get("metadata") or {}).get("type") == "analysis"]
+    relatorio = await call("reports.create", "chat.reports.create", {
+        "conversation_id": conv_id, "title": "Relatório do contrato",
+        "sections": [{"message_id": m["id"], "title": f"Seção {i + 1}"} for i, m in enumerate(analises)],
+    })
+    await call("reports.create sem seções", "chat.reports.create",
+               {"conversation_id": conv_id, "title": "Vazio", "sections": []})
+    await call("report_rows", "chat.report_rows", {"id": relatorio.get("id") if isinstance(relatorio, dict) else None})
+    await call("report_rows de resposta comum", "chat.report_rows", {"id": analises[0]["id"] if analises else None})
     await call("query_executions", "admin.query_executions", {"limit": "100"})
     await call("query_executions inválidas", "admin.query_executions", {"limit": "100", "is_valid": "false"})
     await call("conversations.delete", "chat.conversations.delete", {"id": conv_id})

@@ -13,6 +13,8 @@ import {
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ChatMessage, Conversation } from '@/modules/chat/types'
 import ChatMessageBubble from '@/modules/chat/components/ChatMessageBubble.vue'
+import ChatReportMessage from '@/modules/chat/components/ChatReportMessage.vue'
+import type { ChatChartType } from '@/modules/chat/utils/chartType'
 
 interface StarterCategory {
   key: string
@@ -34,6 +36,7 @@ const emit = defineEmits<{
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
   (e: 'suggest', question: string): void
+  (e: 'chart-type', payload: { id: string; type: ChatChartType }): void
 }>()
 
 const categoryIcons: Record<string, unknown> = {
@@ -170,14 +173,21 @@ function select(key: string) {
       </div>
 
       <div class="mx-auto flex w-full max-w-[980px] flex-col space-y-6 md:space-y-8">
-        <ChatMessageBubble
+        <template
           v-for="message in (messages.length === 1 && messages[0]?.id === 'welcome' && !loading ? [] : messages)"
           :key="message.id"
-          :message="message"
-          @toggle-sql="emit('toggle-sql', $event)"
-          @pin="emit('pin', $event)"
-          @suggest="emit('suggest', $event)"
-        />
+        >
+          <ChatReportMessage v-if="message.report" :message="message" :report="message.report" />
+          <ChatMessageBubble
+            v-else
+            :message="message"
+            @toggle-sql="emit('toggle-sql', $event)"
+            @pin="emit('pin', $event)"
+            @suggest="emit('suggest', $event)"
+            @chart-type="emit('chart-type', $event)"
+          />
+        </template>
+        <slot name="after-messages" />
       </div>
 
       <div id="chat-bottom-anchor" />

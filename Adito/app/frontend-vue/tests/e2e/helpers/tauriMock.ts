@@ -33,6 +33,8 @@ export interface TauriMockOptions {
   chatData?: Array<Record<string, unknown>>
   /** Tipo de gráfico sugerido pelo agente de painéis na resposta do chat (padrão: nenhum). */
   chatChartType?: string
+  /** Linhas por palavra da pergunta (a primeira palavra encontrada vence); senão vale `chatData`. */
+  chatDataByQuestion?: Record<string, Array<Record<string, unknown>>>
 }
 
 /**
@@ -55,6 +57,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     autoUpdateEnabled: options.autoUpdateEnabled ?? false,
     chatData: options.chatData ?? null,
     chatChartType: options.chatChartType ?? null,
+    chatDataByQuestion: options.chatDataByQuestion ?? null,
   }
 
   await page.addInitScript((cfg) => {
@@ -189,6 +192,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           .slice(0, 12),
       }
     }
+    // Relatórios (EPIC-14): linhas e SQL de cada resposta do stream, para o relatório reexecutar.
+    const chatRowsByMessage: Record<string, Array<Record<string, unknown>>> = {}
+    const chatSqlByMessage: Record<string, string> = {}
+    const reports: Record<string, { metadata: Record<string, unknown> } & Record<string, unknown>> = {}
+    let reportSeq = 1
+    let chatAnswerSeq = 0
 
     const conversations: Array<Record<string, unknown>> = [
       {
@@ -373,6 +382,41 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           }
         case 'explorer.rows':
           return explorerQuery(params)
+        case 'chat.reports.create': {
+          const sections = (params.sections as Array<Record<string, unknown>>) || []
+          const report = {
+            id: `rep-${reportSeq++}`,
+            role: 'assistant',
+            content: String(params.title || ''),
+            created_at: '2026-11-25T14:30:00Z',
+            metadata: {
+              type: 'report',
+              title: String(params.title || ''),
+              contexto_nome: CONTEXTOS[0].name,
+              sections: sections.map((section) => ({
+                source_message_id: section.message_id,
+                title: section.title,
+                sql: chatSqlByMessage[String(section.message_id)] || 'SELECT 1',
+                field_formats: { total: 'integer' },
+                chart_type: section.chart_type ?? null,
+              })),
+            },
+          }
+          reports[report.id] = report
+          ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_LAST_REPORT__ = { params, report }
+          return report
+        }
+        case 'chat.report_rows': {
+          const report = reports[String(params.id)]
+          const sections = (report?.metadata.sections || []) as Array<Record<string, unknown>>
+          return {
+            sections: sections.map((section) => {
+              const sql = String(section.sql || '')
+              if (sql.includes('quebrado')) return { data: [], error: 'os dados mudaram desde a pergunta' }
+              return { data: chatRowsByMessage[String(section.source_message_id)] || [], error: null }
+            }),
+          }
+        }
         case 'chat.conversations.list':
           return conversations
         case 'chat.message_rows':
@@ -588,6 +632,18 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             : `conv-live-${liveConversationSeq++}`
           const delay = Number(cfg.chatStreamDelayMs || 0)
           const finalDelay = delay > 0 ? delay : 15
+          const byQuestion = Object.entries(cfg.chatDataByQuestion || {})
+            .find(([word]) => question.toLowerCase().includes(word.toLowerCase()))
+          const answerRows = byQuestion?.[1] || cfg.chatData || [
+            { grande_area: 'Engenharias', total: 120 },
+            { grande_area: 'Ciências Exatas', total: 116 },
+          ]
+          const answerId = `msg-live-${streamId}`
+          const answerSql = byQuestion || cfg.chatData
+            ? `SELECT … /* resposta ${++chatAnswerSeq}: ${question.replace(/\*\//g, '')} */`
+            : 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area'
+          chatRowsByMessage[answerId] = answerRows
+          chatSqlByMessage[answerId] = answerSql
           sendChannel(args.onEvent, [
             {
               msg: { event: 'status', data: { message: 'Consultando dados acadêmicos...', conversation_id: resolvedConvId } },
@@ -601,15 +657,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
               msg: {
                 event: 'result',
                 data: {
-                  message_id: `msg-live-${streamId}`,
+                  message_id: answerId,
                   conversation_id: resolvedConvId,
                   type: 'analysis',
                   text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
-                  sql: 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area',
-                  data: cfg.chatData || [
-                    { grande_area: 'Engenharias', total: 120 },
-                    { grande_area: 'Ciências Exatas', total: 116 },
-                  ],
+                  sql: answerSql,
+                  data: answerRows,
                   chart_type: cfg.chatChartType,
                 },
               },
