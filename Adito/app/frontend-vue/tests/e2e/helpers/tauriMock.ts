@@ -113,8 +113,10 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       {
         id: 'conv-1',
         title: 'Panorama de Projetos',
+        is_pinned: false,
         contexto: CONTEXTOS[0].id,
         created_at: '2026-11-18T12:00:00Z',
+        updated_at: '2026-11-18T12:00:02Z',
         messages: [
           { id: 'm-1', role: 'user', content: 'Quantos projetos existem?', created_at: '2026-11-18T12:00:01Z' },
           {
@@ -280,10 +282,25 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         }
         case 'chat.conversations.list':
           return conversations
+        case 'chat.conversations.update': {
+          const conv = conversations.find((c) => c.id === params.id)
+          if (!conv) return { ok: false }
+          if (typeof params.title === 'string' && params.title.trim()) {
+            conv.title = params.title.trim()
+          }
+          if (typeof params.is_pinned === 'boolean') {
+            conv.is_pinned = params.is_pinned
+          }
+          conversations.sort((a, b) => Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned)))
+          return { ...conv }
+        }
         case 'chat.message_rows':
           return { data: [{ total: 236 }] }
-        case 'chat.conversations.delete':
+        case 'chat.conversations.delete': {
+          const idx = conversations.findIndex((c) => c.id === params.id)
+          if (idx >= 0) conversations.splice(idx, 1)
           return { ok: true }
+        }
         case 'config.test_llm_key':
           return params.key === 'chave-invalida'
             ? { ok: false, reason: 'Chave Gemini rejeitada' }
@@ -448,10 +465,75 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             : `conv-live-${liveConversationSeq++}`
           const delay = Number(cfg.chatStreamDelayMs || 0)
           const finalDelay = delay > 0 ? delay : 15
+          const mockSql = 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area'
+          const mockTrace = {
+            compact: false,
+            duration_ms: 420,
+            steps: [
+              {
+                id: 'routing',
+                title: 'Orquestrador',
+                subtitle: 'Interpretando a solicitação e definindo a estratégia de busca.',
+                status: 'done',
+                header_status: 'Analisando contexto...',
+                details: [`Encaminhando para consulta analítica: ${question}`],
+              },
+              {
+                id: 'query',
+                title: 'Agente de dados',
+                subtitle: 'Buscando dados na base do IFES e aplicando regras de verificação.',
+                status: 'done',
+                header_status: 'Consultando base...',
+                details: ['2 registros encontrados.'],
+                code: mockSql,
+                language: 'sql',
+              },
+              {
+                id: 'synthesis',
+                title: 'Adito',
+                subtitle: 'Consolidando os resultados encontrados.',
+                status: 'done',
+                header_status: 'Estruturando resposta...',
+                details: ['Resposta concluída.'],
+              },
+            ],
+          }
           sendChannel(args.onEvent, [
             {
               msg: { event: 'status', data: { message: 'Consultando dados acadêmicos...', conversation_id: resolvedConvId } },
               delayMs: 5,
+            },
+            {
+              msg: {
+                event: 'step_start',
+                data: {
+                  step_id: 'routing',
+                  title: 'Orquestrador',
+                  subtitle: 'Interpretando a solicitação e definindo a estratégia de busca.',
+                  header_status: 'Analisando contexto...',
+                },
+              },
+              delayMs: 6,
+            },
+            {
+              msg: { event: 'step_complete', data: { step_id: 'routing', detail: `Encaminhando: ${question}` } },
+              delayMs: 8,
+            },
+            {
+              msg: {
+                event: 'step_start',
+                data: {
+                  step_id: 'query',
+                  title: 'Agente de dados',
+                  subtitle: 'Buscando dados na base do IFES e aplicando regras de verificação.',
+                  header_status: 'Consultando base...',
+                },
+              },
+              delayMs: 10,
+            },
+            {
+              msg: { event: 'step_code', data: { step_id: 'query', language: 'sql', code: mockSql } },
+              delayMs: 12,
             },
             {
               msg: { event: 'token', data: { text: `Parcial para "${question}": ` } },
@@ -465,11 +547,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
                   conversation_id: resolvedConvId,
                   type: 'analysis',
                   text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
-                  sql: 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area',
+                  sql: mockSql,
                   data: [
                     { grande_area: 'Engenharias', total: 120 },
                     { grande_area: 'Ciências Exatas', total: 116 },
                   ],
+                  trace: mockTrace,
                 },
               },
               delayMs: finalDelay,

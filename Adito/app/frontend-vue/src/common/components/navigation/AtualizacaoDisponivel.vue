@@ -67,12 +67,21 @@ function reposicionar() {
   if (aberto.value) posicionar()
 }
 
+function aoTeclar(ev: KeyboardEvent) {
+  if (ev.key === 'Escape' && aberto.value && !ocupado.value) {
+    ev.preventDefault()
+    depois()
+  }
+}
+
 onMounted(() => {
   document.addEventListener('mousedown', fora)
+  window.addEventListener('keydown', aoTeclar)
   window.addEventListener('resize', reposicionar)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', fora)
+  window.removeEventListener('keydown', aoTeclar)
   window.removeEventListener('resize', reposicionar)
 })
 </script>
@@ -84,18 +93,18 @@ onBeforeUnmount(() => {
       :aria-expanded="aberto"
       :title="props.collapsed ? 'Atualização disponível' : undefined"
       :class="[
-        'flex w-full items-center gap-2 rounded-md border border-white/[0.14] bg-white/[0.08] text-[13px] font-medium text-white transition-colors hover:bg-white/[0.14]',
-        props.collapsed ? 'justify-center p-3' : 'px-3.5 py-2.5'
+        'flex w-full items-center gap-2.5 rounded-lg border border-white/[0.14] bg-white/[0.06] text-[14.5px] font-medium text-white transition-colors hover:bg-white/[0.12]',
+        props.collapsed ? 'justify-center p-2.5' : 'px-3.5 py-2.5'
       ]"
       @click="alternar"
     >
-      <span class="relative flex h-2 w-2 shrink-0">
+      <span class="relative flex h-2.5 w-2.5 shrink-0">
         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#68d388] opacity-60" />
-        <span class="relative inline-flex h-2 w-2 rounded-full bg-[#68d388]" />
+        <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#68d388]" />
       </span>
       <template v-if="!props.collapsed">
         <span class="flex-1 text-left">Atualização disponível</span>
-        <ArrowRight class="h-4 w-4 text-white/70" />
+        <ArrowRight class="h-4 w-4 shrink-0 text-white/75" />
       </template>
     </button>
 

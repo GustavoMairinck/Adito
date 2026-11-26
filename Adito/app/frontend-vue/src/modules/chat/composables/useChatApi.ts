@@ -1,7 +1,8 @@
 import { computed, shallowRef } from 'vue'
 import { call, stream } from '@/common/api/core'
-import type { ChatMessage } from '@/modules/chat/types'
+import type { ChatMessage, TraceStreamEvent, TraceStreamEventName } from '@/modules/chat/types'
 import { chartKeys } from '@/common/utils/chartKeys'
+import { normalizeTrace } from '@/modules/chat/utils/trace'
 
 function parseNumeric(value: unknown) {
   if (value === null || value === undefined || value === '') return null
@@ -48,9 +49,18 @@ export function isScalarResultData(data?: Array<Record<string, any>>) {
   return !!(data && data.length === 1 && Object.keys(data[0]).length === 1)
 }
 
+const TRACE_EVENTS = new Set<TraceStreamEventName>([
+  'step_start',
+  'step_detail',
+  'step_code',
+  'step_complete',
+  'step_error',
+])
+
 interface StreamHandlers {
   onToken?: (token: string) => void
   onStatus?: (message: string, payload?: Record<string, any>) => void
+  onTraceEvent?: (event: TraceStreamEvent) => void
   onResult?: (message: ChatMessage) => void
 }
 
@@ -75,7 +85,8 @@ function mapResponseToMessage(data: any): ChatMessage {
     explanation: data.explanation,
     suggestions: data.suggestions,
     related_attributes: data.related_attributes,
-    fieldFormats: data.field_formats
+    fieldFormats: data.field_formats,
+    trace: normalizeTrace(data.trace),
   }
 }
 
@@ -177,6 +188,8 @@ export function useChatApi() {
           } else if (event === 'status') {
             maybeMigrateKey(data?.conversation_id)
             handlers.onStatus?.(data.message || 'Processando...', data)
+          } else if (TRACE_EVENTS.has(event as TraceStreamEventName)) {
+            handlers.onTraceEvent?.({ event: event as TraceStreamEventName, data: data || {} })
           } else if (event === 'error') {
             streamError = data.message || 'erro desconhecido'
           } else if (event === 'result') {

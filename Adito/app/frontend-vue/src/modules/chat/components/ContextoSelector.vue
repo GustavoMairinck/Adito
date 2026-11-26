@@ -14,27 +14,47 @@ const props = defineProps<{
 const { contextos, selectedId, select, nameOf, loaded } = useContextos()
 
 const fixedName = computed(() => nameOf(props.conversationContextoId) || 'Contexto removido')
+const singleContexto = computed(() => (contextos.value.length === 1 ? contextos.value[0] : null))
 </script>
 
 <template>
-  <div class="mx-auto flex w-full max-w-3xl items-center gap-2 px-5 pt-2 text-xs text-text-secondary">
+  <div class="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-2 px-5 pt-2 text-xs text-text-secondary">
     <Database class="h-3.5 w-3.5 shrink-0 text-[var(--brand-primary)] dark:text-[#68d388]" />
+
     <template v-if="isNewConversation">
-      <span class="shrink-0">Contexto de dados:</span>
-      <select
-        :value="selectedId ?? ''"
-        class="min-w-0 cursor-pointer rounded-lg border border-border-subtle bg-surface px-2.5 py-1 text-xs font-medium text-text-primary outline-none transition-all hover:border-border-standard focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/20"
-        @change="select(($event.target as HTMLSelectElement).value || null)"
-      >
-        <option value="" disabled>Escolha um contexto</option>
-        <option v-for="contexto in contextos" :key="contexto.id" :value="contexto.id">
-          {{ contexto.name }}
-        </option>
-      </select>
-      <span v-if="loaded && contextos.length === 0" class="text-amber-600 dark:text-amber-300">
-        Nenhum contexto carregado. Carregue os dados no Admin.
-      </span>
+      <template v-if="loaded && contextos.length === 0">
+        <span class="text-amber-700 dark:text-amber-300">Nenhum contexto carregado.</span>
+        <RouterLink
+          to="/admin"
+          class="font-semibold text-[var(--brand-primary)] underline-offset-2 hover:underline dark:text-[#68d388]"
+        >
+          Carregar dados no Admin
+        </RouterLink>
+      </template>
+
+      <template v-else-if="singleContexto">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface px-2.5 py-0.5 font-medium text-text-primary">
+          {{ singleContexto.name }}
+        </span>
+      </template>
+
+      <template v-else>
+        <label for="chat-contexto-select" class="shrink-0">Contexto de dados:</label>
+        <select
+          id="chat-contexto-select"
+          aria-label="Contexto de dados"
+          :value="selectedId ?? ''"
+          class="min-w-0 cursor-pointer rounded-lg border border-border-subtle bg-surface px-2.5 py-1 text-xs font-medium text-text-primary outline-none transition-all hover:border-border-standard focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)]/20"
+          @change="select(($event.target as HTMLSelectElement).value || null)"
+        >
+          <option value="" disabled>Escolha um contexto</option>
+          <option v-for="contexto in contextos" :key="contexto.id" :value="contexto.id">
+            {{ contexto.name }}
+          </option>
+        </select>
+      </template>
     </template>
+
     <template v-else>
       <Lock class="h-3 w-3 shrink-0 text-text-muted" />
       <span>Contexto desta conversa: <strong class="font-semibold text-text-primary">{{ fixedName }}</strong></span>

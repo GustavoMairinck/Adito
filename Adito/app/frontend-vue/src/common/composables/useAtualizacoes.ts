@@ -25,6 +25,7 @@ const instalandoApp = ref(false)
 const progressoApp = ref(0)
 const erro = ref<string | null>(null)
 
+const verificando = ref(false)
 let verificacao: Promise<void> | null = null
 
 function mensagem(err: unknown): string {
@@ -42,14 +43,23 @@ async function carregarStatus() {
 }
 
 async function verificarAgora() {
-  await carregarStatus()
-  const [remoto, update] = await Promise.allSettled([dadosVerificar(), appVerificar()])
-  dadosRemoto.value = remoto.status === 'fulfilled' ? remoto.value : null
-  app.value = update.status === 'fulfilled' ? update.value : null
+  verificando.value = true
+  try {
+    await carregarStatus()
+    const [remoto, update] = await Promise.allSettled([dadosVerificar(), appVerificar()])
+    dadosRemoto.value = remoto.status === 'fulfilled' ? remoto.value : null
+    app.value = update.status === 'fulfilled' ? update.value : null
+  } finally {
+    verificando.value = false
+  }
 }
 
-/** Confere uma vez por sessão; chamadas seguintes reaproveitam a mesma conferência. */
-function verificar(): Promise<void> {
+/** Confere uma vez por sessão; passe `{ forcar: true }` para forçar nova conferência. */
+function verificar(opcoes?: { forcar?: boolean }): Promise<void> {
+  if (opcoes?.forcar) {
+    verificacao = verificarAgora().catch(() => {})
+    return verificacao
+  }
   verificacao ??= verificarAgora().catch(() => {})
   return verificacao
 }
@@ -112,6 +122,7 @@ export function useAtualizacoes() {
     precisaPrimeiraCarga,
     instalandoDados,
     instalandoApp,
+    verificando,
     progressoApp,
     erro,
     verificar,
@@ -128,6 +139,7 @@ export function _resetAtualizacoes() {
   app.value = null
   instalandoDados.value = false
   instalandoApp.value = false
+  verificando.value = false
   progressoApp.value = 0
   erro.value = null
   verificacao = null

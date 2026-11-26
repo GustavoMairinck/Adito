@@ -80,13 +80,22 @@ class Contexto(Record):
 @dataclass
 class Conversation(Record):
     table = "chat_conversation"
-    kinds = {"id": "id", "user_id": "id", "tenant_id": "id", "contexto_id": "id", "created_at": "dt", "updated_at": "dt"}
+    kinds = {
+        "id": "id",
+        "user_id": "id",
+        "tenant_id": "id",
+        "contexto_id": "id",
+        "is_pinned": "bool",
+        "created_at": "dt",
+        "updated_at": "dt",
+    }
 
     id: str | None = None
     user_id: str | None = None
     tenant_id: str | None = None
     contexto_id: str | None = None
     title: str = ""
+    is_pinned: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

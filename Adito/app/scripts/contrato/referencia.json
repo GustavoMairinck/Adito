@@ -511,6 +511,37 @@
     }
    },
    {
+    "event": "step_start",
+    "data": {
+     "step_id": "routing",
+     "title": "Orquestrador",
+     "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+     "header_status": "Analisando contexto..."
+    }
+   },
+   {
+    "event": "step_detail",
+    "data": {
+     "step_id": "routing",
+     "detail": "Encaminhando para o agente de dados na base do IFES."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "routing"
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "query",
+     "title": "Agente de dados",
+     "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+     "header_status": "Consultando base..."
+    }
+   },
+   {
     "event": "status",
     "data": {
      "status": "processing",
@@ -530,6 +561,37 @@
      "status": "processing",
      "step": "mcp_tool_node",
      "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "step_code",
+    "data": {
+     "step_id": "query",
+     "language": "sql",
+     "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano"
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "query",
+     "detail": "1 registro encontrado."
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "synthesis",
+     "title": "Adito",
+     "subtitle": "Consolidando os resultados encontrados.",
+     "header_status": "Estruturando resposta..."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "synthesis",
+     "detail": "Resposta concluída."
     }
    },
    {
@@ -558,6 +620,44 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
+     },
+     "trace": {
+      "steps": [
+       {
+        "id": "routing",
+        "title": "Orquestrador",
+        "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+        "status": "done",
+        "details": [
+         "Encaminhando para o agente de dados na base do IFES."
+        ],
+        "header_status": "Analisando contexto..."
+       },
+       {
+        "id": "query",
+        "title": "Agente de dados",
+        "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+        "status": "done",
+        "details": [
+         "1 registro encontrado."
+        ],
+        "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+        "language": "sql",
+        "header_status": "Consultando base..."
+       },
+       {
+        "id": "synthesis",
+        "title": "Adito",
+        "subtitle": "Consolidando os resultados encontrados.",
+        "status": "done",
+        "details": [
+         "Resposta concluída."
+        ],
+        "header_status": "Estruturando resposta..."
+       }
+      ],
+      "duration_ms": "<volátil>",
+      "compact": false
      }
     }
    }
@@ -575,6 +675,37 @@
      "message": "Roteando pergunta...",
      "conversation_id": "<id6>",
      "user_message_id": "<id9>"
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "routing",
+     "title": "Orquestrador",
+     "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+     "header_status": "Analisando contexto..."
+    }
+   },
+   {
+    "event": "step_detail",
+    "data": {
+     "step_id": "routing",
+     "detail": "Encaminhando para o agente de dados na base do IFES."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "routing"
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "query",
+     "title": "Agente de dados",
+     "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+     "header_status": "Consultando base..."
     }
    },
    {
@@ -597,6 +728,37 @@
      "status": "processing",
      "step": "mcp_tool_node",
      "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "step_code",
+    "data": {
+     "step_id": "query",
+     "language": "sql",
+     "code": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved"
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "query",
+     "detail": "Nenhum registro encontrado."
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "synthesis",
+     "title": "Adito",
+     "subtitle": "Consolidando os resultados encontrados.",
+     "header_status": "Estruturando resposta..."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "synthesis",
+     "detail": "Resposta concluída."
     }
    },
    {
@@ -619,6 +781,44 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
+     },
+     "trace": {
+      "steps": [
+       {
+        "id": "routing",
+        "title": "Orquestrador",
+        "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+        "status": "done",
+        "details": [
+         "Encaminhando para o agente de dados na base do IFES."
+        ],
+        "header_status": "Analisando contexto..."
+       },
+       {
+        "id": "query",
+        "title": "Agente de dados",
+        "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+        "status": "done",
+        "details": [
+         "Nenhum registro encontrado."
+        ],
+        "code": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+        "language": "sql",
+        "header_status": "Consultando base..."
+       },
+       {
+        "id": "synthesis",
+        "title": "Adito",
+        "subtitle": "Consolidando os resultados encontrados.",
+        "status": "done",
+        "details": [
+         "Resposta concluída."
+        ],
+        "header_status": "Estruturando resposta..."
+       }
+      ],
+      "duration_ms": "<volátil>",
+      "compact": false
      }
     }
    }
@@ -636,6 +836,37 @@
      "message": "Roteando pergunta...",
      "conversation_id": "<id11>",
      "user_message_id": "<id12>"
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "routing",
+     "title": "Orquestrador",
+     "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+     "header_status": "Analisando contexto..."
+    }
+   },
+   {
+    "event": "step_detail",
+    "data": {
+     "step_id": "routing",
+     "detail": "Encaminhando para o agente de dados na base do IFES."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "routing"
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "query",
+     "title": "Agente de dados",
+     "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+     "header_status": "Consultando base..."
     }
    },
    {
@@ -658,6 +889,37 @@
      "status": "processing",
      "step": "mcp_tool_node",
      "message": "Consultando dados..."
+    }
+   },
+   {
+    "event": "step_code",
+    "data": {
+     "step_id": "query",
+     "language": "sql",
+     "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano"
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "query",
+     "detail": "1 registro encontrado."
+    }
+   },
+   {
+    "event": "step_start",
+    "data": {
+     "step_id": "synthesis",
+     "title": "Adito",
+     "subtitle": "Consolidando os resultados encontrados.",
+     "header_status": "Estruturando resposta..."
+    }
+   },
+   {
+    "event": "step_complete",
+    "data": {
+     "step_id": "synthesis",
+     "detail": "Resposta concluída."
     }
    },
    {
@@ -686,6 +948,44 @@
      "rewrite": {},
      "field_formats": {
       "total": "currency"
+     },
+     "trace": {
+      "steps": [
+       {
+        "id": "routing",
+        "title": "Orquestrador",
+        "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+        "status": "done",
+        "details": [
+         "Encaminhando para o agente de dados na base do IFES."
+        ],
+        "header_status": "Analisando contexto..."
+       },
+       {
+        "id": "query",
+        "title": "Agente de dados",
+        "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+        "status": "done",
+        "details": [
+         "1 registro encontrado."
+        ],
+        "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+        "language": "sql",
+        "header_status": "Consultando base..."
+       },
+       {
+        "id": "synthesis",
+        "title": "Adito",
+        "subtitle": "Consolidando os resultados encontrados.",
+        "status": "done",
+        "details": [
+         "Resposta concluída."
+        ],
+        "header_status": "Estruturando resposta..."
+       }
+      ],
+      "duration_ms": "<volátil>",
+      "compact": false
      }
     }
    }
@@ -753,6 +1053,7 @@
    {
     "id": "<id11>",
     "title": "Oi",
+    "is_pinned": false,
     "contexto": "<id2>",
     "created_at": "<data>",
     "updated_at": "<data>",
@@ -784,6 +1085,44 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
+       },
+       "trace": {
+        "steps": [
+         {
+          "id": "routing",
+          "title": "Orquestrador",
+          "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+          "status": "done",
+          "details": [
+           "Encaminhando para o agente de dados na base do IFES."
+          ],
+          "header_status": "Analisando contexto..."
+         },
+         {
+          "id": "query",
+          "title": "Agente de dados",
+          "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+          "status": "done",
+          "details": [
+           "1 registro encontrado."
+          ],
+          "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+          "language": "sql",
+          "header_status": "Consultando base..."
+         },
+         {
+          "id": "synthesis",
+          "title": "Adito",
+          "subtitle": "Consolidando os resultados encontrados.",
+          "status": "done",
+          "details": [
+           "Resposta concluída."
+          ],
+          "header_status": "Estruturando resposta..."
+         }
+        ],
+        "duration_ms": "<volátil>",
+        "compact": false
        }
       },
       "created_at": "<data>"
@@ -793,6 +1132,7 @@
    {
     "id": "<id6>",
     "title": "Total por ano?",
+    "is_pinned": false,
     "contexto": "<id2>",
     "created_at": "<data>",
     "updated_at": "<data>",
@@ -824,6 +1164,44 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
+       },
+       "trace": {
+        "steps": [
+         {
+          "id": "routing",
+          "title": "Orquestrador",
+          "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+          "status": "done",
+          "details": [
+           "Encaminhando para o agente de dados na base do IFES."
+          ],
+          "header_status": "Analisando contexto..."
+         },
+         {
+          "id": "query",
+          "title": "Agente de dados",
+          "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+          "status": "done",
+          "details": [
+           "1 registro encontrado."
+          ],
+          "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+          "language": "sql",
+          "header_status": "Consultando base..."
+         },
+         {
+          "id": "synthesis",
+          "title": "Adito",
+          "subtitle": "Consolidando os resultados encontrados.",
+          "status": "done",
+          "details": [
+           "Resposta concluída."
+          ],
+          "header_status": "Estruturando resposta..."
+         }
+        ],
+        "duration_ms": "<volátil>",
+        "compact": false
        }
       },
       "created_at": "<data>"
@@ -853,6 +1231,44 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
+       },
+       "trace": {
+        "steps": [
+         {
+          "id": "routing",
+          "title": "Orquestrador",
+          "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+          "status": "done",
+          "details": [
+           "Encaminhando para o agente de dados na base do IFES."
+          ],
+          "header_status": "Analisando contexto..."
+         },
+         {
+          "id": "query",
+          "title": "Agente de dados",
+          "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+          "status": "done",
+          "details": [
+           "Nenhum registro encontrado."
+          ],
+          "code": "SELECT coluna_inexistente FROM vfact_orientacao_bolsa_resolved",
+          "language": "sql",
+          "header_status": "Consultando base..."
+         },
+         {
+          "id": "synthesis",
+          "title": "Adito",
+          "subtitle": "Consolidando os resultados encontrados.",
+          "status": "done",
+          "details": [
+           "Resposta concluída."
+          ],
+          "header_status": "Estruturando resposta..."
+         }
+        ],
+        "duration_ms": "<volátil>",
+        "compact": false
        }
       },
       "created_at": "<data>"
@@ -978,6 +1394,7 @@
    {
     "id": "<id11>",
     "title": "Oi",
+    "is_pinned": false,
     "contexto": "<id2>",
     "created_at": "<data>",
     "updated_at": "<data>",
@@ -1009,6 +1426,44 @@
        "rewrite": {},
        "field_formats": {
         "total": "currency"
+       },
+       "trace": {
+        "steps": [
+         {
+          "id": "routing",
+          "title": "Orquestrador",
+          "subtitle": "Interpretando a solicitação e definindo a estratégia de busca.",
+          "status": "done",
+          "details": [
+           "Encaminhando para o agente de dados na base do IFES."
+          ],
+          "header_status": "Analisando contexto..."
+         },
+         {
+          "id": "query",
+          "title": "Agente de dados",
+          "subtitle": "Buscando dados na base do IFES e aplicando regras de verificação.",
+          "status": "done",
+          "details": [
+           "1 registro encontrado."
+          ],
+          "code": "SELECT ano, SUM(investimento_total_estimado) AS total FROM vfact_orientacao_bolsa_resolved GROUP BY ano ORDER BY ano",
+          "language": "sql",
+          "header_status": "Consultando base..."
+         },
+         {
+          "id": "synthesis",
+          "title": "Adito",
+          "subtitle": "Consolidando os resultados encontrados.",
+          "status": "done",
+          "details": [
+           "Resposta concluída."
+          ],
+          "header_status": "Estruturando resposta..."
+         }
+        ],
+        "duration_ms": "<volátil>",
+        "compact": false
        }
       },
       "created_at": "<data>"

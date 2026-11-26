@@ -1,6 +1,7 @@
 import { call } from "@/common/api/core";
 import { buildChart, cancelChatStream, isChatConversationLoading, isScalarResultData } from "@/modules/chat/composables/useChatApi";
 import type { ChatMessage, Conversation } from "@/modules/chat/types";
+import { normalizeTrace } from "@/modules/chat/utils/trace";
 import { computed, ref } from "vue";
 
 const STORAGE_PREFIX = "adito_chat_history";
@@ -21,6 +22,7 @@ export function createConversation(): Conversation {
   return {
     id: `local-${Date.now()}-${localConversationSeq}`,
     title: "Nova Conversa",
+    isPinned: false,
     contextoId: null,
     messages: [createWelcomeMessage()],
     createdAt: now,
@@ -57,6 +59,7 @@ function mapBackendMessage(message: any): ChatMessage {
     suggestions: metadata.suggestions,
     related_attributes: metadata.related_attributes,
     fieldFormats: metadata.field_formats,
+    trace: normalizeTrace(metadata.trace),
   };
 }
 
@@ -64,6 +67,7 @@ function mapBackendConversation(conversation: any): Conversation {
   return {
     id: String(conversation.id),
     title: conversation.title || "Nova Conversa",
+    isPinned: Boolean(conversation.is_pinned),
     contextoId: conversation.contexto ? String(conversation.contexto) : null,
     messages: [
       createWelcomeMessage(),
@@ -224,6 +228,51 @@ export function useChatHistory() {
     }
   };
 
+  const handleRenameConversation = async (id: string, nextTitle: string) => {
+    const trimmed = nextTitle.trim().slice(0, 255);
+    if (!trimmed) return;
+    const target = conversations.value.find((c) => c.id === id);
+    if (!target || target.title === trimmed) return;
+
+    const previousTitle = target.title;
+    conversations.value = conversations.value.map((c) =>
+      c.id === id ? { ...c, title: trimmed } : c,
+    );
+
+    if (!id.startsWith("local-")) {
+      try {
+        await call("chat.conversations.update", { id, title: trimmed });
+      } catch (error) {
+        conversations.value = conversations.value.map((c) =>
+          c.id === id ? { ...c, title: previousTitle } : c,
+        );
+        throw error;
+      }
+    }
+  };
+
+  const handleTogglePinConversation = async (id: string) => {
+    const target = conversations.value.find((c) => c.id === id);
+    if (!target) return;
+
+    const previousPinned = Boolean(target.isPinned);
+    const nextPinned = !previousPinned;
+    conversations.value = conversations.value.map((c) =>
+      c.id === id ? { ...c, isPinned: nextPinned } : c,
+    );
+
+    if (!id.startsWith("local-")) {
+      try {
+        await call("chat.conversations.update", { id, is_pinned: nextPinned });
+      } catch (error) {
+        conversations.value = conversations.value.map((c) =>
+          c.id === id ? { ...c, isPinned: previousPinned } : c,
+        );
+        throw error;
+      }
+    }
+  };
+
   const updateConversationById = (
     convId: string,
     updater: (conversation: Conversation) => Conversation,
@@ -275,6 +324,8 @@ export function useChatHistory() {
     setCurrentConvId,
     handleNewConversation,
     handleDeleteConversation,
+    handleRenameConversation,
+    handleTogglePinConversation,
     updateConversationById,
     updateCurrentConversation,
     replaceConversationId,
