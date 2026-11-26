@@ -36,6 +36,10 @@ Evolução do sistema de distribuição desktop (`ADR-0006`/`ADR-0007`) com opç
 Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já recebidas no chat: botão **"Mais" (+)** → **Criar relatório**, seleção das perguntas da conversa como seções, relatório gravado como **mensagem da conversa** com os números recalculados sobre os dados atuais, e **exportação em PDF** com visual de documento formal: logo pequena com o nome "Adito" e número da página no topo, primeira página com os dados do relatório e o conteúdo, uma página por seção com Tabela N e Figura N (ou Quadro N) e a fonte, e o Apêndice A com o SQL (ajustado em 2026-11-26). Texto interpretativo por LLM fica para depois. Origem: `Adito/docs/discovery/relatorios-chat.md` e `Adito/docs/requirements/relatorios-chat.md` (HEAVY PROCESS).
 - **Stories**: US-REL-01 a US-REL-04.
 
+### EPIC-15: Exportação de Dados do Chat para CSV e Excel (`.xlsx`)
+Exportação direta dos dados completos retornados em tabelas e gráficos das respostas do Chat para **CSV** (padrão Excel PT-BR: UTF-8 BOM, separador `;`, proteção contra Formula Injection) e **Excel nativo (`.xlsx` OOXML)** em TypeScript puro (zero novas dependências em npm/Python), com comando Rust `exportar_arquivo` usando o plugin oficial `tauri-plugin-dialog = "2"` (aprovado pelo usuário) para abrir o diálogo nativo **"Salvar como..."** do SO com gravação atômica, fallback `showSaveFilePicker`/`Blob` no navegador/E2E e botão dropdown acessível **"Exportar"** com toast de confirmação. Origem: `Adito/docs/discovery/exportar-dados-csv-excel.md` e `Adito/docs/requirements/exportar-dados-csv-excel.md`.
+- **Stories**: US-EXP-01 e US-EXP-02.
+
 ---
 
 ## User Stories Priorizadas
@@ -156,6 +160,19 @@ Relatório montado por **modelo fixo**, sem LLM, a partir de respostas já receb
 > - **Vertical Slice 1 (10 pts):** `US-REL-01` (botão "Mais", formulário, relatório como mensagem da conversa com números atuais, componentes de gráfico/cartão/tabela compartilhados) com `US-REL-03` em paralelo (spike da impressão no Windows e no Linux).
 > - **Vertical Slice 2 (3 pts):** `US-REL-02` (ordem e títulos das seções, "Copiar" em Markdown).
 > - **Vertical Slice 3 (5 pts):** `US-REL-04` (PDF com visual de documento formal: abertura, tabelas, figuras e quadros numerados com a fonte e apêndice com o SQL), pelo caminho decidido no spike.
+
+---
+
+### 🗂️ EPIC-15 — Exportação de Dados do Chat para CSV e Excel (`.xlsx`) (Aprovado em 26/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-EXP-01](stories/US-EXP-01_gerador-csv-xlsx-comando-rust-exportacao.md) | Gerador CSV/OOXML `.xlsx` (TS puro), comando Rust `exportar_arquivo` e testes unitários | EPIC-15 | 5 | 🔴 Alta (slice 1) | — | FR03–FR07 (núcleo/API), FR08 (Rust + unit), BR01, BR03–BR06, NFR01, NFR03, NFR04, A01–A03 | 🔍 Review |
+| [US-EXP-02](stories/US-EXP-02_ui-exportar-chat-toast-testes-e2e.md) | Botão dropdown "Exportar" no Chat, toast de feedback e testes Vitest + Playwright E2E | EPIC-15 | 3 | 🔴 Alta (slice 2) | US-EXP-01 | FR01–FR03, FR07 (UI/toast), FR08 (component + E2E), BR01, BR02, NFR02, NFR05 | 🔍 Review |
+
+> Total EPIC-15: 8 pts (Nível ScrumAIDev 1, branch `feat/exportar-dados-csv-excel`).  
+> - **Vertical Slice 1 (5 pts):** `US-EXP-01` (gerador CSV PT-BR + OOXML `.xlsx` em TS puro sem dependências npm/Python, comando Rust `exportar_arquivo` com diálogo nativo "Salvar como..." via `tauri-plugin-dialog = "2"` + fallback navegador, testes Rust e Vitest).  
+> - **Vertical Slice 2 (3 pts):** `US-EXP-02` (botão dropdown acessível **"Exportar"** teleportado no Chat, toast de confirmação/erro com cancelamento silencioso e testes Vitest + Playwright E2E).
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >

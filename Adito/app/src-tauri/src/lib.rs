@@ -1081,6 +1081,200 @@ async fn dados_instalar(state: CoreState<'_>, chave: Option<String>) -> Result<S
     .map_err(|e| e.to_string())?
 }
 
+// ── Exportação de dados do Chat (CSV / Excel) ────────────────────────────────
+
+const EXPORT_MAX_BYTES: usize = 20 * 1024 * 1024;
+const WINDOWS_RESERVED_NAMES: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+static EXPORT_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct ExportResultado {
+    nome: String,
+    caminho: String,
+    cancelado: bool,
+}
+
+fn validar_payload_exportacao(bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("Não há dados para exportar.".into());
+    }
+    if bytes.len() > EXPORT_MAX_BYTES {
+        return Err("O arquivo excede o limite máximo de 20 MB para exportação.".into());
+    }
+    Ok(())
+}
+
+fn validar_nome_exportacao(nome: &str) -> Result<(String, String), String> {
+    let limpo = nome.trim();
+    if limpo.is_empty() || limpo.len() > 180 {
+        return Err("Nome de arquivo inválido para exportação.".into());
+    }
+    if limpo.contains('/')
+        || limpo.contains('\\')
+        || limpo.contains("..")
+        || limpo.starts_with('.')
+        || limpo.ends_with('.')
+        || limpo.chars().any(|c| {
+            c.is_control() || matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        })
+    {
+        return Err("Nome de arquivo contém caracteres não permitidos.".into());
+    }
+
+    let Some((stem, ext_raw)) = limpo.rsplit_once('.') else {
+        return Err("O arquivo exportado deve ter extensão .csv ou .xlsx.".into());
+    };
+    let ext = ext_raw.to_ascii_lowercase();
+    if ext != "csv" && ext != "xlsx" {
+        return Err("Extensão não suportada. Use .csv ou .xlsx.".into());
+    }
+    let stem_limpo = stem.trim();
+    if stem_limpo.is_empty() || stem_limpo.ends_with('.') {
+        return Err("Nome base do arquivo inválido.".into());
+    }
+    let upper = stem_limpo.to_ascii_uppercase();
+    let base_reservada = upper.split('.').next().unwrap_or("");
+    if WINDOWS_RESERVED_NAMES.contains(&base_reservada) {
+        return Err("Nome de arquivo reservado pelo sistema operacional.".into());
+    }
+
+    Ok((stem_limpo.to_string(), ext))
+}
+
+fn garantir_extensao_exportacao(destino: PathBuf, ext: &str) -> PathBuf {
+    let tem_ext = destino
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case(ext));
+    if tem_ext {
+        return destino;
+    }
+    let mut os = destino.into_os_string();
+    os.push(".");
+    os.push(ext);
+    PathBuf::from(os)
+}
+
+fn gravar_exportacao_destino(
+    destino: PathBuf,
+    ext: &str,
+    bytes: &[u8],
+) -> Result<ExportResultado, String> {
+    validar_payload_exportacao(bytes)?;
+    let destino_final = garantir_extensao_exportacao(destino.clone(), ext);
+    let extensao_acrescentada = destino_final != destino;
+    let parent = destino_final
+        .parent()
+        .ok_or_else(|| "Pasta de destino inválida para exportação.".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Não foi possível acessar a pasta de destino: {e}"))?;
+
+    let nome = destino_final
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_string();
+
+    if extensao_acrescentada {
+        // O diálogo nativo não confirmou sobrescrita quando o usuário omitiu a extensão:
+        // usa `create_new(true)` para nunca sobrescrever silenciosamente um arquivo já existente.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destino_final)
+        {
+            Ok(mut arquivo) => {
+                if let Err(e) = arquivo.write_all(bytes).and_then(|_| arquivo.sync_all()) {
+                    let _ = fs::remove_file(&destino_final);
+                    return Err(format!("Falha ao gravar o arquivo exportado: {e}"));
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                return Err(format!(
+                    "Já existe um arquivo \"{nome}\" nesta pasta. Escolha outro nome ou informe a extensão .{ext} no diálogo para confirmar a substituição."
+                ));
+            }
+            Err(e) => return Err(format!("Falha ao gravar o arquivo exportado: {e}")),
+        }
+    } else {
+        let seq = EXPORT_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+        let tmp = parent.join(format!(".adito-export-{}-{seq}.tmp", std::process::id()));
+        let gravacao = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .and_then(|mut arquivo| arquivo.write_all(bytes).and_then(|_| arquivo.sync_all()))
+            .and_then(|_| fs::rename(&tmp, &destino_final));
+        if let Err(e) = gravacao {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("Falha ao gravar o arquivo exportado: {e}"));
+        }
+    }
+
+    Ok(ExportResultado {
+        nome,
+        caminho: destino_final.to_string_lossy().into_owned(),
+        cancelado: false,
+    })
+}
+
+/// Abre o diálogo nativo "Salvar como..." do SO para o usuário escolher onde salvar o
+/// arquivo `.csv` ou `.xlsx` gerado pelo frontend e grava atomicamente no destino escolhido.
+#[tauri::command]
+async fn exportar_arquivo(
+    app: tauri::AppHandle,
+    nome: String,
+    bytes: Vec<u8>,
+) -> Result<ExportResultado, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    validar_payload_exportacao(&bytes)?;
+    let (stem, ext) = validar_nome_exportacao(&nome)?;
+    let nome_sugerido = format!("{stem}.{ext}");
+    let filtro_nome = if ext == "xlsx" {
+        "Planilha Excel (*.xlsx)"
+    } else {
+        "CSV (*.csv)"
+    };
+
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Salvar dados exportados")
+        .set_file_name(&nome_sugerido)
+        .add_filter(filtro_nome, &[ext.as_str()]);
+    if let Ok(downloads) = app.path().download_dir() {
+        dialog = dialog.set_directory(downloads);
+    }
+
+    let (tx, rx) = oneshot::channel();
+    dialog.save_file(move |picked| {
+        let _ = tx.send(picked);
+    });
+
+    let escolhido = rx
+        .await
+        .map_err(|_| "Não foi possível abrir o seletor de arquivos do sistema.".to_string())?;
+    let Some(file_path) = escolhido else {
+        return Ok(ExportResultado {
+            nome: String::new(),
+            caminho: String::new(),
+            cancelado: true,
+        });
+    };
+
+    let destino = file_path
+        .into_path()
+        .map_err(|e| format!("Caminho de destino inválido: {e}"))?;
+
+    tauri::async_runtime::spawn_blocking(move || gravar_exportacao_destino(destino, &ext, &bytes))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>> {
     let data_dir = app.path().app_local_data_dir()?;
     let log_dir = app.path().app_log_dir()?;
@@ -1108,17 +1302,18 @@ fn setup_core(app: &tauri::App) -> Result<Arc<Core>, Box<dyn std::error::Error>>
 
 pub fn run() {
     migrate_legacy_data();
+    let mut builder = tauri::Builder::default();
     // Atualização do app (ADR-0006): lê o latest.json do GitHub Releases; o front pergunta antes.
     // Em desenvolvimento (`cargo tauri dev` / `debug_assertions`), o updater do executável fica
     // desligado para não baixar releases antigas do GitHub sobre o build local (`tauri.conf.json`
     // permanece em 0.1.0 e o CI injeta a versão da tag apenas no release).
     #[cfg(not(debug_assertions))]
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build());
-    #[cfg(debug_assertions)]
-    let builder = tauri::Builder::default();
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
     builder
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let core = setup_core(app)?;
             app.manage(core);
@@ -1137,7 +1332,8 @@ pub fn run() {
             clear_llm_key,
             dados_status,
             dados_verificar,
-            dados_instalar
+            dados_instalar,
+            exportar_arquivo
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Adito")
@@ -1344,6 +1540,69 @@ mod testes_migracao {
         let err = apply_llm_config(&dir, &FailingStore, "openai", Some("gpt-4o-mini".into()), None, Some("sk-1".into()), false);
         assert!(err.is_err());
         assert!(!llm_config_path(&dir).exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn exportar_rejeita_path_traversal_extensao_e_nomes_reservados() {
+        for invalido in [
+            "",
+            "../segredo.csv",
+            "sub/arquivo.csv",
+            "sub\\arquivo.xlsx",
+            "arquivo.exe",
+            "sem_extensao",
+            ".oculto.csv",
+            "CON.csv",
+            "nul.xlsx",
+            "com1.csv",
+            "a:b.csv",
+            "a*b.xlsx",
+        ] {
+            assert!(
+                validar_nome_exportacao(invalido).is_err(),
+                "deveria rejeitar '{invalido}'"
+            );
+        }
+        assert_eq!(
+            validar_nome_exportacao("adito-projetos.XLSX").unwrap(),
+            ("adito-projetos".into(), "xlsx".into())
+        );
+        assert!(validar_payload_exportacao(b"").is_err());
+        let grande = vec![b'x'; EXPORT_MAX_BYTES + 1];
+        assert!(validar_payload_exportacao(&grande).is_err());
+    }
+
+    #[test]
+    fn exportar_garante_extensao_e_grava_no_destino_escolhido() {
+        let dir = base("export-destino");
+
+        // Acrescenta extensão se o usuário omitiu no diálogo "Salvar como..."
+        let r1 = gravar_exportacao_destino(dir.join("meus-projetos"), "xlsx", b"PK-1").unwrap();
+        assert!(!r1.cancelado);
+        assert_eq!(r1.nome, "meus-projetos.xlsx");
+        assert_eq!(fs::read(dir.join("meus-projetos.xlsx")).unwrap(), b"PK-1");
+
+        // Preserva ponto no nome base (ex.: relatorio.2026 -> relatorio.2026.csv)
+        let r2 = gravar_exportacao_destino(dir.join("relatorio.2026"), "csv", b"a;b\n1;2").unwrap();
+        assert_eq!(r2.nome, "relatorio.2026.csv");
+        assert_eq!(fs::read(dir.join("relatorio.2026.csv")).unwrap(), b"a;b\n1;2");
+
+        // Se o usuário omitiu a extensão e já existe um arquivo com essa extensão, NÃO sobrescreve
+        let err_sobrescrita = gravar_exportacao_destino(dir.join("meus-projetos"), "xlsx", b"PK-NAO-SOBRESCREVER");
+        assert!(err_sobrescrita.is_err());
+        assert_eq!(fs::read(dir.join("meus-projetos.xlsx")).unwrap(), b"PK-1");
+
+        // Quando o usuário confirma sobrescrita no diálogo (caminho já com extensão), substitui atomicamente
+        let r3 = gravar_exportacao_destino(dir.join("meus-projetos.xlsx"), "xlsx", b"PK-2").unwrap();
+        assert_eq!(r3.nome, "meus-projetos.xlsx");
+        assert_eq!(fs::read(dir.join("meus-projetos.xlsx")).unwrap(), b"PK-2");
+
+        // Mantém extensão existente independente de maiúsculas/minúsculas
+        let r4 = gravar_exportacao_destino(dir.join("SAIDA.CSV"), "csv", b"x;y").unwrap();
+        assert_eq!(r4.nome, "SAIDA.CSV");
+        assert_eq!(fs::read(dir.join("SAIDA.CSV")).unwrap(), b"x;y");
 
         let _ = fs::remove_dir_all(&dir);
     }

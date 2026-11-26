@@ -155,4 +155,87 @@ test.describe('Chat estratégico', () => {
     await expect(page.locator('.conv-item', { hasText: 'Conversa para excluir gerando' })).toHaveCount(0)
     expect(getErrors()).toEqual([])
   })
+
+  test('exporta todos os registros da resposta do chat para CSV e Excel (.xlsx) com toast de confirmação', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    const rows15 = Array.from({ length: 15 }, (_, i) => ({
+      grande_area: `Área ${i + 1}`,
+      total_projetos: (i + 1) * 10,
+    }))
+    await installTauriMock(page, { chatData: rows15 })
+    await page.goto('/#/chat')
+
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Listar projetos por área')
+    await input.press('Enter')
+
+    // Padrão na tabela mostra 10 de 15 registros
+    await expect(page.getByText('Mostrando 10 de 15 registros')).toBeVisible()
+
+    // Exportar CSV (.csv) — garante que o menu fica 100% visível dentro da viewport
+    const exportBtn = page.getByTestId('chat-export-btn').last()
+    await expect(exportBtn).toBeVisible()
+    await exportBtn.click()
+    const menu = page.getByTestId('chat-export-menu')
+    await expect(menu).toBeVisible()
+    const box = await menu.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(box).not.toBeNull()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
+
+    await page.getByRole('menuitem', { name: /Exportar CSV/i }).click()
+
+    await expect(page.getByTestId('chat-toast')).toContainText(/Arquivo salvo em Documentos:.*\.csv/)
+
+    // Exportar Excel (.xlsx)
+    await exportBtn.click()
+    await page.getByRole('menuitem', { name: /Exportar Excel/i }).click()
+
+    await expect(page.getByTestId('chat-toast')).toContainText(/Arquivo salvo em Documentos:.*\.xlsx/)
+
+    const exports = await page.evaluate(
+      () => (window as unknown as Record<string, Array<{ nome: string; bytes: number[] }>>).__TAURI_MOCK_EXPORTS__
+    )
+    expect(exports).toHaveLength(2)
+
+    // Valida CSV completo (UTF-8 BOM + separador ';' + todas as 15 linhas)
+    const csvExport = exports[0]
+    expect(csvExport.nome).toMatch(/^adito-listar-projetos-por-area-\d{8}-\d{6}\.csv$/)
+    expect(csvExport.bytes.slice(0, 3)).toEqual([0xef, 0xbb, 0xbf])
+    const csvText = new TextDecoder().decode(new Uint8Array(csvExport.bytes))
+    expect(csvText).toContain('grande area;total projetos')
+    expect(csvText).toContain('Área 15;150')
+
+    // Valida assinatura PKZIP do .xlsx
+    const xlsxExport = exports[1]
+    expect(xlsxExport.nome).toMatch(/^adito-listar-projetos-por-area-\d{8}-\d{6}\.xlsx$/)
+    expect(xlsxExport.bytes.slice(0, 4)).toEqual([0x50, 0x4b, 0x03, 0x04])
+
+    expect(getErrors()).toEqual([])
+  })
+
+  test('cancelar o diálogo "Salvar como..." na exportação não exibe erro nem grava arquivo', async ({ page }) => {
+    const getErrors = trackPageErrors(page)
+    await installTauriMock(page, { exportCancel: true })
+    await page.goto('/#/chat')
+
+    const input = page.getByLabel('Pergunta sobre pesquisa e extensão')
+    await input.fill('Projetos por área')
+    await input.press('Enter')
+
+    const exportBtn = page.getByTestId('chat-export-btn').last()
+    await expect(exportBtn).toBeVisible()
+    await exportBtn.click()
+    await page.getByRole('menuitem', { name: /Exportar Excel/i }).click()
+
+    await expect(page.getByTestId('chat-toast')).toHaveCount(0)
+    const exports = await page.evaluate(
+      () => (window as unknown as Record<string, Array<{ nome: string; bytes: number[] }>>).__TAURI_MOCK_EXPORTS__
+    )
+    expect(exports).toHaveLength(0)
+    expect(getErrors()).toEqual([])
+  })
 })

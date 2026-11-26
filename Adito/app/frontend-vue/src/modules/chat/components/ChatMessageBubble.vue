@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import {
   AreaChart,
   BarChart2,
   BarChartHorizontal,
   Check,
+  ChevronDown,
   Code,
   Copy,
   Database,
+  Download,
+  FileSpreadsheet,
+  FileText,
   Lightbulb,
   PieChart,
   Pin,
@@ -16,6 +20,7 @@ import {
 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import type { ChatMessage } from '@/modules/chat/types'
+import type { ExportFormat } from '@/common/utils/exportData'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
 import { CHAT_CHART_TYPES, canUsePie, initialChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
 import { formatFieldValue } from '@/modules/chat/utils/format'
@@ -29,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
+  (e: 'export', payload: { message: ChatMessage; format: ExportFormat }): void
   (e: 'suggest', question: string): void
   (e: 'chart-type', payload: { id: string; type: ChatChartType }): void
 }>()
@@ -37,6 +43,105 @@ const hasRenderableTable = computed(() => {
   return !!(props.message.table && props.message.table.length > 0 && Object.values(props.message.table[0])[0] !== 'null')
 })
 
+const canExportTable = computed(() => hasRenderableTable.value && !props.message.isScalarResult)
+
+const exportMenuOpen = ref(false)
+const exportMenuRef = ref<HTMLElement | null>(null)
+const exportButtonRef = ref<HTMLButtonElement | null>(null)
+const exportDropdownRef = ref<HTMLElement | null>(null)
+const exportMenuStyle = ref<Record<string, string>>({})
+let exportListenersAttached = false
+
+function updateExportMenuPosition() {
+  if (typeof window === 'undefined' || !exportMenuRef.value) return
+  const rect = exportMenuRef.value.getBoundingClientRect()
+  const dropdownRect = exportDropdownRef.value?.getBoundingClientRect()
+  const menuWidth = dropdownRect && dropdownRect.width > 0 ? Math.ceil(dropdownRect.width) : 212
+  const menuHeight = dropdownRect && dropdownRect.height > 0 ? Math.ceil(dropdownRect.height) : 96
+  const margin = 8
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - menuWidth - margin))
+  const spaceBelow = window.innerHeight - rect.bottom
+
+  if (spaceBelow < menuHeight + 16 && rect.top > spaceBelow) {
+    exportMenuStyle.value = {
+      left: `${left}px`,
+      bottom: `${window.innerHeight - rect.top + 6}px`,
+      minWidth: '212px',
+    }
+  } else {
+    exportMenuStyle.value = {
+      left: `${left}px`,
+      top: `${rect.bottom + 6}px`,
+      minWidth: '212px',
+    }
+  }
+}
+
+function attachExportListeners() {
+  if (exportListenersAttached || typeof document === 'undefined' || typeof window === 'undefined') return
+  document.addEventListener('mousedown', handleExportOutsideClick)
+  document.addEventListener('keydown', handleExportKeydown, true)
+  window.addEventListener('resize', handleExportViewportChange)
+  window.addEventListener('scroll', handleExportViewportChange, true)
+  exportListenersAttached = true
+}
+
+function detachExportListeners() {
+  if (!exportListenersAttached || typeof document === 'undefined' || typeof window === 'undefined') return
+  document.removeEventListener('mousedown', handleExportOutsideClick)
+  document.removeEventListener('keydown', handleExportKeydown, true)
+  window.removeEventListener('resize', handleExportViewportChange)
+  window.removeEventListener('scroll', handleExportViewportChange, true)
+  exportListenersAttached = false
+}
+
+watch(exportMenuOpen, (open) => {
+  if (open) {
+    updateExportMenuPosition()
+    attachExportListeners()
+    nextTick(() => updateExportMenuPosition())
+  } else {
+    detachExportListeners()
+  }
+})
+
+function toggleExportMenu() {
+  exportMenuOpen.value = !exportMenuOpen.value
+}
+
+function closeExportMenu() {
+  exportMenuOpen.value = false
+}
+
+function triggerExport(format: ExportFormat) {
+  exportMenuOpen.value = false
+  emit('export', { message: props.message, format })
+}
+
+function handleExportOutsideClick(event: MouseEvent) {
+  if (!exportMenuOpen.value) return
+  const target = event.target as Node | null
+  if (target && (exportMenuRef.value?.contains(target) || exportDropdownRef.value?.contains(target))) return
+  closeExportMenu()
+}
+
+function handleExportViewportChange() {
+  if (!exportMenuOpen.value || !exportMenuRef.value) return
+  const rect = exportMenuRef.value.getBoundingClientRect()
+  if (rect.bottom < 0 || rect.top > window.innerHeight) {
+    closeExportMenu()
+    return
+  }
+  updateExportMenuPosition()
+}
+
+function handleExportKeydown(event: KeyboardEvent) {
+  if (!exportMenuOpen.value || event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  closeExportMenu()
+  exportButtonRef.value?.focus()
+}
 const rowLimit = ref<number | 'all'>(10)
 const rowLimitOptions: Array<number | 'all'> = [5, 10, 15, 'all']
 const isCopied = ref(false)
@@ -193,6 +298,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   scrollObserver?.disconnect()
+  detachExportListeners()
 })
 </script>
 
@@ -431,8 +537,9 @@ onBeforeUnmount(() => {
           </p>
         </div>
 
-        <div v-if="message.sql" class="mt-4 flex flex-wrap gap-2">
+        <div v-if="message.sql || canExportTable" class="mt-4 flex flex-wrap gap-2">
           <button
+            v-if="message.sql"
             class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
             @click="emit('toggle-sql', message.id)"
           >
@@ -441,13 +548,64 @@ onBeforeUnmount(() => {
           </button>
 
           <button
-            v-if="hasRenderableTable"
+            v-if="message.sql && hasRenderableTable"
             class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
             @click="pinMessage"
           >
             <Pin class="w-4 h-4" />
             Fixar no Dashboard
           </button>
+
+          <div v-if="canExportTable" ref="exportMenuRef" class="relative">
+            <button
+              ref="exportButtonRef"
+              type="button"
+              data-testid="chat-export-btn"
+              aria-haspopup="menu"
+              :aria-expanded="exportMenuOpen"
+              class="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
+              @click="toggleExportMenu"
+            >
+              <Download class="w-4 h-4" aria-hidden="true" />
+              <span>Exportar</span>
+              <ChevronDown
+                class="w-3.5 h-3.5 transition-transform duration-150"
+                :class="{ 'rotate-180': exportMenuOpen }"
+                aria-hidden="true"
+              />
+            </button>
+
+            <Teleport to="body">
+              <div
+                v-if="exportMenuOpen"
+                ref="exportDropdownRef"
+                role="menu"
+                aria-label="Opções de exportação"
+                data-testid="chat-export-menu"
+                :style="exportMenuStyle"
+                class="fixed z-[75] rounded-xl border border-border-subtle bg-surface p-1.5 shadow-premium dark:border-white/10"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-text-primary transition-colors hover:bg-surface-elevated hover:text-accent"
+                  @click="triggerExport('csv')"
+                >
+                  <FileText class="h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+                  <span>Exportar CSV (.csv)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-text-primary transition-colors hover:bg-surface-elevated hover:text-accent"
+                  @click="triggerExport('xlsx')"
+                >
+                  <FileSpreadsheet class="h-4 w-4 shrink-0 text-emerald-600 dark:text-[#68d388]" aria-hidden="true" />
+                  <span>Exportar Excel (.xlsx)</span>
+                </button>
+              </div>
+            </Teleport>
+          </div>
         </div>
 
         <div v-if="message.sql && message.showSQL" class="mt-3 rounded-lg border border-border-subtle bg-surface-elevated overflow-hidden dark:border-white/[0.06] dark:bg-black/20">
