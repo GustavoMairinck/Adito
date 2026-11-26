@@ -32,6 +32,10 @@ Capacidade de abortar respostas em andamento no chat do Adito via botão **"Para
 Evolução do sistema de distribuição desktop (`ADR-0006`/`ADR-0007`) com opção opt-in em Configurações (desligada por padrão) para verificação periódica/foco, download em segundo plano do executável com proteção de chat ativo e contagem regressiva de 10s (com "Reiniciar agora" e "Adiar"), auto-update de `dados.db` priorizando o executável e sinal reativo `dadosReloadSeq` para recarga automática de Dashboard, Meu painel, Contextos/Chat e Administração com toast discreto, sem reindexação automática de embeddings. Origem: `Adito/docs/discovery/auto-update-reload.md` e `Adito/docs/requirements/auto-update-reload.md`.
 - **Stories**: US-UPD-01 e US-UPD-02.
 
+### EPIC-14: Exportação de Dados do Chat para CSV e Excel (`.xlsx`)
+Exportação direta dos dados completos retornados em tabelas e gráficos das respostas do Chat para **CSV** (padrão Excel PT-BR: UTF-8 BOM, separador `;`, proteção contra Formula Injection) e **Excel nativo (`.xlsx` OOXML)** em TypeScript puro (zero novas dependências em npm/Python), com comando Rust `exportar_arquivo` usando o plugin oficial `tauri-plugin-dialog = "2"` (aprovado pelo usuário) para abrir o diálogo nativo **"Salvar como..."** do SO com gravação atômica, fallback `showSaveFilePicker`/`Blob` no navegador/E2E e botão dropdown acessível **"Exportar"** com toast de confirmação. Origem: `Adito/docs/discovery/exportar-dados-csv-excel.md` e `Adito/docs/requirements/exportar-dados-csv-excel.md`.
+- **Stories**: US-EXP-01 e US-EXP-02.
+
 ---
 
 ## User Stories Priorizadas
@@ -135,6 +139,19 @@ Evolução do sistema de distribuição desktop (`ADR-0006`/`ADR-0007`) com opç
 > Total EPIC-13: 8 pts (Nível ScrumAIDev 1, branch `feat/auto-update-reload`).  
 > - **Vertical Slice 1 (5 pts):** `US-UPD-01` (separação `download()`/`install()`, preferência opt-in em Configurações, monitoramento 30 min / foco 15 min, proteção `useChatApi().isLoading`, contagem 10s, prioridade app > dados, backoff, `dadosReloadSeq`, adenda `ADR-0006` e Vitest).  
 > - **Vertical Slice 2 (3 pts):** `US-UPD-02` (banner discreto de reinício + toast no `MainLayout.vue`, auto-reload reativo nas 4 telas abertas sem retrain automático e Playwright E2E em `atualizacoes.spec.ts`).
+
+---
+
+### 🗂️ EPIC-14 — Exportação de Dados do Chat para CSV e Excel (`.xlsx`) (Aprovado em 26/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-EXP-01](stories/US-EXP-01_gerador-csv-xlsx-comando-rust-exportacao.md) | Gerador CSV/OOXML `.xlsx` (TS puro), comando Rust `exportar_arquivo` e testes unitários | EPIC-14 | 5 | 🔴 Alta (slice 1) | — | FR03–FR07 (núcleo/API), FR08 (Rust + unit), BR01, BR03–BR06, NFR01, NFR03, NFR04, A01–A03 | 🔍 Review |
+| [US-EXP-02](stories/US-EXP-02_ui-exportar-chat-toast-testes-e2e.md) | Botão dropdown "Exportar" no Chat, toast de feedback e testes Vitest + Playwright E2E | EPIC-14 | 3 | 🔴 Alta (slice 2) | US-EXP-01 | FR01–FR03, FR07 (UI/toast), FR08 (component + E2E), BR01, BR02, NFR02, NFR05 | 🔍 Review |
+
+> Total EPIC-14: 8 pts (Nível ScrumAIDev 1, branch `feat/exportar-dados-csv-excel`).  
+> - **Vertical Slice 1 (5 pts):** `US-EXP-01` (gerador CSV PT-BR + OOXML `.xlsx` em TS puro sem dependências npm/Python, comando Rust `exportar_arquivo` com diálogo nativo "Salvar como..." via `tauri-plugin-dialog = "2"` + fallback navegador, testes Rust e Vitest).  
+> - **Vertical Slice 2 (3 pts):** `US-EXP-02` (botão dropdown acessível **"Exportar"** teleportado no Chat, toast de confirmação/erro com cancelamento silencioso e testes Vitest + Playwright E2E).
 
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
