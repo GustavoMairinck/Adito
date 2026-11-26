@@ -48,4 +48,23 @@ describe('modules/chat/components/ChatInputArea', () => {
     await wrapper.find('textarea').trigger('keydown', { key: 'Escape' })
     expect(wrapper.emitted('cancel')).toBeUndefined()
   })
+
+  it('menu "Mais" fecha com Esc de qualquer lugar e quando deixa de haver resposta para relatório', async () => {
+    const wrapper = mount(ChatInputArea, {
+      props: { modelValue: '', loading: false, canCreateReport: true },
+      attachTo: document.body,
+    })
+    const more = wrapper.find('button[aria-label="Mais opções"]')
+
+    await more.trigger('click')
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+
+    await more.trigger('click')
+    await wrapper.setProps({ canCreateReport: false })
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

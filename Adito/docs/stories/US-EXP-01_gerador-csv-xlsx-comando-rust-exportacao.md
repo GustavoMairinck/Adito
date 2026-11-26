@@ -1,6 +1,6 @@
 # User Story: [US-EXP-01] Gerador CSV/OOXML `.xlsx` (TS puro), comando Rust `exportar_arquivo` e testes unitários
 
-**Epic:** EPIC-14 — Exportação de Dados do Chat para CSV e Excel (`.xlsx`)
+**Epic:** EPIC-15 — Exportação de Dados do Chat para CSV e Excel (`.xlsx`)
 **GitHub Epic Issue:** -
 **GitHub US Issue:** -
 **Prioridade:** Alta (slice 1)

@@ -86,6 +86,47 @@ describe('modules/chat/composables/useChatHistory', () => {
     expect(aiMsg.suggestedChartType).toBe('horizontal_bar')
   })
 
+  it('reloadReports reexecuta os relatórios já carregados (dados.db atualizado em segundo plano)', async () => {
+    let total = 120
+    callMock.mockImplementation(async (method: string) => {
+      if (method === 'chat.conversations.list') {
+        return [{
+          id: 'conv-1',
+          title: 'Bolsas',
+          contexto: 'ctx-1',
+          created_at: '2026-11-18T10:00:00Z',
+          messages: [{
+            id: 'r1',
+            role: 'assistant',
+            content: 'Relatório',
+            created_at: '2026-11-18T10:00:03Z',
+            metadata: {
+              type: 'report',
+              title: 'Bolsas',
+              generated_at: '2026-11-18T10:00:03Z',
+              sections: [{ source_message_id: 'a1', title: 'Total', sql: 'SELECT 1', field_formats: {}, chart_type: null }],
+            },
+          }],
+        }]
+      }
+      if (method === 'chat.report_rows') return { sections: [{ data: [{ total }], error: null }] }
+      return null
+    })
+
+    const { currentConversation, currentConvId, syncFromBackend, reloadReports } = useChatHistory()
+    await syncFromBackend()
+    await new Promise((r) => setTimeout(r, 0))
+    const report = () => currentConversation.value.messages.find((m) => m.report)!.report!
+    expect(report().sections[0].data).toEqual([{ total: 120 }])
+
+    const reportCalls = () => callMock.mock.calls.filter(([method]) => method === 'chat.report_rows').length
+    const before = reportCalls()
+    total = 130
+    await reloadReports(currentConvId.value)
+    expect(report().sections[0].data).toEqual([{ total: 130 }])
+    expect(reportCalls()).toBe(before + 1)
+  })
+
   it('handleNewConversation, replaceConversationId e handleDeleteConversation mantêm estado consistente', async () => {
     callMock.mockResolvedValue([])
     const history = useChatHistory()

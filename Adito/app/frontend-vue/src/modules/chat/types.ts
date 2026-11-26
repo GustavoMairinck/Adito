@@ -21,6 +21,27 @@ export interface ChatChart {
 
 export type FieldFormat = 'text' | 'integer' | 'decimal' | 'currency' | 'date' | 'percent'
 
+/** Seção de relatório: definição gravada no núcleo + linhas reexecutadas a cada exibição. */
+export interface ChatReportSection {
+  sourceMessageId: string
+  title: string
+  sql: string
+  fieldFormats: Record<string, FieldFormat>
+  chartType: ChatChartType | null
+  data?: Array<Record<string, any>>
+  error?: string | null
+}
+
+/** Relatório montado por modelo fixo a partir de respostas da conversa (EPIC-14). Não usa LLM. */
+export interface ChatReport {
+  title: string
+  contextoNome?: string | null
+  generatedAt: string
+  sections: ChatReportSection[]
+  /** Linhas das seções já carregadas (o núcleo guarda só o SQL). */
+  loaded: boolean
+}
+
 export interface ChatMessage {
   id: string
   type: 'user' | 'ai'
@@ -36,6 +57,8 @@ export interface ChatMessage {
   chartType?: ChatChartType
   // Tipo sugerido pelo agente de painéis do núcleo; abre o gráfico até o usuário escolher outro.
   suggestedChartType?: ChatChartType
+  // Relatório (mensagem própria da conversa, sem texto de LLM).
+  report?: ChatReport
   isScalarResult?: boolean
   isLoading?: boolean
   loadingStatus?: string

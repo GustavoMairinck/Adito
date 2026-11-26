@@ -19,11 +19,12 @@ from agents.orchestrator.graph import get_graph
 from core import db
 from core.contexts import pick_contexto
 from core.db import api_dt, to_db_id
-from core.records import Conversation, Message, QueryExecution, delete_conversation
+from core.records import Contexto, Conversation, Message, QueryExecution, delete_conversation
 from core.rich_logging import log_info, log_section, log_success
 
 from .core_methods import LLM_KEY_MISSING, llm_configured, llm_missing_message
 from .errors import ApiError, llm_error_message, not_found
+from .params import Choice, Str, Uuid, validate
 from .registry import rpc
 from .session import current
 
@@ -457,6 +458,120 @@ def message_rows(params):
     if conversation is None:
         raise not_found("Conversation")
     rows = execute_query(sql, contexto_id=conversation.contexto_id)
-    if rows and isinstance(rows[0], dict) and "error" in rows[0]:
+    if _query_failed(rows):
         raise ApiError(409, {"message": "os dados mudaram desde esta pergunta; refaça a pergunta", "error": rows[0]["error"]})
     return {"data": _json_safe(rows)}
+
+
+def _query_failed(rows) -> bool:
+    """`execute_query` sinaliza falha devolvendo exatamente `[{"error": "<mensagem>"}]`.
+
+    Mesma regra para `chat.message_rows` e `chat.report_rows`: um resultado legítimo que tenha uma
+    coluna `error` ao lado de outras, ou mais de uma linha, continua sendo dado.
+    """
+    return (
+        isinstance(rows, list)
+        and len(rows) == 1
+        and isinstance(rows[0], dict)
+        and set(rows[0]) == {"error"}
+    )
+
+
+# ── Relatórios (EPIC-14) ────────────────────────────────────────────────────
+# O relatório é uma mensagem da conversa (metadata.type = "report") montada por modelo fixo, sem LLM.
+# Guarda só a definição das seções; as linhas são reexecutadas a cada exibição (números atuais).
+
+REPORT_MAX_SECTIONS = 20
+REPORT_CHART_TYPES = ("bar", "horizontal_bar", "line", "area", "pie")
+
+
+def _report_eligible(message: Message | None) -> bool:
+    """Resposta de análise com SQL (BR01): fora conversa simples, aviso de "não encontrei" e outros relatórios."""
+    if message is None or message.role != "assistant":
+        return False
+    metadata = message.metadata or {}
+    return metadata.get("type") == "analysis" and bool(metadata.get("sql"))
+
+
+@rpc("chat.reports.create")
+def reports_create(params):
+    """Grava o relatório como mensagem da conversa. Não chama LLM nem grava QueryExecution."""
+    conversation = _own_conversation(params.get("conversation_id"))
+    title = validate({"title": Str(required=True, max_length=200, allow_blank=False)}, params)["title"]
+    sections_in = params.get("sections")
+    if not isinstance(sections_in, list) or not sections_in:
+        raise ApiError(400, {"sections": ["Escolha ao menos uma resposta para o relatório."]})
+    if len(sections_in) > REPORT_MAX_SECTIONS:
+        raise ApiError(400, {"sections": [f"O relatório aceita no máximo {REPORT_MAX_SECTIONS} seções."]})
+
+    sections, seen = [], set()
+    for item in sections_in:
+        if not isinstance(item, dict):
+            raise ApiError(400, {"sections": ["Seção inválida."]})
+        section = validate({
+            "message_id": Uuid(required=True),
+            "title": Str(required=True, max_length=300, allow_blank=False),
+            "chart_type": Choice(choices=REPORT_CHART_TYPES, default=None, allow_null=True),
+        }, item)
+        mid = to_db_id(section["message_id"])
+        if mid in seen:
+            raise ApiError(400, {"sections": ["A mesma resposta foi escolhida duas vezes."]})
+        seen.add(mid)
+        source = Message.first("id = ? AND conversation_id = ?", [mid, to_db_id(conversation.id)])
+        if not _report_eligible(source):
+            raise ApiError(400, {"sections": ["Só entram respostas com dados desta conversa."]})
+        metadata = source.metadata or {}
+        chart_type = section.get("chart_type") or metadata.get("chart_type")
+        sections.append({
+            "source_message_id": source.id,
+            "title": section["title"],
+            "sql": metadata["sql"],
+            "field_formats": metadata.get("field_formats") or {},
+            "chart_type": chart_type if chart_type in REPORT_CHART_TYPES else None,
+        })
+
+    contexto = Contexto.first("id = ?", [to_db_id(conversation.contexto_id)]) if conversation.contexto_id else None
+    metadata = {
+        "type": "report",
+        "title": title,
+        "contexto_nome": contexto.name if contexto else None,
+        "sections": sections,
+    }
+    with db.transaction():
+        message = Message(conversation_id=conversation.id, role="assistant", content=title, metadata=metadata).insert()
+        conversation.updated_at = message.created_at
+        conversation.update("updated_at")
+    return _message_json(message)
+
+
+@rpc("chat.report_rows")
+def report_rows(params):
+    """Reexecuta o SQL de cada seção com a política do contexto. Uma seção com erro não derruba as outras."""
+    user, tenant = current()
+    try:
+        mid = to_db_id(params.get("id"))
+    except (ValueError, TypeError, AttributeError):
+        mid = None
+    message = Message.first(
+        "id = ? AND role = 'assistant' AND conversation_id IN "
+        "(SELECT id FROM chat_conversation WHERE user_id = ? AND tenant_id = ?)",
+        [mid, to_db_id(user.id), to_db_id(tenant.id) if tenant else None],
+    ) if mid else None
+    if message is None or (message.metadata or {}).get("type") != "report":
+        raise not_found("Report")
+    conversation = Conversation.first("id = ?", [to_db_id(message.conversation_id)])
+    if conversation is None:
+        raise not_found("Conversation")
+
+    results = []
+    for section in message.metadata.get("sections") or []:
+        try:
+            rows = execute_query(section.get("sql") or "", contexto_id=conversation.contexto_id)
+        except Exception:  # noqa: BLE001 - uma seção quebrada não derruba o relatório
+            logger.exception("Falha ao reexecutar seção do relatório %s", message.id)
+            rows = [{"error": "falha ao executar"}]
+        if _query_failed(rows):
+            results.append({"data": [], "error": "os dados mudaram desde a pergunta"})
+        else:
+            results.append({"data": _json_safe(rows), "error": None})
+    return {"sections": results}
