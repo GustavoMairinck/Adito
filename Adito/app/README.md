@@ -181,7 +181,7 @@ continuam compatíveis.
 
 As consultas usam o `dados.db` SQLite do desktop, aberto para leitura, e respeitam
 as colunas sensíveis declaradas no contexto. A exploração funciona com os contextos
-carregados mesmo sem chave do Gemini. O DDL PostgreSQL em `../scripts/sql/` documenta
+carregados mesmo sem chave de IA configurada. O DDL SQLite em `../scripts/sql/` documenta
 o modelo unificado. Para consultá-lo nesta versão, disponibilize suas relações no
 `dados.db` e no contexto correspondente.
 

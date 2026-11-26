@@ -29,7 +29,7 @@ Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.to
 
 - [ ] **Critério 1:** Cada contexto pode declarar filtros num `filters.json` validado na carga.
 - [ ] **Critério 2:** Filtros globais do dashboard valem só para widgets cujo contexto declara o filtro.
-- ~~**Critério 3:** Explorar Dados volta ao menu, lendo as views e filtros do contexto escolhido.~~ Fora do escopo desde 2026-11-19 (tela removida).
+- [x] **Critério 3:** Explorar Dados volta ao menu, lendo as views do contexto escolhido. Feito em 2026-11-25 (a tela tinha saído em 2026-11-19). Ler os filtros do contexto depende do Critério 1.
 
 ---
 
@@ -75,7 +75,7 @@ N/A
 - [ ] **[TASK-002]** Endpoints por contexto
   - Estimativa: -
   - Assignee: -
-- ~~**[TASK-003]** Refazer Explorar Dados~~ (tela removida em 2026-11-19)
+- [x] **[TASK-003]** Refazer Explorar Dados (removida em 2026-11-19, de volta em 2026-11-25)
   - Estimativa: -
   - Assignee: -
 

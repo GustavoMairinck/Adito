@@ -2,9 +2,8 @@
 import logging
 import re
 import sqlite3
-from contextlib import closing
 
-from core.contexts import visible_columns
+from core.contexts import read_policy_for, visible_columns
 from core.datastore import connect_dados
 from core.db import to_db_id
 from core.records import Contexto
@@ -125,7 +124,7 @@ def rows(params):
         page_size = int(params["page_size"])
         # O SQL usa apenas a relação e as colunas já validadas no contexto.
         # Os valores fornecidos pelo usuário são parâmetros da consulta.
-        with closing(connect_dados()) as conn:
+        with connect_dados(read_policy_for(contexto)) as conn:
             total = conn.execute(f"SELECT COUNT(*) FROM {source}{where}", values).fetchone()[0]
             page = min(params["page"], max(1, (total + page_size - 1) // page_size))
             records = conn.execute(
@@ -145,7 +144,7 @@ def rows(params):
             "total": total, "page": page, "page_size": page_size,
             "distribution": distribution,
         }
-    except (FileNotFoundError, sqlite3.Error):
+    except (FileNotFoundError, PermissionError, sqlite3.Error):
         logger.exception("Falha ao consultar a relação %s do contexto %s", view["name"], contexto.id)
         raise _unavailable() from None
 

@@ -32,6 +32,8 @@ let catalogController: AbortController | undefined
 let rowsController: AbortController | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
 let disposed = false
+// Quando o backend ajusta a página pedida, a mudança de `page` não deve refazer a mesma consulta.
+let pageSyncedFromServer = false
 
 const categories = [
   { key: 'all', label: 'Todas' },
@@ -82,8 +84,12 @@ async function initialize() {
   catalogLoading.value = true
   catalogError.value = ''
   try {
+    const wasReady = ready.value
+    const previousId = selectedId.value
     await loadContextos()
     if (disposed) return
+    // Se o contexto mudou com a tela pronta, o watch de `selectedId` já recarregou o catálogo.
+    if (wasReady && selectedId.value !== previousId) return
     ready.value = true
     await fetchCatalog()
   } catch (error) {
@@ -107,7 +113,10 @@ async function fetchRows() {
     }, { signal: controller.signal })
     if (!controller.signal.aborted) {
       result.value = data
-      page.value = data.page
+      if (data.page !== page.value) {
+        pageSyncedFromServer = true
+        page.value = data.page
+      }
     }
   } catch (error) {
     if (!controller.signal.aborted) rowsError.value = errorMessage(error, 'Não foi possível consultar os registros. Tente novamente.')
@@ -158,7 +167,13 @@ watch(currentTable, table => {
 })
 watch(filterColumn, () => { filterValue.value = '' })
 watch([search, filterColumn, filterValue, sort, direction, pageSize], () => { page.value = 1 })
-watch([tableName, search, filterColumn, filterValue, sort, direction, page, pageSize, mode, groupBy], scheduleRows, { flush: 'post' })
+watch([tableName, search, filterColumn, filterValue, sort, direction, page, pageSize, mode, groupBy], () => {
+  if (pageSyncedFromServer) {
+    pageSyncedFromServer = false
+    return
+  }
+  scheduleRows()
+}, { flush: 'post' })
 
 onMounted(initialize)
 onBeforeUnmount(() => {
