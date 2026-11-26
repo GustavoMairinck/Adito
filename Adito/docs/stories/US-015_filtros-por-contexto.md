@@ -20,6 +20,8 @@
 Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.top_projects`) consultam uma view fixa, hoje `vfact_orientacao_bolsa_resolved` (antes era a view da demonstração de vendas, removida). A proposta é um `filters.json` por contexto.
 
 > **2026-11-19:** a tela Explorar dados saiu do produto, a pedido do usuário. Esta história passa a tratar só dos filtros do dashboard.
+>
+> **2026-11-25:** a tela Explorar dados voltou, a pedido do usuário, porque os dados usados não são privados. Voltou exatamente como era antes da remoção (`explorer.tables` e `explorer.rows`, lendo as views do contexto escolhido). Os filtros por contexto (`filters.json`) continuam pendentes nesta história.
 
 ---
 
@@ -27,7 +29,7 @@ Os métodos fixos do painel (`dashboard.kpis`, `dashboard.charts`, `dashboard.to
 
 - [ ] **Critério 1:** Cada contexto pode declarar filtros num `filters.json` validado na carga.
 - [ ] **Critério 2:** Filtros globais do dashboard valem só para widgets cujo contexto declara o filtro.
-- ~~**Critério 3:** Explorar Dados volta ao menu, lendo as views e filtros do contexto escolhido.~~ Fora do escopo desde 2026-11-19 (tela removida).
+- [x] **Critério 3:** Explorar Dados volta ao menu, lendo as views do contexto escolhido. Feito em 2026-11-25 (a tela tinha saído em 2026-11-19). Ler os filtros do contexto depende do Critério 1.
 
 ---
 
@@ -73,7 +75,7 @@ N/A
 - [ ] **[TASK-002]** Endpoints por contexto
   - Estimativa: -
   - Assignee: -
-- ~~**[TASK-003]** Refazer Explorar Dados~~ (tela removida em 2026-11-19)
+- [x] **[TASK-003]** Refazer Explorar Dados (removida em 2026-11-19, de volta em 2026-11-25)
   - Estimativa: -
   - Assignee: -
 
@@ -94,7 +96,7 @@ N/A
 
 ## 📝 Notas e Comentários
 
-- Ligada à US-010. Em 2026-11-19 a tela Explorar dados foi removida de vez.
+- Ligada à US-010. Em 2026-11-19 a tela Explorar dados foi removida; em 2026-11-25 voltou como era.
 
 Registro completo: [PORTE_DESKTOP_DECISOES.md](../PORTE_DESKTOP_DECISOES.md).
 

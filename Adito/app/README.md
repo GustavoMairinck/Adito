@@ -146,10 +146,44 @@ Atalho: `../../rodar_desktop.sh` (na raiz do repositório) sobe o Vite e a janel
 ### Primeira vez no app
 
 1. **Para usar o chat**, abra **Configurações** → cole a chave do Gemini → **Salvar**. O app testa a chave antes de guardar.
-2. **Administração** → **Carregar Contextos**. Valida os contextos e, com a chave configurada, gera os embeddings.
+2. **Administração** → **Carregar Contextos**. Valida os contextos e, com a chave configurada, gera os embeddings. A exploração das tabelas funciona com os contextos validados.
 3. **Chat** → escolha o contexto e pergunte, por exemplo: "quantas ações de extensão foram cadastradas por ano?".
 
 Mudou algo em `contexts/` ou trocou o `dados.db`? Repita o passo 2.
+
+### Explorar os dados do Adito
+
+Em **Explorar dados**, selecione um contexto e uma relação no catálogo. A tela oferece
+busca textual, filtro por valor exato de uma coluna, ordenação pelos cabeçalhos e
+paginação de 25, 50 ou 100 registros. Em **Estrutura e colunas visíveis**, consulte os
+tipos e escolha as colunas da tabela. A visualização **Gráfico** conta os registros
+por valor da coluna escolhida, considerando todos os resultados filtrados e exibindo
+até 12 grupos.
+
+O catálogo segue as relações já expostas em `views.json`, incluindo as entidades do
+modelo UML unificado. Cada entrada aceita os campos opcionais `label` (nome exibido)
+e `kind` (`fact`, `dimension` ou `entity`). Por exemplo, uma entrada de `iniciativa`
+do modelo unificado pode ser declarada assim, quando essa relação existir no SQLite.
+
+```json
+{
+  "name": "iniciativa",
+  "label": "Iniciativas de pesquisa e extensão",
+  "description": "Iniciativas institucionais do modelo unificado.",
+  "kind": "entity"
+}
+```
+
+Sem `kind`, os prefixos `fact`/`fato` e `dim_`/`dimensao_` identificam fatos e dimensões
+(também após `v_`/`vw_`). As demais relações aparecem como entidades. Use `kind`
+para classificar relações com outras convenções de nomes. Os contextos existentes
+continuam compatíveis.
+
+As consultas usam o `dados.db` SQLite do desktop, aberto para leitura, e respeitam
+as colunas sensíveis declaradas no contexto. A exploração funciona com os contextos
+carregados mesmo sem chave de IA configurada. O DDL SQLite em `../scripts/sql/` documenta
+o modelo unificado. Para consultá-lo nesta versão, disponibilize suas relações no
+`dados.db` e no contexto correspondente.
 
 ---
 
@@ -190,7 +224,7 @@ A partir de `backend/nucleo`:
 ../../.venv/bin/python -m unittest core.tests
 ```
 
-Cobre a segurança do SQL, os contextos, a chave do Gemini, os agentes e a persistência e a migração do `app.db`.
+Cobre a segurança do SQL, os contextos, a chave do Gemini, os agentes, a tela Explorar (catálogo, busca, filtros, paginação, agrupamentos, isolamento de contextos, colunas sensíveis) e a persistência e a migração do `app.db`.
 
 ### Manutenção
 

@@ -145,6 +145,19 @@ async def roteiro(api) -> list[dict]:
     ctxs = await call("contextos", "contextos.list")
     cid = ctxs[0]["id"] if isinstance(ctxs, list) and ctxs else None
 
+    await call("explorer.tables", "explorer.tables", {"contexto_id": cid})
+    await call("explorer.tables sem contexto", "explorer.tables", {})
+    base = {"contexto_id": cid, "table": VIEW}
+    await call("explorer.rows padrão", "explorer.rows", base)
+    await call("explorer.rows busca", "explorer.rows", {**base, "search": "Projeto 0", "page_size": "50"})
+    await call("explorer.rows ordenado", "explorer.rows", {**base, "sort": "ano", "direction": "desc", "page": "2"})
+    await call("explorer.rows filtro+grupo", "explorer.rows",
+               {**base, "filter_column": "grande_area", "filter_value": "Exatas", "group_by": "programa_fomento"})
+    await call("explorer.rows coluna sensível", "explorer.rows", {**base, "sort": "cpf_orientador"})
+    await call("explorer.rows tabela inexistente", "explorer.rows", {**base, "table": "nao_existe"})
+    await call("explorer.rows página inválida", "explorer.rows", {**base, "page": "0"})
+    await call("explorer.rows dim", "explorer.rows", {**base, "table": "dim_area"})
+
     await call("kpis", "dashboard.kpis")
     await call("kpis filtrado", "dashboard.kpis", {"ano": "2025", "area": "hum"})
     await call("top_projects", "dashboard.top_projects")
