@@ -4,8 +4,8 @@ import { ArrowRight, Database, Download, Loader2, X } from 'lucide-vue-next'
 import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 
 /**
- * Aviso discreto no rodapé da barra lateral, como o "Atualização disponível" do Claude:
- * não abre sozinho nem bloqueia o uso. Clicar mostra o que há de novo e o usuário escolhe.
+ * Aviso discreto no rodapé da barra lateral: não abre sozinho nem bloqueia o uso.
+ * Ao clicar, abre o diálogo centralizado na tela com as atualizações disponíveis.
  */
 const props = defineProps<{ collapsed?: boolean }>()
 
@@ -24,47 +24,42 @@ const {
 
 const aberto = ref(false)
 const chave = ref('')
-const raiz = ref<HTMLElement | null>(null)
-const painel = ref<HTMLElement | null>(null)
-// O painel vai para o <body>: a barra lateral corta o que passa da borda (overflow-hidden).
-const posicao = ref<Record<string, string>>({})
 const ocupado = computed(() => instalandoApp.value || instalandoDados.value)
 
 function tamanhoMb(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
 }
 
-function posicionar() {
-  const r = raiz.value?.getBoundingClientRect()
-  if (!r) return
-  posicao.value = props.collapsed
-    ? { left: `${r.right + 8}px`, bottom: `${window.innerHeight - r.bottom}px`, width: '18rem' }
-    : { left: `${r.left}px`, bottom: `${window.innerHeight - r.top + 8}px`, width: `${Math.max(r.width, 240)}px` }
-}
-
 function alternar() {
   aberto.value = !aberto.value
-  if (aberto.value) posicionar()
-  else limparErro()
+  if (!aberto.value) limparErro()
 }
 
 function depois() {
+  if (ocupado.value) return
   aberto.value = false
   limparErro()
 }
 
-async function atualizarDados() {
-  const ok = await instalarDados(dadosNovos.value?.precisa_chave ? chave.value : undefined)
-  if (ok) chave.value = ''
-}
+const podeBaixar = computed(() => {
+  if (ocupado.value) return false
+  if (dadosNovos.value?.precisa_chave && !chave.value.trim()) return false
+  return !!app.value || !!dadosNovos.value
+})
 
-function fora(ev: MouseEvent) {
-  const alvo = ev.target as Node
-  if (aberto.value && !ocupado.value && !raiz.value?.contains(alvo) && !painel.value?.contains(alvo)) depois()
-}
-
-function reposicionar() {
-  if (aberto.value) posicionar()
+async function baixarAgora() {
+  if (!podeBaixar.value) return
+  if (dadosNovos.value) {
+    const ok = await instalarDados(dadosNovos.value.precisa_chave ? chave.value : undefined)
+    if (!ok) return
+    chave.value = ''
+  }
+  if (app.value) {
+    await instalarApp()
+  }
+  if (!temAtualizacao.value) {
+    aberto.value = false
+  }
 }
 
 function aoTeclar(ev: KeyboardEvent) {
@@ -75,19 +70,15 @@ function aoTeclar(ev: KeyboardEvent) {
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', fora)
   window.addEventListener('keydown', aoTeclar)
-  window.addEventListener('resize', reposicionar)
 })
 onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', fora)
   window.removeEventListener('keydown', aoTeclar)
-  window.removeEventListener('resize', reposicionar)
 })
 </script>
 
 <template>
-  <div v-if="temAtualizacao" ref="raiz" class="relative" data-testid="atualizacao-disponivel">
+  <div v-if="temAtualizacao" class="relative" data-testid="atualizacao-disponivel">
     <button
       type="button"
       :aria-expanded="aberto"
@@ -109,82 +100,115 @@ onBeforeUnmount(() => {
     </button>
 
     <Teleport to="body">
-    <div
-      v-if="aberto"
-      ref="painel"
-      role="dialog"
-      aria-label="Atualizações do Adito"
-      :style="posicao"
-      class="fixed z-[70] rounded-xl border border-border-subtle bg-surface p-4 text-sm text-text-primary shadow-premium"
-    >
-      <div class="mb-3 flex items-center justify-between">
-        <h3 class="font-semibold">Atualizações</h3>
-        <button type="button" aria-label="Fechar" class="rounded p-1 text-text-muted hover:text-text-primary" :disabled="ocupado" @click="depois">
-          <X class="h-4 w-4" />
-        </button>
-      </div>
-
-      <div v-if="app" class="mb-3 rounded-lg border border-border-subtle p-3">
-        <div class="mb-1 flex items-center gap-2 font-medium">
-          <Download class="h-4 w-4 text-[var(--brand-primary)] dark:text-[#68d388]" />
-          Nova versão do Adito
-        </div>
-        <p class="mb-2 text-xs text-text-secondary">
-          Versão {{ app.version }}. O app reinicia no fim; suas conversas e painéis continuam.
-        </p>
-        <button type="button" class="btn-primary w-full disabled:opacity-50" :disabled="ocupado" @click="instalarApp">
-          <template v-if="instalandoApp">
-            <Loader2 class="mr-1 inline h-4 w-4 animate-spin" />
-            {{ progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…' }}
-          </template>
-          <template v-else>Atualizar o app</template>
-        </button>
-      </div>
-
-      <div v-if="dadosNovos" class="mb-3 rounded-lg border border-border-subtle p-3">
-        <div class="mb-1 flex items-center gap-2 font-medium">
-          <Database class="h-4 w-4 text-[var(--brand-primary)] dark:text-[#68d388]" />
-          Dados novos
-        </div>
-        <p class="mb-2 text-xs text-text-secondary">
-          Versão {{ dadosNovos.versao }} ({{ tamanhoMb(dadosNovos.tamanho) }}). Não precisa reinstalar o app.
-        </p>
-        <form class="flex flex-col gap-2" @submit.prevent="atualizarDados">
-          <template v-if="dadosNovos.precisa_chave">
-            <p class="text-xs text-amber-700 dark:text-amber-300">A chave dos dados mudou. Informe a nova chave.</p>
-            <input
-              v-model="chave"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="Nova chave dos dados"
-              class="rounded-md border border-border-subtle bg-surface-elevated/60 px-3 py-2 text-sm placeholder:text-text-muted focus:border-[var(--brand-primary)] focus:outline-none"
-            />
-          </template>
-          <button
-            type="submit"
-            class="btn-primary w-full disabled:opacity-50"
-            :disabled="ocupado || (dadosNovos.precisa_chave && !chave.trim())"
-          >
-            <template v-if="instalandoDados">
-              <Loader2 class="mr-1 inline h-4 w-4 animate-spin" /> Baixando e conferindo…
-            </template>
-            <template v-else>Atualizar os dados</template>
-          </button>
-        </form>
-      </div>
-
-      <p v-if="erro" class="mb-3 text-xs text-[#C50707] dark:text-red-300">{{ erro }}</p>
-
-      <button
-        type="button"
-        class="w-full rounded-md px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-elevated disabled:opacity-50"
-        :disabled="ocupado"
-        @click="depois"
+      <transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
       >
-        Depois
-      </button>
-    </div>
+        <div
+          v-if="aberto"
+          class="fixed inset-0 z-[90] flex items-center justify-center p-4"
+        >
+          <!-- Backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50"
+            @click="depois"
+          />
+
+          <!-- Modal centralizado na tela -->
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Atualizações do Adito"
+            class="relative w-full max-w-md overflow-hidden rounded-2xl border border-border-subtle bg-surface p-6 text-left text-sm text-text-primary shadow-[rgba(0,0,0,0.16)_0px_0px_0px_1px,rgba(0,0,0,0.16)_0px_16px_40px] dark:border-white/[0.12]"
+          >
+            <button
+              type="button"
+              aria-label="Fechar"
+              class="absolute right-4 top-4 rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary disabled:opacity-50"
+              :disabled="ocupado"
+              @click="depois"
+            >
+              <X class="h-4 w-4" />
+            </button>
+
+            <div class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--accent-light)] text-[var(--brand-primary)] dark:bg-[#2B7A42]/20 dark:text-[#68d388]">
+              <Download class="h-5 w-5" />
+            </div>
+
+            <h3 class="text-lg font-semibold tracking-tight text-text-primary">
+              Nova atualização disponível
+            </h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              Há novidades para o Adito. Você pode baixar agora ou continuar e atualizar mais tarde.
+            </p>
+
+            <form class="mt-5 space-y-3" @submit.prevent="baixarAgora">
+              <div v-if="app" class="rounded-xl border border-border-subtle bg-surface p-4 dark:border-white/[0.1]">
+                <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  <Download class="h-4 w-4 shrink-0 text-[var(--brand-primary)] dark:text-[#68d388]" />
+                  <span>Nova versão do Adito</span>
+                </div>
+                <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  Versão {{ app.version }}. O download instala a atualização e reinicia o aplicativo. Suas conversas e painéis são preservados.
+                </p>
+              </div>
+
+              <div v-if="dadosNovos" class="rounded-xl border border-border-subtle bg-surface p-4 dark:border-white/[0.1]">
+                <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  <Database class="h-4 w-4 shrink-0 text-[var(--brand-primary)] dark:text-[#68d388]" />
+                  <span>Dados novos</span>
+                </div>
+                <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  Versão {{ dadosNovos.versao }} ({{ tamanhoMb(dadosNovos.tamanho) }}). Não precisa reinstalar o aplicativo.
+                </p>
+                <div v-if="dadosNovos.precisa_chave" class="mt-3 flex flex-col gap-2">
+                  <p class="text-xs text-amber-700 dark:text-amber-300">A chave dos dados mudou. Informe a nova chave.</p>
+                  <input
+                    v-model="chave"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Nova chave dos dados"
+                    class="rounded-lg border border-border-subtle bg-surface-elevated/60 px-3 py-2 text-sm placeholder:text-text-muted focus:border-[var(--brand-primary)] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <p v-if="erro" class="text-xs text-[#C50707] dark:text-red-300">{{ erro }}</p>
+
+              <div class="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  class="flex-1 cursor-pointer rounded-xl border border-border-standard bg-surface px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] disabled:opacity-50"
+                  :disabled="ocupado"
+                  @click="depois"
+                >
+                  Deixar para depois
+                </button>
+                <button
+                  type="submit"
+                  class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--brand-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!podeBaixar"
+                >
+                  <template v-if="instalandoApp">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    <span>{{ progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…' }}</span>
+                  </template>
+                  <template v-else-if="instalandoDados">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    <span>Baixando…</span>
+                  </template>
+                  <template v-else>Baixar agora</template>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </transition>
     </Teleport>
   </div>
 </template>

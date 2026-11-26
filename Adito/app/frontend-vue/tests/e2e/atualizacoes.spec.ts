@@ -25,7 +25,7 @@ test.describe('Distribuição: primeiro uso e atualizações', () => {
     await expect(painel.getByText('Dados novos')).toBeVisible()
     await expect(painel.getByText(/2026-11-22/)).toBeVisible()
 
-    await painel.getByRole('button', { name: 'Atualizar os dados' }).click()
+    await painel.getByRole('button', { name: 'Baixar agora' }).click()
     await expect(page.getByTestId('atualizacao-disponivel')).toHaveCount(0)
     expect(errors()).toEqual([])
   })
