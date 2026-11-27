@@ -70,36 +70,10 @@ def bind_structured_output(llm_model: Any, schema: type[Any], *, prefer_function
 
 
 def get_embeddings():
-    """Instancia o embedder do provedor ativo sob demanda, ou None quando o provedor é só-chat."""
-    cfg = resolve_active_llm_config()
-    if not cfg.supports_embeddings or not cfg.embedding_model:
-        return None
+    """Embedder local (fastembed), o mesmo para qualquer provedor de chat: nenhuma chamada de API."""
+    from analytics_index.modelo_local import get_embedder_local
 
-    if cfg.protocol == "gemini":
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-        return GoogleGenerativeAIEmbeddings(
-            output_dimensionality=cfg.embedding_dim or 1024,
-            model=cfg.embedding_model,
-            google_api_key=cfg.api_key,
-        )
-
-    from langchain_openai import OpenAIEmbeddings
-
-    api_key = cfg.api_key or ("ollama" if cfg.is_local else "")
-    kwargs: dict[str, object] = {
-        "model": cfg.embedding_model,
-        "api_key": api_key,
-    }
-    if cfg.base_url:
-        kwargs["base_url"] = cfg.base_url
-    # Servidores OpenAI-compatíveis fora da OpenAI (ex.: Ollama, Z.AI, Mistral, Together, Fireworks, OpenRouter)
-    # esperam texto puro, não arrays de token IDs produzidos pelo check_embedding_ctx_length do tiktoken.
-    if cfg.provider != "openai":
-        kwargs["check_embedding_ctx_length"] = False
-    if cfg.provider == "mistral":
-        kwargs["model_kwargs"] = {"encoding_format": "float"}
-    return OpenAIEmbeddings(**kwargs)
+    return get_embedder_local()
 # ─── Checkpointer (estado das conversas do LangGraph) ─────────────────────────
 # Fica no app.db; se aparecer "database is locked", apontar para um arquivo próprio.
 from core.datastore import app_db_path

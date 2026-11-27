@@ -5,12 +5,6 @@ from pydantic import BaseModel, Field
 
 # O prompt de SQL é montado por contexto em core.contexts.build_system_prompt.
 
-KNOWLEDGE_LIMITS: dict[str, int] = {
-    "ddl": 3,
-    "doc": 3,
-    "query_example": 10,
-}
-
 KNOWLEDGE_LABELS: dict[str, str] = {
     "ddl": "DDL",
     "doc": "Regra de Negócio",

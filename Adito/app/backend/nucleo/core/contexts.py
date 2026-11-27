@@ -273,89 +273,34 @@ def sync_default_contexts(tenant: Tenant, dados_path=None) -> list[Contexto]:
 ORIGEM_MANUAL = "admin_panel"
 
 
-def index_contexto(contexto: Contexto, embedder, examples: list[dict], dados_path=None) -> dict:
-    """Refaz o RAG do contexto (esquema, regras, exemplos) e o índice de valores. Usa o provedor ativo."""
-    from agents.providers import resolve_active_llm_config
-    from analytics_index.services import embed_texts, update_text_embeddings
-    from .vectors import vector_matches_provider
+def index_contexto(contexto: Contexto, examples: list[dict], dados_path=None) -> dict:
+    """Refaz a Base de conhecimento do contexto (esquema, regras, exemplos) a partir dos arquivos.
 
-    cfg = resolve_active_llm_config()
-    emb_meta = {"embedding_provider": cfg.provider, "embedding_model": cfg.embedding_model}
-
-    items = [("ddl", describe_views(contexto, dados_path), dict(emb_meta))]
+    Não gera embeddings: os exemplos são embedados na hora, pelo modelo local (query_extractor), e os
+    valores do banco chegam com vetores prontos no dados.db (analytics_index/valores.py).
+    """
+    items = [("ddl", describe_views(contexto, dados_path), {})]
     if contexto.rules:
-        items.append(("doc", contexto.rules, dict(emb_meta)))
+        items.append(("doc", contexto.rules, {}))
     for example in examples:
         items.append((
             "query_example",
             f"Pergunta: {example['question']}\nSQL: {example['sql']}",
-            {"question": example["question"], **emb_meta},
+            {"question": example["question"], "sql": example["sql"]},
         ))
-
-    # Todos os embeddings (rede) saem ANTES da transação: se houver erro de cota/rede no meio,
-    # o banco atual permanece intacto sem mistura parcial.
-    rows = [(item_type, content, metadata, embedder.embed_query(content)) for item_type, content, metadata in items]
-    new_dim_bytes = len(rows[0][3]) * 4 if rows and rows[0][3] is not None else None
-
-    # Re-embedar em lote os itens manuais cuja dimensão ou provedor/modelo divergir do ativo.
-    cid = to_db_id(contexto.id)
-    manual_updates: list[tuple[KnowledgeItem, object]] = []
-    if new_dim_bytes:
-        manuais = KnowledgeItem.select(
-            "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
-            [cid, ORIGEM_MANUAL],
-        )
-        manuais_para_reembedar: list[tuple[KnowledgeItem, str]] = []
-        for manual in manuais:
-            meta = manual.metadata or {}
-            same_dim = manual.embedding is not None and (len(manual.embedding) * 4 == new_dim_bytes)
-            same_space = vector_matches_provider(
-                meta.get("embedding_provider"),
-                meta.get("embedding_model"),
-                cfg,
-            )
-            if (not same_dim) or (not same_space):
-                text_to_embed = meta.get("question") if manual.item_type == "query_example" else manual.content
-                manuais_para_reembedar.append((manual, text_to_embed or manual.content))
-        if manuais_para_reembedar:
-            novos_vetores = embed_texts(embedder, [text for _, text in manuais_para_reembedar])
-            manual_updates = [
-                (manual, vec) for (manual, _), vec in zip(manuais_para_reembedar, novos_vetores)
-            ]
-
     with db.transaction():
         # Os itens que o admin pôs à mão (Novo treinamento, promover consulta) não vêm dos arquivos e ficam.
         db.execute(
             "DELETE FROM knowledge_knowledgeitem WHERE contexto_id = ?"
             " AND COALESCE(json_extract(metadata, '$.source'), '') <> ?",
-            [cid, ORIGEM_MANUAL],
+            [to_db_id(contexto.id), ORIGEM_MANUAL],
         )
-        for item_type, content, metadata, embedding in rows:
+        for item_type, content, metadata in items:
             KnowledgeItem(
                 tenant_id=contexto.tenant_id,
                 contexto_id=contexto.id,
                 item_type=item_type,
                 content=content,
                 metadata=metadata,
-                embedding=embedding,
             ).insert()
-        for manual, new_vec in manual_updates:
-            meta = dict(manual.metadata or {})
-            meta.update(emb_meta)
-            manual.metadata = meta
-            manual.embedding = new_vec
-            manual.update("metadata", "embedding")
-        if new_dim_bytes:
-            # Apaga vetores de valores de outro espaço/provedor/modelo/dimensão (inclusive mesma dimensão,
-            # como Gemini 1024 → Mistral 1024) para que update_text_embeddings reindexe todos no novo espaço.
-            db.execute(
-                "DELETE FROM analytics_text_embedding WHERE contexto_id = ? "
-                "AND (embedding IS NULL "
-                "OR LENGTH(embedding) <> ? "
-                "OR COALESCE(embedding_provider, '') <> ? "
-                "OR (COALESCE(embedding_model, '') <> ? AND ? <> ''))",
-                [cid, new_dim_bytes, cfg.provider, cfg.embedding_model or "", cfg.embedding_model or ""],
-            )
-
-    values = update_text_embeddings(contexto, embedder)
-    return {"knowledge_items": len(items), "values": values}
+    return {"knowledge_items": len(items)}

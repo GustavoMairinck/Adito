@@ -3,8 +3,8 @@ import logging
 import os
 import time
 
-from agents.providers import resolve_active_llm_config
-from analytics_index.embedder import CotaEsgotada, EmbedderIndisponivel, get_embedder
+from analytics_index.modelo_local import estado as estado_modelo
+from analytics_index.valores import indice_valores
 from core import db
 from core.contexts import (
     ORIGEM_MANUAL,
@@ -18,10 +18,9 @@ from core.datastore import REPO_APP_DIR, app_db_path, connect_dados, dados_db_pa
 from core.db import api_dt, to_db_id
 from core.records import Contexto, KnowledgeItem, QueryExecution, User
 from core.rich_logging import log_error, log_success
-from core.vectors import embedding_diagnostics
 
-from .core_methods import llm_configured, llm_missing_message
-from .errors import bad_request, forbidden, is_cota_message, llm_error_message, not_found
+from .core_methods import llm_configured
+from .errors import bad_request, forbidden, not_found
 from .params import Choice, Str, Uuid, validate
 from .registry import rpc
 from .session import current
@@ -112,13 +111,12 @@ def system_status(params):
             "SELECT item_type, COUNT(*) FROM knowledge_knowledgeitem GROUP BY item_type"
         ):
             counts[item_type] = total
-        vector_count = db.execute("SELECT COUNT(*) FROM knowledge_knowledgeitem WHERE embedding IS NOT NULL").fetchone()[0]
+        vector_count = len(indice_valores())
         # Texto como está no app.db (o front só exibe).
         last_training = db.execute("SELECT MAX(created_at) FROM knowledge_knowledgeitem").fetchone()[0]
     except Exception as exc:
         logger.warning("Erro ao buscar stats do knowledge: %s", exc)
 
-    cfg = resolve_active_llm_config()
     return {
         "services": services,
         "systemStats": {
@@ -130,13 +128,27 @@ def system_status(params):
             "trainedExamples": counts["query_example"],
             "lastTraining": last_training,
         },
-        "embeddings": embedding_diagnostics(cfg),
+        "embeddings": busca_semantica(),
+    }
+
+
+def busca_semantica() -> dict:
+    """Modelo local e vetores do dados.db, como o painel admin mostra."""
+    indice = indice_valores()
+    modelo = estado_modelo()
+    return {
+        "modelo": modelo["modelo"],
+        "modelo_pronto": modelo["pronto"],
+        "modelo_erro": modelo["erro"],
+        "valores_disponiveis": indice.disponivel,
+        "valores": len(indice),
+        "motivo": indice.motivo,
     }
 
 
 @rpc("admin.bootstrap")
 def bootstrap(params):
-    """Recarrega e valida os contextos e, com a chave configurada, gera o RAG e o índice de valores."""
+    """Recarrega e valida os contextos e refaz a Base de conhecimento (sem API: nada de embeddings aqui)."""
     user, tenant = current()
     if not user.is_staff:
         raise forbidden("Apenas administradores podem preparar os dados.")
@@ -158,11 +170,10 @@ def bootstrap(params):
             loaded.append({"pasta": folder.name, "ativo": False, "erros": [str(exc)]})
             continue
         item = {"pasta": folder.name, "slug": contexto.slug, "nome": contexto.name, "ativo": contexto.is_active, "erros": errors}
-        cfg = resolve_active_llm_config()
-        if contexto.is_active and not errors and llm_configured() and cfg.supports_embeddings:
+        if contexto.is_active and not errors:
             try:
-                summary = index_contexto(contexto, get_embedder(), examples)
-                item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=summary["values"]["created"] + summary["values"]["skipped"])
+                summary = index_contexto(contexto, examples)
+                item.update(indexado=True, rag_itens=summary["knowledge_items"], valores=_valores_do_contexto(contexto))
             except Exception as exc:
                 log_error("data_bootstrap", f"Falha ao indexar {contexto.slug}: {exc}")
                 item.update(indexado=False, erros=[f"Indexação falhou: {exc}"])
@@ -172,6 +183,14 @@ def bootstrap(params):
 
     log_success("data_bootstrap", f"{sum(c['ativo'] for c in loaded)}/{len(loaded)} contexto(s) válidos")
     return {"status": "success", "chave_configurada": llm_configured(), "contextos": loaded}
+
+
+def _valores_do_contexto(ctx: Contexto) -> int:
+    """Valores com vetor pronto (vindos no dados.db) nas views do contexto."""
+    indice = indice_valores()
+    if not indice.disponivel or not len(indice):
+        return 0
+    return int(sum(1 for view in indice.views if view in set(ctx.view_names())))
 
 
 @rpc("admin.contextos")
@@ -198,7 +217,7 @@ def contextos(params):
             "ativo": ctx.is_active,
             "tabelas": [view["name"] for view in ctx.views],
             "rag_itens": db.execute("SELECT COUNT(*) FROM knowledge_knowledgeitem WHERE contexto_id = ?", [cid]).fetchone()[0],
-            "valores": db.execute("SELECT COUNT(*) FROM analytics_text_embedding WHERE contexto_id = ?", [cid]).fetchone()[0],
+            "valores": _valores_do_contexto(ctx),
             "atualizado_em": api_dt(ctx.updated_at),
             "erros": erros,
         })
@@ -258,7 +277,8 @@ def training_json(item: KnowledgeItem, ctx: Contexto | None = None) -> dict:
         "contexto_slug": ctx.slug if ctx else None,
         "contexto_nome": ctx.name if ctx else None,
         "origem": "manual" if manual else "contexto",
-        "indexado": item.embedding is not None,
+        # O vetor é calculado na hora pelo modelo local; todo item entra na busca.
+        "indexado": True,
         "created_at": api_dt(item.created_at),
         "updated_at": api_dt(item.updated_at),
     }
@@ -276,14 +296,6 @@ def trainings_list(params):
     return [training_json(item, contextos.get(item.contexto_id)) for item in items]
 
 
-def _embeddings_unsupported_message(label: str) -> str:
-    return (
-        f"O provedor ativo ({label}) não gera embeddings. "
-        "O chat funciona normalmente em modo fallback textual; para indexação vetorial e Wipe & Retrain, "
-        "configure um provedor com suporte a embeddings (ex.: Gemini, OpenAI, Z.AI ou Ollama)."
-    )
-
-
 @rpc("admin.trainings.create")
 def trainings_create(params):
     _, tenant = _staff()
@@ -293,12 +305,6 @@ def trainings_create(params):
     if data["type"] == "sql" and not data.get("question"):
         raise bad_request({"question": ["Pergunta é obrigatória para training SQL."]})
     ctx = _contexto_do_tenant(tenant, data["contexto"]) if data.get("contexto") else None
-    cfg = resolve_active_llm_config()
-    if not llm_configured():
-        raise bad_request({"detail": llm_missing_message("adicionar treinamentos")})
-    if not cfg.supports_embeddings:
-        raise bad_request({"detail": _embeddings_unsupported_message(cfg.label)})
-
     item_type = TYPE_TO_ITEM_TYPE[data["type"]]
     question = data.get("question", "")
     raw_content = data["content"]
@@ -306,26 +312,13 @@ def trainings_create(params):
     metadata = {
         "name": question[:60] if item_type == "query_example" else raw_content[:60],
         "source": ORIGEM_MANUAL,
-        "embedding_provider": cfg.provider,
-        "embedding_model": cfg.embedding_model,
     }
     if item_type == "query_example":
         metadata.update({"question": question, "sql": raw_content})
 
-    try:
-        embedding = get_embedder().embed_query(question if item_type == "query_example" else raw_content)
-    except (CotaEsgotada, EmbedderIndisponivel) as exc:
-        raise bad_request({"detail": str(exc)}) from None
-    except Exception as exc:
-        log_error("trainings_create", f"Falha ao gerar embedding: {exc}")
-        raise bad_request({
-            "detail": llm_error_message(exc)
-            or f"Não foi possível gerar o embedding do treinamento com {cfg.label}. Verifique a configuração e a conexão e tente de novo."
-        }) from None
-
     item = KnowledgeItem(
         tenant_id=tenant.id, contexto_id=ctx.id if ctx else None,
-        item_type=item_type, content=content, metadata=metadata, embedding=embedding,
+        item_type=item_type, content=content, metadata=metadata,
     )
     return training_json(item.insert(), ctx)
 
@@ -346,16 +339,11 @@ def trainings_delete(params):
 
 @rpc("admin.trainings.retrain")
 def trainings_retrain(params):
-    """Refaz o RAG a partir dos arquivos de um contexto (ou de todos os ativos), mantendo os itens manuais."""
+    """Refaz a Base de conhecimento a partir dos arquivos de um contexto (ou de todos os ativos), mantendo os manuais."""
     _, tenant = _staff()
     if tenant is None:
         raise bad_request({"message": "Usuário sem tenant."})
     data = validate(RETRAIN, params)
-    cfg = resolve_active_llm_config()
-    if not llm_configured():
-        raise bad_request({"detail": llm_missing_message("refazer o índice")})
-    if not cfg.supports_embeddings:
-        raise bad_request({"detail": _embeddings_unsupported_message(cfg.label)})
     tid = to_db_id(tenant.id)
     if data.get("contexto"):
         alvos = [_contexto_do_tenant(tenant, data["contexto"])]
@@ -365,20 +353,9 @@ def trainings_retrain(params):
     for folder in context_folders():
         pastas.setdefault(slug_da_pasta(folder), folder)
 
-    try:
-        embedder = get_embedder()
-    except EmbedderIndisponivel as exc:
-        raise bad_request({"detail": str(exc)}) from None
-
     out = []
-    cota_acabou = None
     for ctx in alvos:
         item = {"contexto": ctx.id, "slug": ctx.slug, "nome": ctx.name, "indexado": False, "erros": []}
-        if cota_acabou:
-            # A cota acabou num contexto anterior: insistir só gastaria tentativas à toa.
-            item["erros"] = [f"Não processado: {cota_acabou}"]
-            out.append(item)
-            continue
         folder = pastas.get(ctx.slug)
         if folder is None:
             item["erros"] = [f"Pasta do contexto '{ctx.slug}' não encontrada."]
@@ -389,14 +366,11 @@ def trainings_retrain(params):
             if not ctx.is_active or errors:
                 item["erros"] = errors or ["Contexto inativo."]
             else:
-                summary = index_contexto(ctx, embedder, examples)
+                summary = index_contexto(ctx, examples)
                 item.update(indexado=True, rag_itens=summary["knowledge_items"])
         except Exception as exc:
             log_error("trainings_retrain", f"Falha ao reindexar {ctx.slug}: {exc}")
-            amigavel = str(exc) if isinstance(exc, CotaEsgotada) else llm_error_message(exc)
-            item["erros"] = [f"Indexação falhou: {amigavel or exc}"]
-            if isinstance(exc, CotaEsgotada) or is_cota_message(amigavel):
-                cota_acabou = amigavel
+            item["erros"] = [f"Indexação falhou: {exc}"]
         item["manuais_mantidos"] = KnowledgeItem.count(
             "contexto_id = ? AND COALESCE(json_extract(metadata, '$.source'), '') = ?",
             [to_db_id(ctx.id), ORIGEM_MANUAL],

@@ -443,9 +443,6 @@ class BaseConhecimentoTests(AppDbTestCase):
         })
         env.start()
         self.addCleanup(env.stop)
-        p = patch("rpc.admin.get_embedder", return_value=EmbedderFalso())
-        p.start()
-        self.addCleanup(p.stop)
         load_handlers()
         _, tenant = session.current()
         self.ctx, _, erros = load_context_dir(self.folder, tenant)
@@ -490,11 +487,15 @@ class BaseConhecimentoTests(AppDbTestCase):
         self.assertNotIn(novo["id"], {i["id"] for i in self._lista()})
         self.assertEqual(call("admin.trainings.delete", {"id": novo["id"]})[0], 404)
 
-    def test_create_sem_chave_do_gemini_devolve_aviso_claro(self):
+    def test_create_e_reindex_funcionam_sem_chave_de_ia(self):
+        # A Base de conhecimento não gera mais embeddings por API: nada aqui depende da chave.
         with patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
             status, body = call("admin.trainings.create", {"type": "documentation", "content": "Regra qualquer."})
-        self.assertEqual(status, 400, body)
-        self.assertIn("chave do Gemini", body["detail"])
+            self.assertEqual(status, 200, body)
+            self.assertTrue(body["indexado"])
+            status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
+        self.assertEqual(status, 200, body)
+        self.assertTrue(body["contextos"][0]["indexado"], body)
 
     def test_item_sem_contexto_vale_para_todos_e_contexto_invalido_recusa(self):
         status, novo = call("admin.trainings.create", {"type": "documentation", "content": "Bolsista é aluno com bolsa."})
@@ -505,28 +506,6 @@ class BaseConhecimentoTests(AppDbTestCase):
             "type": "documentation", "content": "x", "contexto": "00000000-0000-0000-0000-000000000000",
         })
         self.assertEqual(status, 400)
-
-    def test_reindex_sem_chave_recusa(self):
-        with patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
-            status, _ = call("admin.trainings.retrain", {"contexto": self.ctx.id})
-        self.assertEqual(status, 400)
-
-    def test_reindex_com_cota_esgotada_devolve_mensagem_clara(self):
-        from analytics_index.embedder import CotaEsgotada
-
-        class SemCota:
-            def embed_documents(self, texts):
-                raise CotaEsgotada("A cota diária da chave do Gemini acabou.")
-
-            embed_query = embed_documents
-
-        with patch("rpc.admin.get_embedder", return_value=SemCota()):
-            status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
-        self.assertEqual(status, 200, body)
-        erro = body["contextos"][0]["erros"][0]
-        self.assertFalse(body["contextos"][0]["indexado"])
-        self.assertIn("cota diária", erro)
-
 
 class ExplorerTests(AppDbTestCase):
     def setUp(self):
@@ -1648,67 +1627,6 @@ class QaAccuracyGuardsTests(unittest.TestCase):
                 rows = conn.execute(ex["sql"]).fetchall()
                 self.assertGreater(len(rows), 0, f"Exemplo #{idx} retornou 0 linhas: {ex['question']}")
 
-    def _run_extractor(self, system_prompt: str, fake_items: dict[str, list]) -> str:
-        from types import SimpleNamespace
-        from agents.bi_agent.nodes.query_extractor import query_extractor
-
-        embedder = SimpleNamespace(embed_query=lambda _text: [0.1, 0.2])
-        state = {
-            "tenant_id": "00000000-0000-0000-0000-000000000001",
-            "contexto_id": "00000000-0000-0000-0000-000000000002",
-            "user_input": "quantos projetos existem?",
-            "system_prompt": system_prompt,
-        }
-        with patch("agents.bi_agent.nodes.query_extractor.KnowledgeItem.count", return_value=3), patch(
-            "agents.bi_agent.nodes.query_extractor._search_knowledge",
-            side_effect=lambda _t, _c, _emb, item_type: fake_items.get(item_type, []),
-        ):
-            out = query_extractor(state, embedder)
-        return out["retrieved_schema"]
-
-    def test_remove_ddl_e_doc_quando_identicos_ao_system_prompt(self) -> None:
-        from types import SimpleNamespace
-
-        ddl_text = "- vfact_projeto_pesquisa_resolved(id_projeto INTEGER)"
-        doc_text = "Regras oficiais do contexto pesquisa-extensao-ifes."
-        ex_text = "Pergunta: Total?\nSQL: SELECT COUNT(*) FROM vfact_projeto_pesquisa_resolved"
-        fake_items = {
-            "ddl": [SimpleNamespace(content=ddl_text)],
-            "doc": [SimpleNamespace(content=doc_text)],
-            "query_example": [SimpleNamespace(content=ex_text)],
-        }
-        retrieved = self._run_extractor(
-            f"ALLOWED VIEWS:\n{ddl_text}\n\nBUSINESS RULES:\n{doc_text}",
-            fake_items,
-        )
-        self.assertNotIn(ddl_text, retrieved)
-        self.assertNotIn(doc_text, retrieved)
-        self.assertIn(ex_text, retrieved)
-
-    def test_preserva_doc_extra_nao_contido_no_system_prompt(self) -> None:
-        from types import SimpleNamespace
-
-        extra_doc = "Nota adicional indexada fora do rules.md."
-        fake_items = {
-            "ddl": [],
-            "doc": [SimpleNamespace(content=extra_doc)],
-            "query_example": [],
-        }
-        retrieved = self._run_extractor("ALLOWED VIEWS:\n- v1(id INT)", fake_items)
-        self.assertIn(extra_doc, retrieved)
-
-    def test_preserva_ddl_e_doc_quando_system_prompt_vazio(self) -> None:
-        from types import SimpleNamespace
-
-        ddl_text = "- vfact_projeto_pesquisa_resolved(id_projeto INTEGER)"
-        fake_items = {
-            "ddl": [SimpleNamespace(content=ddl_text)],
-            "doc": [],
-            "query_example": [],
-        }
-        retrieved = self._run_extractor("", fake_items)
-        self.assertIn(ddl_text, retrieved)
-
     def test_reprova_sql_sem_is_null_em_pergunta_de_projetos_sem_coordenador(self) -> None:
         from agents.bi_agent.nodes.sql_validator import check_missing_null_guard
 
@@ -1967,8 +1885,8 @@ class MultiProvedorLLMTests(AppDbTestCase):
         self.assertTrue(body["llm_configured"])
         self.assertTrue(body["llm_is_local"])
         self.assertEqual(type(llm).__name__, "ChatOpenAI")
-        self.assertEqual(type(emb).__name__, "OpenAIEmbeddings")
-        self.assertFalse(emb.check_embedding_ctx_length)
+        # O embedding é sempre o modelo local, qualquer que seja o provedor do chat.
+        self.assertEqual(type(emb).__name__, "EmbedderLocal")
 
     def test_mistral_e_openrouter_instanciam_chat_e_embeddings(self) -> None:
         from agents.config import get_chat_llm, get_embeddings
@@ -1976,42 +1894,11 @@ class MultiProvedorLLMTests(AppDbTestCase):
             llm = get_chat_llm(temperature=0.0)
             emb = get_embeddings()
         self.assertEqual(type(llm).__name__, "ChatOpenAI")
-        self.assertEqual(type(emb).__name__, "OpenAIEmbeddings")
-        self.assertEqual(emb.model, "mistral-embed")
-        self.assertEqual(emb.model_kwargs.get("encoding_format"), "float")
-        self.assertFalse(emb.check_embedding_ctx_length)
+        self.assertEqual(type(emb).__name__, "EmbedderLocal")
 
         with self._clean_llm_env({"ADITO_LLM_PROVIDER": "openrouter", "ADITO_LLM_API_KEY": "or-fake"}):
             emb_or = get_embeddings()
-        self.assertEqual(emb_or.model, "openai/text-embedding-3-small")
-
-    def test_guarda_defensiva_quando_provedor_sem_embeddings_bloqueia_retrain(self) -> None:
-        from agents.config import get_embeddings
-        from agents.providers import ActiveLLMConfig
-
-        sem_emb = ActiveLLMConfig(
-            provider="mock",
-            label="Mock",
-            protocol="openai_compatible",
-            model="m",
-            base_url="https://api.exemplo.com/v1",
-            api_key="k",
-            supports_embeddings=False,
-            embedding_model=None,
-            embedding_dim=None,
-            is_local=False,
-            configured=True,
-        )
-        with patch("agents.config.resolve_active_llm_config", return_value=sem_emb), \
-                patch("rpc.admin.resolve_active_llm_config", return_value=sem_emb), \
-                patch("rpc.core_methods.resolve_active_llm_config", return_value=sem_emb):
-            self.assertIsNone(get_embeddings())
-            retrain_status, retrain_body = call("admin.trainings.retrain", {})
-            create_status, create_body = call("admin.trainings.create", {"type": "documentation", "content": "Regra"})
-        self.assertEqual(retrain_status, 400)
-        self.assertIn("não gera embeddings", retrain_body["detail"])
-        self.assertEqual(create_status, 400)
-        self.assertIn("não gera embeddings", create_body["detail"])
+        self.assertIs(emb_or, emb)
 
     def test_validacao_test_llm_key_openai_compativel_e_loopback(self) -> None:
         import httpx
@@ -2134,7 +2021,7 @@ class MultiProvedorLLMTests(AppDbTestCase):
         )
         schema = out["retrieved_schema"]
         self.assertIn("Regra manual 11", schema)
-        self.assertEqual(schema.count("Regra manual "), qe.FALLBACK_MANUAL_LIMIT)
+        self.assertEqual(schema.count("Regra manual "), qe.MANUAL_LIMIT)
 
     def test_semantic_value_resolver_pula_quando_embedder_none(self) -> None:
         import importlib

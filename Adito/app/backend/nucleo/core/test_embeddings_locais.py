@@ -6,6 +6,7 @@ Usa um modelo falso (trigramas de caracteres): textos parecidos ficam próximos,
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.util
 import io
 import json
@@ -186,6 +187,42 @@ class GeracaoEIndiceTests(unittest.TestCase):
 
         ok, erro = validate_read_only_sql("SELECT valor FROM adito_valor_embedding", {"vfact_teste"})
         self.assertFalse(ok, erro)
+
+
+class ExemplosLocaisTests(unittest.TestCase):
+    EXEMPLOS = [
+        {"pergunta": "Quantas bolsas do PIBIC por campus?", "texto": "A"},
+        {"pergunta": "Quantas ações de extensão no campus Serra?", "texto": "B"},
+        {"pergunta": "Quais grupos de pesquisa certificados?", "texto": "C"},
+        {"pergunta": "Evolução anual das produções do Lattes", "texto": "D"},
+        {"pergunta": "Investimento estimado em bolsas por agência", "texto": "E"},
+    ]
+
+    def test_escolhe_o_exemplo_mais_proximo_primeiro_e_no_maximo_quatro(self):
+        qe = importlib.import_module("agents.bi_agent.nodes.query_extractor")
+
+        escolhidos = qe.escolher_exemplos(embedder_falso(), "grupos de pesquisa certificados no Ifes", self.EXEMPLOS)
+        self.assertEqual(escolhidos[0]["texto"], "C")
+        self.assertGreaterEqual(len(escolhidos), qe.MIN_EXEMPLOS)
+        self.assertLessEqual(len(escolhidos), qe.MAX_EXEMPLOS)
+        sims = [e["similaridade"] for e in escolhidos]
+        self.assertEqual(sims, sorted(sims, reverse=True))
+
+    def test_vetores_dos_exemplos_sao_calculados_uma_vez(self):
+        qe = importlib.import_module("agents.bi_agent.nodes.query_extractor")
+
+        chamadas = []
+
+        class Contador(MotorFalso):
+            def embed(self, textos):
+                chamadas.append(list(textos))
+                return super().embed(textos)
+
+        emb = EmbedderLocal(Modelo(chave="contador", nome="c", dim=DIM), criar=lambda m: Contador())
+        qe.escolher_exemplos(emb, "bolsas", self.EXEMPLOS)
+        qe.escolher_exemplos(emb, "grupos", self.EXEMPLOS)
+        # 1 lote com os 5 exemplos + 1 vetor por pergunta
+        self.assertEqual([len(c) for c in chamadas], [5, 1, 1])
 
 
 if __name__ == "__main__":

@@ -2,11 +2,10 @@
 Comandos de manutenção do Adito (substituem os do manage.py). Rodar de backend/nucleo:
 
     python -m core.cli load-context <pasta> [--index]
-    python -m core.cli sync-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]
-    python -m core.cli rebuild-embeddings --contexto <slug> [--table V] [--batch-size N] [--limit N] [--dry-run]
     python -m core.cli flush-data [--dry-run] [--keep-email EMAIL]
 
 Usam o mesmo app.db do app (ADITO_DATA_DIR / ADITO_APP_DB) e o dados.db atual.
+Os vetores dos valores não são mais gerados aqui: vêm prontos no dados.db (Adito/scripts/gerar_embeddings_dados.py).
 """
 from __future__ import annotations
 
@@ -15,8 +14,6 @@ import os
 import sqlite3
 import sys
 
-from analytics_index.config import TEXT_EMBEDDING_BATCH_SIZE
-
 from . import db
 from .records import Contexto, Tenant
 from .schema import ensure_schema
@@ -24,15 +21,6 @@ from .schema import ensure_schema
 
 class Erro(Exception):
     pass
-
-
-def _embedder():
-    from analytics_index.embedder import EmbedderIndisponivel, get_embedder
-
-    try:
-        return get_embedder()
-    except EmbedderIndisponivel as exc:
-        raise Erro(str(exc)) from exc
 
 
 def _contexto(slug: str | None) -> Contexto:
@@ -59,29 +47,8 @@ def load_context(args) -> None:
         raise Erro(f"Contexto '{contexto.slug}' carregado como inativo: corrija os erros acima.")
     print(f"Contexto '{contexto.slug}' válido: {len(contexto.views)} view(s), {len(examples)} exemplo(s).")
     if args.index:
-        summary = index_contexto(contexto, _embedder(), examples)
-        print(f"Indexado: {summary['knowledge_items']} item(ns) de RAG, {summary['values']['created']} valor(es).")
-
-
-def embeddings(args) -> None:
-    from analytics_index.services import rebuild_text_embeddings, sync_text_embeddings
-
-    contexto = _contexto(args.contexto)
-    fn = rebuild_text_embeddings if args.comando == "rebuild-embeddings" else sync_text_embeddings
-    try:
-        summary = fn(
-            contexto=contexto,
-            embedder=None if args.dry_run else _embedder(),
-            table=args.table,
-            batch_size=args.batch_size,
-            dry_run=args.dry_run,
-            limit=args.limit,
-        )
-    except ValueError as exc:
-        raise Erro(str(exc)) from exc
-    for table, t in summary["tables"].items():
-        print(f"{table}: found={t['found']} pending={t['pending']} created={t['created']} skipped={t['skipped']}")
-    print(f"Concluído: created={summary['created']} skipped={summary['skipped']} dry_run={summary['dry_run']}")
+        summary = index_contexto(contexto, examples)
+        print(f"Base de conhecimento refeita: {summary['knowledge_items']} item(ns).")
 
 
 def flush_data(args) -> None:
@@ -123,18 +90,8 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("load-context", help="Carrega e valida um contexto (views.json, rules.md, examples.json).")
     p.add_argument("pasta")
-    p.add_argument("--index", action="store_true", help="Gera o RAG e o índice de valores (usa a chave do Gemini).")
+    p.add_argument("--index", action="store_true", help="Refaz a Base de conhecimento do contexto (sem API).")
     p.set_defaults(fn=load_context)
-
-    for nome, ajuda in (("sync-embeddings", "Sincroniza os embeddings de valores."),
-                        ("rebuild-embeddings", "Recria os embeddings de valores.")):
-        p = sub.add_parser(nome, help=ajuda)
-        p.add_argument("--contexto")
-        p.add_argument("--table")
-        p.add_argument("--batch-size", type=int, default=TEXT_EMBEDDING_BATCH_SIZE)
-        p.add_argument("--limit", type=int)
-        p.add_argument("--dry-run", action="store_true")
-        p.set_defaults(fn=embeddings)
 
     p = sub.add_parser("flush-data", help="Apaga conversas e auditoria de SQL.")
     p.add_argument("--dry-run", action="store_true")
