@@ -7,6 +7,7 @@ from core.rich_logging import log_node_end, log_node_start, log_panel
 from ..config import SQLResponse
 from ..state import BiAgentState
 from .field_formats import field_formats_as_strings
+from .sql_generator import contexto_do_prompt, pergunta_para_o_modelo
 
 
 def sql_corrector(
@@ -19,13 +20,12 @@ def sql_corrector(
     attempt = state.get("correction_attempts", 0) + 1
     log_node_start("corrector", f"tentativa={attempt} erro={error[:160]!r}")
 
-    question = state.get("rewritten_user_input") or state.get("user_input", "")
+    question = pergunta_para_o_modelo(state)
     # Mesmo contexto do gerador: sem a pergunta e o esquema, a correção podia mudar o sentido da consulta.
     system_content = (
         f"You are a SQL expert for the {dialect.upper()} database. Fix the query so it answers the question.\n\n"
         f"Write the explanation field in Brazilian Portuguese.\n\n"
-        f"RETRIEVED CONTEXT:\n{state.get('retrieved_schema', '')}\n\n"
-        f"{state.get('system_prompt', '')}"
+        f"{contexto_do_prompt(state)}"
     )
     prompt = (
         f"Question: {question}\n"

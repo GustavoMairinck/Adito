@@ -175,7 +175,7 @@ def sql_validator(
         log_node_end("validator", "valid=False")
         return {"validation_result": {"valid": False, "error": f"Erro de Banco: {exc}"}}
 
-    question = state.get("rewritten_user_input") or state.get("user_input", "")
+    question = state.get("pergunta_original") or state.get("user_input", "")
     semantic_error = check_missing_null_guard(question, sql, dialect=dialect)
     if semantic_error:
         log_warning("bi", f"Validação semântica (NULL guard) falhou: {semantic_error}")

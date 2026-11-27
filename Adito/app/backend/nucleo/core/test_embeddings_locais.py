@@ -225,5 +225,78 @@ class ExemplosLocaisTests(unittest.TestCase):
         self.assertEqual([len(c) for c in chamadas], [5, 1, 1])
 
 
+class ResolvedorValoresTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        banco = Path(self.tmp.name) / "dados.db"
+        criar_banco(banco)
+        p = patch.object(valores, "modelo_ativo", return_value=MODELO_FALSO)
+        p.start()
+        self.addCleanup(p.stop)
+        carregar_script("gerar_embeddings_dados").gerar(
+            banco, criar_contexto(Path(self.tmp.name) / "ctx"), embedder_falso(), log=lambda *_: None
+        )
+        self.indice = valores.carregar_indice(banco)
+        self.vr = importlib.import_module("agents.bi_agent.nodes.value_resolver")
+
+    def test_trechos_ignoram_numeros_e_palavras_de_metrica_nas_pontas(self):
+        termos = [t[2] for t in self.vr.trechos("Quantas bolsas de IC no campus de Cariacica em 2024?")]
+        self.assertIn("cariacica", termos)
+        self.assertIn("ic", termos)
+        self.assertNotIn("quantas", termos)
+        self.assertFalse(any("2024" in t for t in termos))
+        self.assertIn("ciencia da computacao", [t[2] for t in self.vr.trechos("projetos de ciência da computação")])
+
+    def test_sinonimo_identico_e_semantico(self):
+        sinonimos = {"ic": [{"coluna": "programa_fomento", "valores": ["pibic", "pivic"]}]}
+        achados = self.vr.resolver_valores(
+            ["bolsas de IC no campus cariacca em Engenharias"], self.indice, embedder_falso(), sinonimos,
+        )
+        por_valor = {a["valor"]: a for a in achados}
+        self.assertEqual(por_valor["pibic"]["origem"], "sinônimo")
+        self.assertEqual(por_valor["Engenharias"]["origem"], "idêntico")
+        self.assertEqual(por_valor["Cariacica"]["origem"], "semântico")
+        self.assertEqual(por_valor["Cariacica"]["termo"], "cariacca")
+
+    def test_nao_inventa_valor_quando_nada_passa_do_minimo(self):
+        self.assertEqual(self.vr.resolver_valores(["quantos registros xyz?"], self.indice, embedder_falso(), {}), [])
+
+    def test_sem_vetores_ainda_usa_sinonimos(self):
+        desligado = valores.IndiceValores(False, "sem vetores")
+        achados = self.vr.resolver_valores(
+            ["bolsas de IC"], desligado, embedder_falso(), {"ic": [{"coluna": "programa_fomento", "valores": ["pibic"]}]},
+        )
+        self.assertEqual([a["valor"] for a in achados], ["pibic"])
+
+    def test_bloco_do_prompt_escapa_aspas(self):
+        bloco = self.vr.bloco_valores([{"termo": "dagua", "coluna": "titulo", "valor": "Olho d'água",
+                                        "views": ["v1"], "similaridade": 0.9, "origem": "semântico"}])
+        self.assertIn("titulo = 'Olho d''água' (em v1)", bloco)
+
+
+class PerguntaOriginalTests(unittest.TestCase):
+    def test_gerador_recebe_a_pergunta_do_usuario_quando_a_instrucao_diverge(self):
+        gen = importlib.import_module("agents.bi_agent.nodes.sql_generator")
+        texto = gen.pergunta_para_o_modelo({
+            "user_input": "Quantos projetos de pesquisa em 2024 no campus Serra?",
+            "pergunta_original": "e na Serra?",
+        })
+        self.assertIn("Pergunta do usuário: e na Serra?", texto)
+        self.assertIn("não acrescente filtros", texto)
+        self.assertEqual(gen.pergunta_para_o_modelo({"user_input": "X", "pergunta_original": "X"}), "X")
+
+    def test_prompt_tem_bloco_fixo_antes_e_valores_no_fim(self):
+        gen = importlib.import_module("agents.bi_agent.nodes.sql_generator")
+        texto = gen.contexto_do_prompt({
+            "system_prompt": "REGRAS",
+            "retrieved_schema": "EXEMPLOS",
+            "valores_reais": [{"termo": "serra", "coluna": "campus", "valor": "Serra", "views": [],
+                               "similaridade": 1.0, "origem": "idêntico"}],
+        })
+        self.assertLess(texto.index("REGRAS"), texto.index("EXEMPLOS"))
+        self.assertLess(texto.index("EXEMPLOS"), texto.index("campus = 'Serra'"))
+
+
 if __name__ == "__main__":
     unittest.main()

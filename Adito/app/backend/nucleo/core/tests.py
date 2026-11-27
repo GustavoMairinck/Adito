@@ -1324,48 +1324,6 @@ class AgentesRevisaoTests(unittest.TestCase):
         sends = route_from_orchestrator({"calls": [{"intent": "bi_agent", "delegation_instruction": "contar projetos"}]})
         self.assertEqual(sends[0].arg["delegation_instruction"], "contar projetos")
 
-    def test_busca_de_valores_isolada_por_execucao(self):
-        import threading
-        from langchain_core.runnables.config import ContextThreadPoolExecutor
-        from agents.bi_agent.tools import vector_search as vs
-
-        def busca(**kw):
-            return [{"distance": 0.1, "embedding_text": f"{kw['contexto']}:{kw['query_embedding']}"}]
-
-        embedder = MagicMock()
-        embedder.embed_query.side_effect = lambda q: q
-        resultados, barreira = {}, threading.Barrier(2)
-
-        def execucao(nome):
-            vs.configure_vector_search(contexto=nome, embedder=embedder, top_k=3)
-            barreira.wait()  # as duas configuram antes de qualquer busca
-            # Como o ToolNode do LangGraph: a ferramenta roda numa thread do executor que copia o contexto.
-            with ContextThreadPoolExecutor(max_workers=1) as ex:
-                ex.submit(vs.search_analytics_values.invoke, {"query": f"termo-{nome}", "source_table": "v"}).result()
-            resultados[nome] = vs.vector_search_results()
-
-        with patch.object(vs, "configured_tables", return_value=["v"]), \
-                patch.object(vs, "search_text_embeddings", side_effect=busca):
-            threads = [threading.Thread(target=execucao, args=(n,)) for n in ("A", "B")]
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
-
-        for nome in ("A", "B"):
-            candidatos, termos, _ = resultados[nome]
-            self.assertEqual(termos, [f"termo-{nome}"])
-            self.assertEqual([c["embedding_text"] for c in candidatos], [f"{nome}:termo-{nome}"])
-
-
-    def test_busca_de_valores_e_solta_ao_terminar(self):
-        from agents.bi_agent.tools import vector_search as vs
-
-        token = vs.configure_vector_search(contexto="X", embedder=MagicMock(), top_k=3)
-        self.assertIsNotNone(vs._busca.get())
-        vs.reset_vector_search(token)
-        self.assertIsNone(vs._busca.get())
-
     def test_resposta_dos_dados_passa_callbacks_do_langfuse(self):
         from agents.bi_agent import tool
 
@@ -1457,14 +1415,6 @@ class AgentesRevisaoTests(unittest.TestCase):
         self.assertIn("CREATE VIEW v (campus TEXT)", sistema.content)
         self.assertIn("regras do contexto", sistema.content)
         self.assertIn("quantos projetos por campus?", humano.content)
-
-    def test_prompt_do_resolvedor_sem_vendas(self):
-        from agents.bi_agent.config import BI_VALUE_RESOLVER_SYSTEM_PROMPT as prompt
-
-        for termo in ("sales", "client", "CRM", "vendas", "salesperson", "product names"):
-            self.assertNotIn(termo, prompt)
-        self.assertIn("research group", prompt)
-
 
 class EvalAcuraciaComparatorTests(unittest.TestCase):
     """Valida comparador semântico e integridade do dataset gabarito (US-QA-04)."""
@@ -1713,129 +1663,6 @@ class QaAccuracyGuardsTests(unittest.TestCase):
         self.assertIn("coordenador_nome IS NULL", err)
 
 
-class SemanticValueResolverTests(AppDbTestCase):
-    """Regressão do erro de prefilling no Gemini e preservação de candidatos no resolvedor."""
-
-    def _criar_contexto_indexado(self, com_valores: bool = True):
-        _, tenant = session.current()
-        ctx = Contexto(
-            tenant_id=tenant.id,
-            slug="teste-resolver",
-            name="Teste Resolver",
-            views=[{"name": "vfact_orientacao_bolsa_resolved", "embed_columns": ["programa_fomento"]}],
-        ).insert()
-        if com_valores:
-            from core.records import AnalyticsTextEmbedding
-            AnalyticsTextEmbedding(
-                tenant_id=tenant.id,
-                contexto_id=ctx.id,
-                source_table="vfact_orientacao_bolsa_resolved",
-                embedding_text="programa_fomento: pibic",
-                payload_json='{"programa_fomento": "pibic"}',
-                value_hash="hash-pibic",
-                embedding=[1.0, 0.0],
-            ).insert()
-        return ctx
-
-    def test_nao_passa_response_format_e_inclui_views_no_prompt(self) -> None:
-        import importlib
-        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
-        from agents.bi_agent.tools import vector_search as vs
-
-        ctx = self._criar_contexto_indexado(com_valores=True)
-        captured: dict = {}
-
-        class FakeAgent:
-            def invoke(self, payload):
-                busca = vs._busca.get()
-                busca.searched_terms.append("PIBIC")
-                busca.candidates.append({
-                    "source_table": "vfact_orientacao_bolsa_resolved",
-                    "embedding_text": "programa_fomento: pibic",
-                    "payload_json": '{"programa_fomento": "pibic"}',
-                    "distance": 0.05,
-                })
-                busca.search_calls.append({"query": "PIBIC", "source_table": "vfact_orientacao_bolsa_resolved"})
-                return {"messages": []}
-
-        def fake_create_react_agent(**kwargs):
-            captured.update(kwargs)
-            return FakeAgent()
-
-        with patch.object(svr, "create_react_agent", side_effect=fake_create_react_agent):
-            out = svr.semantic_value_resolver(
-                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
-                llm_model=object(),
-                embedder=object(),
-            )
-
-        self.assertNotIn("response_format", captured)
-        self.assertIn("vfact_orientacao_bolsa_resolved", captured["prompt"])
-        self.assertIn("programa_fomento", captured["prompt"])
-        self.assertEqual(len(out["rewrite_candidates"]), 1)
-        self.assertEqual(out["value_search_queries"], ["PIBIC"])
-
-    def test_pula_llm_quando_nao_ha_valores_indexados(self) -> None:
-        import importlib
-        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
-
-        ctx = self._criar_contexto_indexado(com_valores=False)
-        with patch.object(svr, "create_react_agent") as mocked_agent:
-            out = svr.semantic_value_resolver(
-                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
-                llm_model=object(),
-                embedder=object(),
-            )
-
-        mocked_agent.assert_not_called()
-        self.assertEqual(out["rewrite_candidates"], [])
-
-    def test_preserva_candidatos_ja_coletados_se_agente_falhar_depois(self) -> None:
-        import importlib
-        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
-        from agents.bi_agent.tools import vector_search as vs
-
-        ctx = self._criar_contexto_indexado(com_valores=True)
-
-        class FailingAfterToolAgent:
-            def invoke(self, payload):
-                busca = vs._busca.get()
-                busca.searched_terms.append("PIBIC")
-                busca.candidates.append({
-                    "source_table": "vfact_orientacao_bolsa_resolved",
-                    "embedding_text": "programa_fomento: pibic",
-                    "payload_json": '{"programa_fomento": "pibic"}',
-                    "distance": 0.05,
-                })
-                raise RuntimeError("erro tardio")
-
-        with patch.object(svr, "create_react_agent", return_value=FailingAfterToolAgent()):
-            out = svr.semantic_value_resolver(
-                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
-                llm_model=object(),
-                embedder=object(),
-            )
-
-        self.assertEqual(len(out["rewrite_candidates"]), 1)
-
-    def test_trata_erro_sqlite_em_has_indexed_values_sem_derrubar_no(self) -> None:
-        import importlib
-        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
-
-        ctx = self._criar_contexto_indexado(com_valores=True)
-        with patch.object(svr, "get_contexto", return_value=ctx), \
-                patch.object(svr.db, "execute", side_effect=sqlite3.OperationalError("database is locked")), \
-                patch.object(svr, "create_react_agent") as mocked_agent:
-            out = svr.semantic_value_resolver(
-                {"user_input": "No programa PIBIC", "contexto_id": str(ctx.id)},
-                llm_model=object(),
-                embedder=object(),
-            )
-
-        mocked_agent.assert_not_called()
-        self.assertEqual(out["rewrite_candidates"], [])
-
-
 class MultiProvedorLLMTests(AppDbTestCase):
     """US-LLM-01 e US-LLM-02: catálogo multi-provedor, validação RPC, embeddings híbridos e fallback."""
 
@@ -2023,16 +1850,6 @@ class MultiProvedorLLMTests(AppDbTestCase):
         self.assertIn("Regra manual 11", schema)
         self.assertEqual(schema.count("Regra manual "), qe.MANUAL_LIMIT)
 
-    def test_semantic_value_resolver_pula_quando_embedder_none(self) -> None:
-        import importlib
-        svr = importlib.import_module("agents.bi_agent.nodes.semantic_value_resolver")
-        out = svr.semantic_value_resolver(
-            {"user_input": "PIBIC", "contexto_id": None},
-            llm_model=object(),
-            embedder=None,
-        )
-        self.assertEqual(out["rewrite_candidates"], [])
-
     def test_diagnostico_embeddings_detecta_dimensao_divergente(self) -> None:
         from agents.providers import resolve_active_llm_config
         from core.records import KnowledgeItem
@@ -2170,7 +1987,7 @@ class ChatCancelamentoTests(AppDbTestCase):
             return {"extracted_context": "ctx"}
 
         def fake_resolver(state, llm_model=None, embedder=None):
-            chamadas.append("semantic_value_resolver")
+            chamadas.append("value_resolver")
             return {}
 
         def fake_generator(state, llm_model=None, dialect="sqlite"):
@@ -2179,7 +1996,7 @@ class ChatCancelamentoTests(AppDbTestCase):
 
         with (
             patch("agents.bi_agent.graph.query_extractor", side_effect=fake_extractor),
-            patch("agents.bi_agent.graph.semantic_value_resolver", side_effect=fake_resolver),
+            patch("agents.bi_agent.graph.value_resolver", side_effect=fake_resolver),
             patch("agents.bi_agent.graph.sql_generator", side_effect=fake_generator),
             patch("agents.bi_agent.agent.build_system_prompt", return_value="sys"),
         ):
@@ -2398,7 +2215,7 @@ class ChatCancelamentoTests(AppDbTestCase):
             return {"extracted_context": "ctx"}
 
         def fake_resolver(state, llm_model=None, embedder=None):
-            etapas_chamadas.append("semantic_value_resolver")
+            etapas_chamadas.append("value_resolver")
             return {}
 
         def fake_generator(state, llm_model=None, dialect="sqlite"):
@@ -2417,7 +2234,7 @@ class ChatCancelamentoTests(AppDbTestCase):
                 patch("agents.orchestrator.router.get_chat_llm", return_value=object()),
                 patch("agents.orchestrator.router.bind_structured_output", return_value=_RouteToBI()),
                 patch("agents.bi_agent.graph.query_extractor", side_effect=fake_extractor),
-                patch("agents.bi_agent.graph.semantic_value_resolver", side_effect=fake_resolver),
+                patch("agents.bi_agent.graph.value_resolver", side_effect=fake_resolver),
                 patch("agents.bi_agent.graph.sql_generator", side_effect=fake_generator),
                 patch("agents.bi_agent.agent.build_system_prompt", return_value="sys"),
             ):

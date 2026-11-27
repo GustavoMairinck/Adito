@@ -80,7 +80,13 @@ def get_bi_agent() -> BIAgent:
     return _bi_agent
 
 
-def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: str = "default_session") -> str:
+def run_bi_agent(
+    instruction: str,
+    tenant_id: str,
+    contexto_id: str,
+    thread_id: str = "default_session",
+    pergunta_original: str = "",
+) -> str:
     check_cancelled()
     print(f"[BI Agent] tenant={tenant_id!r} contexto={contexto_id!r} | instrução={instruction[:80]!r}")
 
@@ -94,19 +100,12 @@ def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: 
                 "step_id": "query",
                 "detail": "Identificando views, regras e colunas relevantes da base do IFES.",
             })
-        elif node_name == "semantic_value_resolver":
-            candidates = update.get("rewrite_candidates") or []
-            if candidates:
+        elif node_name == "value_resolver":
+            valores = update.get("valores_reais") or []
+            if valores:
                 _emit_trace("step_detail", {
                     "step_id": "query",
-                    "detail": f"Mapeando {len(candidates)} valor(es) real(is) nas colunas da base.",
-                })
-        elif node_name == "question_rewriter":
-            rewritten = (update.get("rewritten_user_input") or "").strip()
-            if rewritten and rewritten != instruction.strip():
-                _emit_trace("step_detail", {
-                    "step_id": "query",
-                    "detail": "Ajustando termos da pergunta aos campos da base.",
+                    "detail": f"Mapeando {len(valores)} valor(es) real(is) nas colunas da base.",
                 })
         elif node_name == "generator":
             _emit_trace("step_detail", {
@@ -154,6 +153,7 @@ def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: 
         "thread_id": thread_id,
         "callbacks": langfuse_callbacks(),
         "execute": True,
+        "pergunta_original": pergunta_original or instruction,
     }
     if has_sink:
         ask_kwargs["on_progress"] = _on_progress
@@ -202,7 +202,10 @@ def run_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: 
             "header_status": "Estruturando resposta...",
         })
         limit = row_limit_for(contexto_id, ANSWER_ROWS_DEFAULT)
-        text_resp = answer_from_rows(instruction, data_rows, limit) or text_resp
+        pergunta = instruction
+        if pergunta_original and pergunta_original.strip() != instruction.strip():
+            pergunta = f"{pergunta_original}\n(Pedido completo, com o contexto da conversa: {instruction})"
+        text_resp = answer_from_rows(pergunta, data_rows, limit) or text_resp
         check_cancelled()
 
     data_preview = ""
@@ -256,9 +259,15 @@ def answer_from_rows(question: str, rows: list[dict], limit: int) -> str | None:
         return None
 
 
-async def _arun_bi_agent(instruction: str, tenant_id: str, contexto_id: str, thread_id: str = "default_session") -> str:
+async def _arun_bi_agent(
+    instruction: str,
+    tenant_id: str,
+    contexto_id: str,
+    thread_id: str = "default_session",
+    pergunta_original: str = "",
+) -> str:
     # .ask() é síncrono (LLM + sqlite3); fora do loop para não travar o streaming SSE.
-    return await asyncio.to_thread(run_bi_agent, instruction, tenant_id, contexto_id, thread_id)
+    return await asyncio.to_thread(run_bi_agent, instruction, tenant_id, contexto_id, thread_id, pergunta_original)
 
 
 bi_agent_tool = StructuredTool.from_function(

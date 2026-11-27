@@ -10,12 +10,10 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
     system_prompt: str
     retrieved_schema: str
-    # rewrite pipeline
-    rewrite_candidates: list[dict[str, Any]]
-    value_search_queries: list[str]
-    value_search_calls: list[dict[str, Any]]
-    rewritten_user_input: str
-    rewrite_reason: str
+    # pergunta como o usuário escreveu (user_input é a instrução resolvida pelo orquestrador)
+    pergunta_original: str
+    # valores reais do banco achados na pergunta (nodes/value_resolver.py)
+    valores_reais: list[dict[str, Any]]
     # SQL generation
     generated_sql: str
     field_formats: dict[str, str]

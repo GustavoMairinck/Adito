@@ -8,12 +8,11 @@ from core.rich_logging import log_info
 from .cancellation import check_cancelled
 from .nodes import (
     query_extractor,
-    question_rewriter,
     response_formatter,
-    semantic_value_resolver,
     sql_corrector,
     sql_generator,
     sql_validator,
+    value_resolver,
 )
 from .state import BiAgentState
 
@@ -61,11 +60,7 @@ def build_graph(
     workflow = StateGraph(BiAgentState)
 
     workflow.add_node("extractor", _cancellable(partial(query_extractor, embedder=embedder)))
-    workflow.add_node(
-        "semantic_value_resolver",
-        _cancellable(partial(semantic_value_resolver, llm_model=llm_model, embedder=embedder)),
-    )
-    workflow.add_node("question_rewriter", _cancellable(partial(question_rewriter, llm_model=llm_model)))
+    workflow.add_node("value_resolver", _cancellable(partial(value_resolver, embedder=embedder)))
     workflow.add_node("generator", _cancellable(partial(sql_generator, llm_model=llm_model, dialect=dialect)))
     workflow.add_node(
         "validator",
@@ -75,9 +70,8 @@ def build_graph(
     workflow.add_node("formatter", _cancellable(response_formatter))
 
     workflow.set_entry_point("extractor")
-    workflow.add_edge("extractor", "semantic_value_resolver")
-    workflow.add_edge("semantic_value_resolver", "question_rewriter")
-    workflow.add_edge("question_rewriter", "generator")
+    workflow.add_edge("extractor", "value_resolver")
+    workflow.add_edge("value_resolver", "generator")
     workflow.add_edge("generator", "validator")
 
     workflow.add_conditional_edges(

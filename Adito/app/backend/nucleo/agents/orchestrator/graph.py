@@ -72,6 +72,9 @@ async def mcp_tool_node(state: MultiAgentState):
                     "contexto_id": state.get("contexto_id", ""),
                     "thread_id":      state.get("thread_id", "default_session"),
                 }
+                if "pergunta_original" in (t.args or {}):
+                    # A pergunta como o usuário escreveu: a instrução do roteador pode ter acrescentado filtros.
+                    invoke_args["pergunta_original"] = state.get("user_input", "")
                 result = await t.ainvoke(invoke_args)
 
                 content_str = ""
