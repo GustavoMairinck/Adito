@@ -74,7 +74,6 @@ def me(params):
         "llm_provider": cfg.provider,
         "llm_provider_label": cfg.label,
         "llm_model": cfg.model,
-        "llm_supports_embeddings": cfg.supports_embeddings,
         "llm_is_local": cfg.is_local,
     }
 

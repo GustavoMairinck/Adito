@@ -13,8 +13,6 @@ export interface LlmProviderSpec {
   protocol: 'gemini' | 'openai_compatible'
   base_url: string
   default_model: string
-  supports_embeddings: boolean
-  default_embedding_model: string | null
   requires_key: boolean
   allow_custom_base_url: boolean
 }
@@ -55,8 +53,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'gemini',
     base_url: 'https://generativelanguage.googleapis.com/v1beta',
     default_model: 'gemini-3.5-flash-lite',
-    supports_embeddings: true,
-    default_embedding_model: 'gemini-embedding-2',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -66,8 +62,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://api.openai.com/v1',
     default_model: 'gpt-4o-mini',
-    supports_embeddings: true,
-    default_embedding_model: 'text-embedding-3-small',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -77,8 +71,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://openrouter.ai/api/v1',
     default_model: 'google/gemini-2.5-flash',
-    supports_embeddings: true,
-    default_embedding_model: 'openai/text-embedding-3-small',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -88,8 +80,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://api.mistral.ai/v1',
     default_model: 'ministral-8b-latest',
-    supports_embeddings: true,
-    default_embedding_model: 'mistral-embed',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -99,8 +89,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://api.z.ai/api/paas/v4',
     default_model: 'glm-4.5-flash',
-    supports_embeddings: true,
-    default_embedding_model: 'embedding-3',
     requires_key: true,
     allow_custom_base_url: true,
   },
@@ -110,8 +98,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://api.together.xyz/v1',
     default_model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    supports_embeddings: true,
-    default_embedding_model: 'intfloat/multilingual-e5-large-instruct',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -121,8 +107,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'https://api.fireworks.ai/inference/v1',
     default_model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
-    supports_embeddings: true,
-    default_embedding_model: 'nomic-ai/nomic-embed-text-v1.5',
     requires_key: true,
     allow_custom_base_url: false,
   },
@@ -132,8 +116,6 @@ export const DEFAULT_LLM_PROVIDERS: LlmProviderSpec[] = [
     protocol: 'openai_compatible',
     base_url: 'http://localhost:11434/v1',
     default_model: 'qwen2.5:7b',
-    supports_embeddings: true,
-    default_embedding_model: 'nomic-embed-text',
     requires_key: false,
     allow_custom_base_url: true,
   },

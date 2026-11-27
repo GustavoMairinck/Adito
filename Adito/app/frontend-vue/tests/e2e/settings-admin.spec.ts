@@ -24,8 +24,8 @@ test.describe('Configurações e Administração', () => {
     await expect(page.getByText(/provedor local/i)).toBeVisible()
   })
 
-  test('exibe abas principais, lista contextos e aviso de reindexação na Administração', async ({ page }) => {
-    await installTauriMock(page, { llmProvider: 'openai', embeddingsNeedsRetrain: true })
+  test('exibe abas principais, lista contextos e aviso da busca semântica na Administração', async ({ page }) => {
+    await installTauriMock(page, { llmProvider: 'openai', semVetores: true })
     await page.goto('/#/admin')
 
     await expect(page.getByRole('button', { name: 'Base de conhecimento' })).toBeVisible()
@@ -33,7 +33,7 @@ test.describe('Configurações e Administração', () => {
     await expect(page.getByRole('button', { name: 'Contextos de dados' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sistema' })).toBeVisible()
 
-    await expect(page.getByText(/Reindexação recomendada \(Wipe & Retrain\)/i)).toBeVisible()
+    await expect(page.getByText('Busca semântica de valores desligada')).toBeVisible()
     await expect(page.getByRole('button', { name: /Wipe & Retrain/i })).toBeEnabled()
 
     await page.getByRole('button', { name: /Contextos de dados/i }).click()

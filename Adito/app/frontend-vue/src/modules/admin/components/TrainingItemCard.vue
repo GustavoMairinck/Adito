@@ -15,8 +15,6 @@ export interface TrainingItem {
   contexto_nome?: string | null
   /** 'contexto' = gerado dos arquivos do contexto (o reindex refaz); 'manual' = posto pelo admin. */
   origem?: 'contexto' | 'manual'
-  /** false quando o vetor foi apagado (troca de modelo de embedding) e o item ainda não entra na busca. */
-  indexado?: boolean
   created_at?: string
 }
 
@@ -114,15 +112,6 @@ const copyToClipboard = async () => {
             :title="item.origem === 'manual' ? 'Adicionado no painel; o Wipe & Retrain mantém.' : 'Gerado dos arquivos do contexto; o Wipe & Retrain refaz.'"
           >
             {{ item.origem === 'manual' ? 'Manual' : 'Dos arquivos' }}
-          </span>
-          <span
-            v-if="item.indexado === false"
-            class="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-600 dark:text-red-300"
-            :title="item.origem === 'manual'
-              ? 'Sem vetor: não entra na busca. Remova e adicione de novo.'
-              : 'Sem vetor: não entra na busca até o próximo Wipe & Retrain.'"
-          >
-            Sem vetor
           </span>
         </div>
         <p v-if="item.question" class="mt-1 truncate text-xs text-text-secondary leading-relaxed">

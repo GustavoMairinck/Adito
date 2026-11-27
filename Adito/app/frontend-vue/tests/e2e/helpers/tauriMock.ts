@@ -15,8 +15,8 @@ export function trackPageErrors(page: Page): () => string[] {
 export interface TauriMockOptions {
   llmConfigured?: boolean
   llmProvider?: string
-  llmSupportsEmbeddings?: boolean
-  embeddingsNeedsRetrain?: boolean
+  /** Simula um dados.db sem os vetores do modelo do app (aviso no painel admin). */
+  semVetores?: boolean
   chatError503?: boolean
   /** Atraso em ms antes de finalizar o stream do chat (útil para testar botão Parar / Esc / segundo plano). */
   chatStreamDelayMs?: number
@@ -50,8 +50,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
   const config = {
     llmConfigured: options.llmConfigured ?? true,
     llmProvider: options.llmProvider ?? 'gemini',
-    llmSupportsEmbeddings: options.llmSupportsEmbeddings,
-    embeddingsNeedsRetrain: options.embeddingsNeedsRetrain ?? false,
+    semVetores: options.semVetores ?? false,
     chatError503: options.chatError503 ?? false,
     chatStreamDelayMs: options.chatStreamDelayMs ?? 0,
     role: options.role ?? 'admin',
@@ -91,14 +90,14 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_EXPORTS__ = exportedFiles
 
     const PROVIDERS = [
-      { id: 'gemini', label: 'Gemini', protocol: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', default_model: 'gemini-3.5-flash-lite', supports_embeddings: true, default_embedding_model: 'gemini-embedding-2', requires_key: true, allow_custom_base_url: false },
-      { id: 'openai', label: 'OpenAI', protocol: 'openai_compatible', base_url: 'https://api.openai.com/v1', default_model: 'gpt-4o-mini', supports_embeddings: true, default_embedding_model: 'text-embedding-3-small', requires_key: true, allow_custom_base_url: false },
-      { id: 'openrouter', label: 'OpenRouter', protocol: 'openai_compatible', base_url: 'https://openrouter.ai/api/v1', default_model: 'google/gemini-2.5-flash', supports_embeddings: true, default_embedding_model: 'openai/text-embedding-3-small', requires_key: true, allow_custom_base_url: false },
-      { id: 'mistral', label: 'Mistral AI', protocol: 'openai_compatible', base_url: 'https://api.mistral.ai/v1', default_model: 'ministral-8b-latest', supports_embeddings: true, default_embedding_model: 'mistral-embed', requires_key: true, allow_custom_base_url: false },
-      { id: 'zai', label: 'Z.AI (GLM)', protocol: 'openai_compatible', base_url: 'https://api.z.ai/api/paas/v4', default_model: 'glm-4.5-flash', supports_embeddings: true, default_embedding_model: 'embedding-3', requires_key: true, allow_custom_base_url: true },
-      { id: 'together', label: 'Together AI', protocol: 'openai_compatible', base_url: 'https://api.together.xyz/v1', default_model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', supports_embeddings: true, default_embedding_model: 'intfloat/multilingual-e5-large-instruct', requires_key: true, allow_custom_base_url: false },
-      { id: 'fireworks', label: 'Fireworks AI', protocol: 'openai_compatible', base_url: 'https://api.fireworks.ai/inference/v1', default_model: 'accounts/fireworks/models/llama-v3p3-70b-instruct', supports_embeddings: true, default_embedding_model: 'nomic-ai/nomic-embed-text-v1.5', requires_key: true, allow_custom_base_url: false },
-      { id: 'ollama', label: 'Ollama (Local)', protocol: 'openai_compatible', base_url: 'http://localhost:11434/v1', default_model: 'qwen2.5:7b', supports_embeddings: true, default_embedding_model: 'nomic-embed-text', requires_key: false, allow_custom_base_url: true },
+      { id: 'gemini', label: 'Gemini', protocol: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', default_model: 'gemini-3.5-flash-lite', requires_key: true, allow_custom_base_url: false },
+      { id: 'openai', label: 'OpenAI', protocol: 'openai_compatible', base_url: 'https://api.openai.com/v1', default_model: 'gpt-4o-mini', requires_key: true, allow_custom_base_url: false },
+      { id: 'openrouter', label: 'OpenRouter', protocol: 'openai_compatible', base_url: 'https://openrouter.ai/api/v1', default_model: 'google/gemini-2.5-flash', requires_key: true, allow_custom_base_url: false },
+      { id: 'mistral', label: 'Mistral AI', protocol: 'openai_compatible', base_url: 'https://api.mistral.ai/v1', default_model: 'ministral-8b-latest', requires_key: true, allow_custom_base_url: false },
+      { id: 'zai', label: 'Z.AI (GLM)', protocol: 'openai_compatible', base_url: 'https://api.z.ai/api/paas/v4', default_model: 'glm-4.5-flash', requires_key: true, allow_custom_base_url: true },
+      { id: 'together', label: 'Together AI', protocol: 'openai_compatible', base_url: 'https://api.together.xyz/v1', default_model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', requires_key: true, allow_custom_base_url: false },
+      { id: 'fireworks', label: 'Fireworks AI', protocol: 'openai_compatible', base_url: 'https://api.fireworks.ai/inference/v1', default_model: 'accounts/fireworks/models/llama-v3p3-70b-instruct', requires_key: true, allow_custom_base_url: false },
+      { id: 'ollama', label: 'Ollama (Local)', protocol: 'openai_compatible', base_url: 'http://localhost:11434/v1', default_model: 'qwen2.5:7b', requires_key: false, allow_custom_base_url: true },
     ]
     const hasKeyByProvider: Record<string, boolean> = Object.fromEntries(
       PROVIDERS.map((p) => [p.id, p.id === activeProvider && llmConfigured && p.id !== 'ollama'])
@@ -289,7 +288,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return { status: 'ok' }
         case 'me': {
           const spec = activeSpec()
-          const supportsEmb = cfg.llmSupportsEmbeddings ?? spec.supports_embeddings
           return {
             id: 'user-local',
             username: 'Pesquisador IFES',
@@ -300,7 +298,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             llm_provider: spec.id,
             llm_provider_label: spec.label,
             llm_model: activeModel || spec.default_model,
-            llm_supports_embeddings: supportsEmb,
             llm_is_local: spec.id === 'ollama',
           }
         }
@@ -453,8 +450,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             ? { ok: false, reason: 'Chave Gemini rejeitada' }
             : { ok: true }
         case 'admin.system_status': {
-          const spec = activeSpec()
-          const supportsEmb = cfg.llmSupportsEmbeddings ?? spec.supports_embeddings
           return {
             services: [
               { name: 'app.db', status: 'online', latency_ms: 1, url: 'app.db' },
@@ -470,14 +465,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
               lastTraining: '2026-11-19T12:00:00Z',
             },
             embeddings: {
-              supports_embeddings: supportsEmb,
-              provider: spec.id,
-              provider_label: spec.label,
-              embedding_model: supportsEmb ? spec.default_embedding_model : null,
-              expected_dim: spec.id === 'gemini' ? 1024 : spec.id === 'openai' ? 1536 : null,
-              stored_dims: [1024],
-              needs_retrain: cfg.embeddingsNeedsRetrain,
-              incompatible_vectors: cfg.embeddingsNeedsRetrain ? 18 : 0,
+              modelo: 'minilm-l12-int8',
+              modelo_pronto: true,
+              modelo_erro: null,
+              valores_disponiveis: !cfg.semVetores,
+              valores: cfg.semVetores ? 0 : 1200,
+              motivo: cfg.semVetores ? 'O dados.db não tem vetores de busca.' : null,
             },
           }
         }

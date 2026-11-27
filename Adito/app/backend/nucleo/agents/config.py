@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agents.providers import (
-    DEFAULT_GEMINI_EMBEDDING_MODEL,
     DEFAULT_GEMINI_MODEL,
     ActiveLLMConfig,
     resolve_active_llm_config,
@@ -14,7 +13,6 @@ from agents.providers import (
 # ─── LLM (Gemini legado + múltiplos provedores via ADITO_LLM_*) ──────────────
 GEMINI_MODEL           = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 GEMINI_API_KEY         = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-GEMINI_EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", DEFAULT_GEMINI_EMBEDDING_MODEL)
 
 
 def get_active_llm_config() -> ActiveLLMConfig:

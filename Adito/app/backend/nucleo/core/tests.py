@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents.bi_agent.agent import BIAgent
 from agents.bi_agent.sql_security import validate_read_only_sql
-from analytics_index.services import fetch_distinct_candidates
 from core import db
 from core.contexts import describe_views, load_context_dir, view_columns
 from core.datastore import (
@@ -213,7 +212,7 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
         for view_name in FATOS_NOMES:
             self.assertIn(view_name, ddl)
 
-    def test_bi_agent_execute_query_e_fetch_distinct_candidates(self) -> None:
+    def test_bi_agent_execute_query(self) -> None:
         pasta_ifes = RAIZ_REPO / "Adito" / "app" / "contexts" / "pesquisa-extensao-ifes"
         ctx_ifes, _, _ = load_context_dir(
             pasta_ifes, self.tenant, dados_path=self.synthetic_sqlite
@@ -232,16 +231,6 @@ class SQLiteSecurityAndContextTests(AppDbTestCase):
         cols = view_columns("vfact_extensao_acao_resolved", dados_path=self.synthetic_sqlite)
         self.assertTrue(any(c[0] == "campus" for c in cols))
 
-        old_env = os.environ.get("ADITO_DADOS_DB")
-        os.environ["ADITO_DADOS_DB"] = str(self.synthetic_sqlite)
-        try:
-            candidates = fetch_distinct_candidates(ctx_ifes, "vfact_extensao_acao_resolved")
-            self.assertEqual(len(candidates), 1)
-        finally:
-            if old_env is None:
-                os.environ.pop("ADITO_DADOS_DB", None)
-            else:
-                os.environ["ADITO_DADOS_DB"] = old_env
 
     def test_banco_sqlite_real_contagens_fatos_quando_presente(self) -> None:
         if not DEFAULT_REPO_SQLITE.exists():
@@ -324,95 +313,6 @@ class PainelContextosTests(AppDbTestCase):
         self.assertEqual((meu["rag_itens"], meu["valores"]), (0, 0))
 
 
-class EmbedderFalso:
-    """Devolve um vetor por texto; pode recusar com 429 nas chamadas escolhidas."""
-
-    def __init__(self, recusas=(), erro="429 RESOURCE_EXHAUSTED. Please retry in 12.5s."):
-        self.recusas, self.erro, self.chamadas, self.textos = set(recusas), erro, 0, []
-
-    def embed_documents(self, texts):
-        self.chamadas += 1
-        if self.chamadas in self.recusas:
-            raise RuntimeError(self.erro)
-        self.textos.extend(texts)
-        return [[float(len(t)), 1.0] for t in texts]
-
-    def embed_query(self, text):
-        return self.embed_documents([text])[0]
-
-
-class EmbedderComEsperaTests(unittest.TestCase):
-    """Cota por minuto do Gemini: espera o tempo pedido e tenta de novo; cota diária para com aviso."""
-
-    def test_espera_o_tempo_pedido_e_tenta_de_novo(self):
-        from analytics_index.embedder import EmbedderComEspera
-        esperas = []
-        real = EmbedderFalso(recusas={1, 2})
-        self.assertEqual(EmbedderComEspera(real, dormir=esperas.append).embed_documents(["ab"]), [[2.0, 1.0]])
-        self.assertEqual(esperas, [13.5, 13.5])
-
-    def test_cota_diaria_nao_espera(self):
-        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
-        esperas = []
-        real = EmbedderFalso(recusas={1}, erro="429 RESOURCE_EXHAUSTED quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier")
-        with self.assertRaisesRegex(CotaEsgotada, "cota diária"):
-            EmbedderComEspera(real, dormir=esperas.append).embed_query("x")
-        self.assertEqual(esperas, [])
-
-    def test_desiste_depois_das_tentativas_e_outros_erros_passam_direto(self):
-        from analytics_index.embedder import CotaEsgotada, EmbedderComEspera
-        with self.assertRaises(CotaEsgotada):
-            EmbedderComEspera(EmbedderFalso(recusas={1, 2, 3}), dormir=lambda s: None, tentativas=3).embed_query("x")
-        with self.assertRaisesRegex(RuntimeError, "chave inválida"):
-            EmbedderComEspera(EmbedderFalso(recusas={1}, erro="400 chave inválida"), dormir=lambda s: None).embed_query("x")
-
-
-class IndexacaoIncrementalTests(AppDbTestCase):
-    """A carga continua de onde parou: não apaga o que já foi indexado e só envia o que falta."""
-
-    def setUp(self):
-        super().setUp()
-        pasta = tempfile.TemporaryDirectory()
-        self.addCleanup(pasta.cleanup)
-        self.dados_db = Path(pasta.name) / "dados.db"
-        self._gravar_nomes([f"nome {i}" for i in range(5)])
-        env = patch.dict(os.environ, {"ADITO_DADOS_DB": str(self.dados_db)})
-        env.start()
-        self.addCleanup(env.stop)
-        _, tenant = session.current()
-        self.ctx = Contexto(tenant_id=tenant.id, slug="teste", name="Teste", views=[{"name": "t", "embed_columns": ["nome"]}])
-        self.ctx.insert()
-
-    def _gravar_nomes(self, nomes):
-        close_dados()
-        conn = sqlite3.connect(self.dados_db)
-        conn.execute("DROP TABLE IF EXISTS t")
-        conn.execute("CREATE TABLE t (nome TEXT)")
-        conn.executemany("INSERT INTO t VALUES (?)", [(n,) for n in nomes])
-        conn.commit()
-        conn.close()
-
-    def _indexados(self):
-        return db.execute("SELECT COUNT(*) FROM analytics_text_embedding").fetchone()[0]
-
-    def test_continua_de_onde_parou_e_apaga_o_que_sumiu(self):
-        from analytics_index.services import update_text_embeddings
-        # Lotes de 2: o 2º lote falha, o 1º fica gravado.
-        with self.assertRaises(RuntimeError):
-            update_text_embeddings(self.ctx, EmbedderFalso(recusas={2}, erro="rede caiu"), batch_size=2)
-        self.assertEqual(self._indexados(), 2)
-
-        segundo = EmbedderFalso()
-        resumo = update_text_embeddings(self.ctx, segundo, batch_size=2)
-        self.assertEqual((resumo["created"], resumo["skipped"]), (3, 2))
-        self.assertEqual(len(segundo.textos), 3)  # só o que faltava foi enviado
-        self.assertEqual(self._indexados(), 5)
-
-        self._gravar_nomes(["nome 0", "nome novo"])
-        resumo = update_text_embeddings(self.ctx, EmbedderFalso(), batch_size=2)
-        self.assertEqual((resumo["created"], resumo["removed"]), (1, 4))
-        self.assertEqual(self._indexados(), 2)
-
 
 class BaseConhecimentoTests(AppDbTestCase):
     """Aba Base de conhecimento: lista do app.db, item manual, remoção e reindex que mantém os manuais."""
@@ -492,7 +392,7 @@ class BaseConhecimentoTests(AppDbTestCase):
         with patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
             status, body = call("admin.trainings.create", {"type": "documentation", "content": "Regra qualquer."})
             self.assertEqual(status, 200, body)
-            self.assertTrue(body["indexado"])
+            self.assertEqual(body["content"], "Regra qualquer.")
             status, body = call("admin.trainings.retrain", {"contexto": self.ctx.id})
         self.assertEqual(status, 200, body)
         self.assertTrue(body["contextos"][0]["indexado"], body)
@@ -1685,11 +1585,7 @@ class MultiProvedorLLMTests(AppDbTestCase):
         ids = [p["id"] for p in providers]
         self.assertEqual(ids, ["gemini", "openai", "openrouter", "mistral", "zai", "together", "fireworks", "ollama"])
         by_id = {p["id"]: p for p in providers}
-        self.assertTrue(all(p["supports_embeddings"] and p["default_embedding_model"] for p in providers))
-        self.assertEqual(by_id["openrouter"]["default_embedding_model"], "openai/text-embedding-3-small")
-        self.assertEqual(by_id["mistral"]["default_embedding_model"], "mistral-embed")
-        self.assertEqual(by_id["together"]["default_embedding_model"], "intfloat/multilingual-e5-large-instruct")
-        self.assertEqual(by_id["fireworks"]["default_embedding_model"], "nomic-ai/nomic-embed-text-v1.5")
+        self.assertTrue(all("supports_embeddings" not in p for p in providers))
         self.assertFalse(by_id["ollama"]["requires_key"])
 
     def test_retrocompatibilidade_gemini_e_metadados_no_me(self) -> None:
@@ -1699,7 +1595,6 @@ class MultiProvedorLLMTests(AppDbTestCase):
         self.assertTrue(body["llm_configured"])
         self.assertEqual(body["llm_provider"], "gemini")
         self.assertEqual(body["llm_provider_label"], "Gemini")
-        self.assertTrue(body["llm_supports_embeddings"])
         self.assertFalse(body["llm_is_local"])
 
     def test_ollama_local_configurado_sem_chave_e_fabrica_openai(self) -> None:
@@ -1809,23 +1704,6 @@ class MultiProvedorLLMTests(AppDbTestCase):
             self.assertIn("servidor local", msg_rede)
             self.assertIn("Ollama", msg_rede)
 
-    def test_vectors_filtra_dimensoes_incompativeis_sem_crash(self) -> None:
-        from types import SimpleNamespace
-        from core.vectors import nearest_with_stats
-
-        items = [
-            SimpleNamespace(id="ok1", embedding=[1.0, 0.0, 0.0]),
-            SimpleNamespace(id="wrong_dim", embedding=[1.0, 0.0]),
-            SimpleNamespace(id="ok2", embedding=[0.0, 1.0, 0.0]),
-        ]
-        matches, incompatible = nearest_with_stats(items, [1.0, 0.0, 0.0], k=2)
-        self.assertEqual(incompatible, 1)
-        self.assertEqual([m[0].id for m in matches], ["ok1", "ok2"])
-
-        matches_empty, inc_all = nearest_with_stats([SimpleNamespace(id="a", embedding=[1.0, 2.0])], [1.0, 2.0, 3.0], k=2)
-        self.assertEqual(matches_empty, [])
-        self.assertEqual(inc_all, 1)
-
     def test_query_extractor_fallback_sem_embeddings_inclui_manuais_e_respeita_teto(self) -> None:
         import importlib
         from core.records import KnowledgeItem
@@ -1849,69 +1727,6 @@ class MultiProvedorLLMTests(AppDbTestCase):
         schema = out["retrieved_schema"]
         self.assertIn("Regra manual 11", schema)
         self.assertEqual(schema.count("Regra manual "), qe.MANUAL_LIMIT)
-
-    def test_diagnostico_embeddings_detecta_dimensao_divergente(self) -> None:
-        from agents.providers import resolve_active_llm_config
-        from core.records import KnowledgeItem
-        from core.vectors import embedding_diagnostics
-
-        _, tenant = session.current()
-        ctx = Contexto(tenant_id=tenant.id, slug="ctx-diag", name="Diag", views=[{"name": "t"}]).insert()
-        KnowledgeItem(
-            tenant_id=tenant.id,
-            contexto_id=ctx.id,
-            item_type="doc",
-            content="Regra",
-            metadata={"embedding_provider": "gemini"},
-            embedding=[0.1] * 1024,
-        ).insert()
-
-        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "openai", "ADITO_LLM_API_KEY": "sk-x"}):
-            diag = embedding_diagnostics(resolve_active_llm_config())
-        self.assertTrue(diag["supports_embeddings"])
-        self.assertTrue(diag["needs_retrain"])
-        self.assertEqual(diag["stored_dims"], [1024])
-        self.assertEqual(diag["expected_dim"], 1536)
-        self.assertEqual(diag["incompatible_vectors"], 1)
-
-    def test_mesma_dimensao_1024_entre_gemini_e_mistral_sinaliza_retrain_e_isola_busca(self) -> None:
-        from agents.providers import resolve_active_llm_config
-        from analytics_index.services import search_text_embeddings
-        from core.records import AnalyticsTextEmbedding, KnowledgeItem
-        from core.vectors import embedding_diagnostics
-
-        _, tenant = session.current()
-        ctx = Contexto(tenant_id=tenant.id, slug="ctx-1024", name="SameDim", views=[{"name": "t", "embed_columns": ["nome"]}]).insert()
-        # Item legado v0.1.0 sem tag + valor analytics gerado no Gemini (ambos 1024 dims).
-        KnowledgeItem(
-            tenant_id=tenant.id,
-            contexto_id=ctx.id,
-            item_type="doc",
-            content="Regra legada",
-            metadata={},
-            embedding=[0.1] * 1024,
-        ).insert()
-        AnalyticsTextEmbedding(
-            id=db.new_id(),
-            tenant_id=tenant.id,
-            contexto_id=ctx.id,
-            source_table="t",
-            embedding_text="Nome: PIBIC",
-            payload_json={"nome": "PIBIC"},
-            value_hash="h1",
-            embedding=[0.2] * 1024,
-            embedding_provider="gemini",
-            embedding_model="gemini-embedding-2",
-        ).insert()
-
-        with self._clean_llm_env({"ADITO_LLM_PROVIDER": "mistral", "ADITO_LLM_API_KEY": "mis-x"}):
-            cfg = resolve_active_llm_config()
-            diag = embedding_diagnostics(cfg)
-            # Mesmo tendo 1024 dims iguais, Gemini/legado são incompatíveis com Mistral!
-            self.assertTrue(diag["needs_retrain"])
-            self.assertEqual(diag["incompatible_vectors"], 2)
-            # Busca semântica de valores não mistura vetores do Gemini com query da Mistral.
-            self.assertEqual(search_text_embeddings(ctx, [0.2] * 1024, table="t"), [])
 
     def test_base_url_exige_https_remoto_e_recusa_url_custom_em_provedor_fechado(self) -> None:
         from agents.providers import resolve_active_llm_config, validate_base_url

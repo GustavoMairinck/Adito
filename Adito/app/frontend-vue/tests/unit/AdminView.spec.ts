@@ -10,7 +10,6 @@ const userRef = ref<Record<string, unknown>>({
   llm_provider: 'gemini',
   llm_provider_label: 'Gemini',
   llm_model: 'gemini-3.5-flash-lite',
-  llm_supports_embeddings: true,
 })
 
 vi.mock('@/common/api/core', () => ({
@@ -50,87 +49,52 @@ function mockAdminCalls(embeddings: Record<string, unknown>) {
   })
 }
 
-describe('AdminView.vue — banners de embeddings na Base de conhecimento', () => {
+const BUSCA_OK = {
+  modelo: 'minilm-l12-int8',
+  modelo_pronto: true,
+  modelo_erro: null,
+  valores_disponiveis: true,
+  valores: 1200,
+  motivo: null,
+}
+
+describe('AdminView.vue — aviso da busca semântica local na Base de conhecimento', () => {
   beforeEach(() => {
     _resetAtualizacoes()
     callMock.mockReset()
   })
 
-  it('exibe banner informativo e desabilita Novo Treinamento e Wipe & Retrain quando provedor não suporta embeddings', async () => {
+  it('avisa quando o dados.db não traz vetores do modelo do app, sem travar os botões', async () => {
     mockAdminCalls({
-      supports_embeddings: false,
-      provider: 'groq',
-      provider_label: 'Groq',
-      embedding_model: null,
-      expected_dim: null,
-      stored_dims: [],
-      needs_retrain: false,
-      incompatible_vectors: 0,
+      ...BUSCA_OK,
+      valores_disponiveis: false,
+      valores: 0,
+      motivo: 'Os vetores do dados.db são de outro modelo (e5-large-int8).',
     })
 
     const wrapper = mount(AdminView, { global: { directives: { motion: {} } } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Provedor ativo (Groq) não gera embeddings')
-    expect(wrapper.text()).toContain('modo fallback textual')
-
+    expect(wrapper.text()).toContain('Busca semântica de valores desligada')
+    expect(wrapper.text()).toContain('outro modelo (e5-large-int8)')
     const novoBtn = wrapper.findAll('button').find((b) => b.text().includes('Novo Treinamento'))
     const wipeBtn = wrapper.findAll('button').find((b) => b.text().includes('Wipe & Retrain'))
-    expect((novoBtn!.element as HTMLButtonElement).disabled).toBe(true)
-    expect((wipeBtn!.element as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('exibe banner de reindexação recomendada quando há vetores com dimensão divergente', async () => {
-    mockAdminCalls({
-      supports_embeddings: true,
-      provider: 'openai',
-      provider_label: 'OpenAI',
-      embedding_model: 'text-embedding-3-small',
-      expected_dim: 1536,
-      stored_dims: [1024],
-      needs_retrain: true,
-      incompatible_vectors: 18,
-    })
-
-    const wrapper = mount(AdminView, { global: { directives: { motion: {} } } })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Reindexação recomendada (Wipe & Retrain)')
-    expect(wrapper.text()).toContain('18 vetor(es)')
-    const wipeBtn = wrapper.findAll('button').find((b) => b.text().includes('Wipe & Retrain'))
+    expect((novoBtn!.element as HTMLButtonElement).disabled).toBe(false)
     expect((wipeBtn!.element as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('oculta ambos os banners quando provedor suporta embeddings e base está consistente', async () => {
-    mockAdminCalls({
-      supports_embeddings: true,
-      provider: 'gemini',
-      provider_label: 'Gemini',
-      embedding_model: 'gemini-embedding-2',
-      expected_dim: 1024,
-      stored_dims: [1024],
-      needs_retrain: false,
-      incompatible_vectors: 0,
-    })
+  it('não mostra aviso quando o modelo e os vetores estão prontos', async () => {
+    mockAdminCalls(BUSCA_OK)
 
     const wrapper = mount(AdminView, { global: { directives: { motion: {} } } })
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('não gera embeddings')
-    expect(wrapper.text()).not.toContain('Reindexação recomendada')
+    expect(wrapper.text()).not.toContain('Busca semântica de valores desligada')
+    expect(wrapper.text()).not.toContain('Modelo de embedding local indisponível')
   })
 
   it('recarrega status e contextos quando dadosReloadSeq incrementa sem disparar retrain automático', async () => {
-    mockAdminCalls({
-      supports_embeddings: true,
-      provider: 'gemini',
-      provider_label: 'Gemini',
-      embedding_model: 'gemini-embedding-2',
-      expected_dim: 1024,
-      stored_dims: [1024],
-      needs_retrain: false,
-      incompatible_vectors: 0,
-    })
+    mockAdminCalls(BUSCA_OK)
 
     const wrapper = mount(AdminView, { global: { directives: { motion: {} } } })
     await flushPromises()

@@ -21,7 +21,6 @@ export interface User {
   llm_provider?: string
   llm_provider_label?: string
   llm_model?: string
-  llm_supports_embeddings?: boolean
   llm_is_local?: boolean
 }
 

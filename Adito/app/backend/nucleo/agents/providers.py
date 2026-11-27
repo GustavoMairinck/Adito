@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 DEFAULT_PROVIDER_ID = "gemini"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
-DEFAULT_GEMINI_EMBEDDING_MODEL = "gemini-embedding-2"
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -18,9 +17,6 @@ class ProviderSpec:
     protocol: str  # "gemini" | "openai_compatible"
     base_url: str
     default_model: str
-    supports_embeddings: bool
-    default_embedding_model: str | None = None
-    default_embedding_dim: int | None = None
     requires_key: bool = True
     allow_custom_base_url: bool = False
 
@@ -31,8 +27,6 @@ class ProviderSpec:
             "protocol": self.protocol,
             "base_url": self.base_url,
             "default_model": self.default_model,
-            "supports_embeddings": self.supports_embeddings,
-            "default_embedding_model": self.default_embedding_model,
             "requires_key": self.requires_key,
             "allow_custom_base_url": self.allow_custom_base_url,
         }
@@ -45,9 +39,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta",
         default_model=DEFAULT_GEMINI_MODEL,
-        supports_embeddings=True,
-        default_embedding_model=DEFAULT_GEMINI_EMBEDDING_MODEL,
-        default_embedding_dim=1024,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -57,9 +48,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://api.openai.com/v1",
         default_model="gpt-4o-mini",
-        supports_embeddings=True,
-        default_embedding_model="text-embedding-3-small",
-        default_embedding_dim=1536,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -69,9 +57,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://openrouter.ai/api/v1",
         default_model="google/gemini-2.5-flash",
-        supports_embeddings=True,
-        default_embedding_model="openai/text-embedding-3-small",
-        default_embedding_dim=1536,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -81,9 +66,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://api.mistral.ai/v1",
         default_model="ministral-8b-latest",
-        supports_embeddings=True,
-        default_embedding_model="mistral-embed",
-        default_embedding_dim=1024,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -93,9 +75,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://api.z.ai/api/paas/v4",
         default_model="glm-4.5-flash",
-        supports_embeddings=True,
-        default_embedding_model="embedding-3",
-        default_embedding_dim=None,
         requires_key=True,
         allow_custom_base_url=True,
     ),
@@ -105,9 +84,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://api.together.xyz/v1",
         default_model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        supports_embeddings=True,
-        default_embedding_model="intfloat/multilingual-e5-large-instruct",
-        default_embedding_dim=1024,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -117,9 +93,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="https://api.fireworks.ai/inference/v1",
         default_model="accounts/fireworks/models/llama-v3p3-70b-instruct",
-        supports_embeddings=True,
-        default_embedding_model="nomic-ai/nomic-embed-text-v1.5",
-        default_embedding_dim=768,
         requires_key=True,
         allow_custom_base_url=False,
     ),
@@ -129,9 +102,6 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         protocol="openai_compatible",
         base_url="http://localhost:11434/v1",
         default_model="qwen2.5:7b",
-        supports_embeddings=True,
-        default_embedding_model="nomic-embed-text",
-        default_embedding_dim=768,
         requires_key=False,
         allow_custom_base_url=True,
     ),
@@ -148,9 +118,6 @@ class ActiveLLMConfig:
     model: str
     base_url: str
     api_key: str | None
-    supports_embeddings: bool
-    embedding_model: str | None
-    embedding_dim: int | None
     is_local: bool
     configured: bool
 
@@ -160,8 +127,6 @@ class ActiveLLMConfig:
             self.model,
             self.base_url,
             self.api_key,
-            self.embedding_model,
-            self.supports_embeddings,
         )
 
 
@@ -228,11 +193,6 @@ def resolve_active_llm_config() -> ActiveLLMConfig:
     else:
         base_url = spec.base_url
 
-    env_emb_model = (os.environ.get("ADITO_LLM_EMBEDDING_MODEL") or "").strip()
-    if not env_emb_model and spec.id == "gemini":
-        env_emb_model = (os.environ.get("GEMINI_EMBEDDING_MODEL") or "").strip()
-    embedding_model = (env_emb_model or spec.default_embedding_model) if spec.supports_embeddings else None
-
     is_local = spec.protocol == "openai_compatible" and is_loopback_url(base_url)
 
     if spec.protocol == "gemini":
@@ -253,9 +213,6 @@ def resolve_active_llm_config() -> ActiveLLMConfig:
         model=model,
         base_url=base_url,
         api_key=env_key,
-        supports_embeddings=bool(spec.supports_embeddings and embedding_model),
-        embedding_model=embedding_model,
-        embedding_dim=spec.default_embedding_dim if embedding_model == spec.default_embedding_model else None,
         is_local=is_local,
         configured=configured,
     )

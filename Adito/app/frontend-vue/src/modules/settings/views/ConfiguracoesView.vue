@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, ChevronDown, ChevronUp, Database, Eye, EyeOff, Info, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { CheckCircle2, ChevronDown, ChevronUp, Database, Eye, EyeOff, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import {
   clearKey,
   DEFAULT_LLM_PROVIDERS,
@@ -380,17 +380,6 @@ onMounted(() => {
           </p>
         </div>
 
-        <p
-          v-if="!selectedProvider.supports_embeddings"
-          class="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200"
-        >
-          <Info class="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            {{ selectedProvider.label }} funciona em modo só-chat: o Adito usa fallback textual automático (regras, views,
-            exemplos e busca local) sem precisar gerar embeddings.
-          </span>
-        </p>
-
         <div class="flex flex-wrap items-center gap-3">
           <button type="submit" :disabled="!canSubmit" class="btn-primary disabled:opacity-50">
             {{ busy ? 'Testando…' : 'Testar e salvar' }}
@@ -489,8 +478,8 @@ onMounted(() => {
           <p id="auto-update-desc" class="text-xs text-text-secondary">
             Quando ativada, o Adito verifica novas versões em segundo plano, baixa o executável sem interromper
             perguntas ativas no chat (exibindo contagem de 10 segundos com opção de adiar) e atualiza o banco
-            <code class="font-mono">dados.db</code> recarregando as telas abertas automaticamente — sem reindexar
-            embeddings. Desligada por padrão (modo assistido na barra lateral).
+            <code class="font-mono">dados.db</code> recarregando as telas abertas automaticamente, já com os vetores de busca
+            gerados na publicação. Desligada por padrão (modo assistido na barra lateral).
           </p>
         </div>
 
@@ -538,9 +527,6 @@ onMounted(() => {
         <ul class="mb-3 list-disc space-y-1 pl-5 text-text-secondary">
           <li>a pergunta que você digita (nomes escritos na pergunta também vão);</li>
           <li>o esquema das views do contexto, as regras e os exemplos, sem as colunas sensíveis;</li>
-          <li v-if="selectedProvider.supports_embeddings">
-            os valores únicos das colunas marcadas para busca semântica, ao carregar ou reindexar os dados;
-          </li>
           <li>uma prévia de até 5 linhas do resultado de cada consulta, que entra no histórico da conversa.</li>
         </ul>
       </template>

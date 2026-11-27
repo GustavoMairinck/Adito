@@ -26,8 +26,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle,
-  Info
+  AlertTriangle
 } from 'lucide-vue-next'
 
 import { call } from '@/common/api/core'
@@ -42,25 +41,19 @@ import type { TrainingItem } from '@/modules/admin/components/TrainingItemCard.v
 const { user } = useAuth()
 const activeTab = ref<'governance' | 'etl' | 'audit' | 'system'>('governance')
 
-interface EmbeddingsDiagnostics {
-  supports_embeddings: boolean
-  provider: string
-  provider_label: string
-  embedding_model: string | null
-  expected_dim: number | null
-  stored_dims: number[]
-  needs_retrain: boolean
-  incompatible_vectors: number
+/** Busca semântica local: modelo de embedding na máquina e vetores que vêm no dados.db. */
+interface BuscaSemantica {
+  modelo: string
+  modelo_pronto: boolean
+  modelo_erro: string | null
+  valores_disponiveis: boolean
+  valores: number
+  motivo: string | null
 }
 
-const embeddingsStatus = ref<EmbeddingsDiagnostics | null>(null)
-const activeLlmLabel = computed(
-  () => embeddingsStatus.value?.provider_label || user.value?.llm_provider_label || 'Gemini'
-)
+const buscaSemantica = ref<BuscaSemantica | null>(null)
+const activeLlmLabel = computed(() => user.value?.llm_provider_label || 'Gemini')
 const activeLlmModel = computed(() => user.value?.llm_model || '')
-const supportsEmbeddings = computed(
-  () => embeddingsStatus.value?.supports_embeddings ?? (user.value?.llm_supports_embeddings !== false)
-)
 
 const tabs = [
   { key: 'governance' as const, label: 'Base de conhecimento', icon: Brain },
@@ -406,9 +399,7 @@ async function handleSync() {
         ? (ctx.erros || []).join(' ')
         : ctx.indexado
           ? `${ctx.rag_itens} itens de RAG, ${ctx.valores} valores`
-          : supportsEmbeddings.value
-            ? `válido; sem indexação (configure ${activeLlmLabel.value} em Configurações)`
-            : `válido; modo fallback textual (${activeLlmLabel.value} não gera embeddings)`,
+          : 'válido; sem indexação',
       state: ctx.erros?.length || !ctx.ativo ? 'failed' : ctx.indexado ? 'success' : 'pending',
       triggeredAt
     }))
@@ -419,11 +410,7 @@ async function handleSync() {
     etlLogs.value.unshift({
       id: Date.now(),
       timestamp: triggeredAt,
-      message: data.chave_configurada
-        ? supportsEmbeddings.value
-          ? `${validos} de ${contextos.length} contexto(s) válidos; ${indexados} indexado(s).`
-          : `${validos} de ${contextos.length} contexto(s) válidos. ${activeLlmLabel.value} opera em modo fallback textual (sem embeddings).`
-        : `${validos} de ${contextos.length} contexto(s) válidos. Configure um provedor de IA em Configurações para indexar o RAG.`,
+      message: `${validos} de ${contextos.length} contexto(s) válidos; ${indexados} indexado(s).`,
       status: falhou ? 'error' : 'success',
       totalRecords: contextos.length,
       changedRecords: validos,
@@ -473,8 +460,8 @@ async function fetchSystemStatus() {
         latency: s.latency_ms ? `${s.latency_ms}ms` : '-'
       }))
       systemStats.value = res.systemStats || systemStats.value
-      if (res.embeddings && typeof res.embeddings.supports_embeddings === 'boolean') {
-        embeddingsStatus.value = res.embeddings
+      if (res.embeddings && typeof res.embeddings.valores_disponiveis === 'boolean') {
+        buscaSemantica.value = res.embeddings
       }
     }
   } catch (error) {
@@ -755,8 +742,7 @@ onBeforeUnmount(() => {
 
           <div class="flex flex-wrap items-center gap-3">
             <button
-              :disabled="!supportsEmbeddings"
-              :title="supportsEmbeddings ? 'Adicionar item manual ao RAG' : `Indisponível: ${activeLlmLabel} não gera embeddings`"
+              title="Adicionar item manual ao RAG"
               class="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="openAddModal"
             >
@@ -764,9 +750,9 @@ onBeforeUnmount(() => {
               Novo Treinamento
             </button>
             <button
-              :disabled="wipingInProgress || !supportsEmbeddings"
+              :disabled="wipingInProgress"
               class="btn-secondary flex items-center gap-2 text-[#C50707] border-[#C50707]/30 hover:border-[#C50707]/60 hover:bg-[#C50707]/8 disabled:opacity-50 disabled:cursor-not-allowed dark:text-red-300 dark:border-red-400/40 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:hover:border-red-400/60"
-              :title="!supportsEmbeddings ? `Indisponível: ${activeLlmLabel} não gera embeddings` : (wipeAlvo ? `Refazer o índice de ${wipeAlvo.nome}` : 'Refazer o índice de todos os contextos ativos')"
+              :title="wipeAlvo ? `Refazer o índice de ${wipeAlvo.nome}` : 'Refazer o índice de todos os contextos ativos'"
               @click="confirmWipe = true"
             >
               <Loader2 v-if="wipingInProgress" class="h-4 w-4 animate-spin" />
@@ -777,38 +763,26 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          v-if="!supportsEmbeddings"
+          v-if="buscaSemantica && !buscaSemantica.valores_disponiveis"
           role="status"
-          class="flex items-start gap-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200"
-        >
-          <Info class="mt-0.5 h-5 w-5 shrink-0" />
-          <div>
-            <p class="font-semibold">Provedor ativo ({{ activeLlmLabel }}) não gera embeddings</p>
-            <p class="mt-0.5 text-xs opacity-90">
-              O chat funciona normalmente em modo fallback textual (usando esquema das views, regras, exemplos e busca local).
-              Para criar treinamentos vetoriais ou rodar Wipe &amp; Retrain, selecione um provedor com embeddings em Configurações
-              (Gemini, OpenAI, Z.AI ou Ollama).
-            </p>
-          </div>
-        </div>
-
-        <div
-          v-else-if="embeddingsStatus?.needs_retrain"
-          role="alert"
           class="flex items-start gap-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200"
         >
           <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <p class="font-semibold">Reindexação recomendada (Wipe &amp; Retrain)</p>
+            <p class="font-semibold">Busca semântica de valores desligada</p>
             <p class="mt-0.5 text-xs opacity-90">
-              Existem {{ embeddingsStatus.incompatible_vectors }} vetor(es) na base gerados por outro provedor ou dimensão
-              diferente do provedor ativo ({{ embeddingsStatus.provider_label }}
-              <span v-if="embeddingsStatus.embedding_model"> · {{ embeddingsStatus.embedding_model }}</span>).
-              O chat segue funcionando em modo seguro, mas recomendamos executar <strong>Wipe &amp; Retrain</strong> para
-              reativar a busca vetorial completa.
+              {{ buscaSemantica.motivo }} O chat segue funcionando com sinônimos e valores idênticos do banco.
+              Atualize o dados.db para receber os vetores do modelo {{ buscaSemantica.modelo }}.
             </p>
           </div>
         </div>
+        <p
+          v-else-if="buscaSemantica && buscaSemantica.modelo_erro"
+          role="status"
+          class="rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-200"
+        >
+          Modelo de embedding local indisponível: {{ buscaSemantica.modelo_erro }}
+        </p>
 
         <p
           v-if="wipeResult"
@@ -1113,7 +1087,7 @@ onBeforeUnmount(() => {
                 <h2 class="text-xl font-semibold text-text-primary">Contextos de dados</h2>
                 <p class="max-w-xl text-sm text-text-secondary leading-relaxed">
                   Lê os contextos do app e da sua pasta de dados, confere se as tabelas existem no dados.db e,
-                  com um provedor com suporte a embeddings configurado, gera o RAG (esquema, regras e exemplos) e o índice de valores de cada um.
+                  monta a Base de conhecimento (esquema, regras e exemplos) de cada um. Os vetores de busca vêm prontos no dados.db.
                 </p>
               </div>
             </div>
@@ -1181,7 +1155,7 @@ onBeforeUnmount(() => {
                 <span v-if="ctx.atualizado_em">Atualizado em {{ new Date(ctx.atualizado_em).toLocaleString('pt-BR') }}</span>
               </div>
               <p v-if="ctx.ativo && ctx.erros.length === 0 && ctx.rag_itens === 0" class="text-xs text-amber-700 dark:text-amber-400">
-                Ainda sem RAG vetorial: o chat funciona em modo fallback textual. Para indexação vetorial, configure um provedor com embeddings em Configurações e use "Carregar e indexar contextos".
+                Base de conhecimento ainda vazia: use "Carregar e indexar contextos".
               </p>
               <ul v-if="ctx.erros.length" class="space-y-1 rounded-lg border border-red-100 bg-red-50/60 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 <li v-for="erro in ctx.erros" :key="erro">{{ erro }}</li>

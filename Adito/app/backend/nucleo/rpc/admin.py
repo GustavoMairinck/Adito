@@ -277,8 +277,6 @@ def training_json(item: KnowledgeItem, ctx: Contexto | None = None) -> dict:
         "contexto_slug": ctx.slug if ctx else None,
         "contexto_nome": ctx.name if ctx else None,
         "origem": "manual" if manual else "contexto",
-        # O vetor é calculado na hora pelo modelo local; todo item entra na busca.
-        "indexado": True,
         "created_at": api_dt(item.created_at),
         "updated_at": api_dt(item.updated_at),
     }
