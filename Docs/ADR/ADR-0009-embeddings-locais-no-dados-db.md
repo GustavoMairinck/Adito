@@ -1,6 +1,6 @@
 # ADR 0009: Embeddings Locais Gerados na Publicação do `dados.db`
 
-**Status:** Proposto (em teste no fork; falta escolher o modelo pela comparação da US-EMB-05)  
+**Status:** Proposto (em teste no fork; modelo escolhido em 27/11/2026, falta a segunda rodada do teste de busca)  
 **Data:** 27/11/2026
 
 ## Contexto/Problema
@@ -12,12 +12,12 @@ O RAG do Adito gerava embeddings pela API do provedor de IA ativo (Gemini, OpenA
 4. **Instabilidade:** a mesma pergunta feita duas vezes dava respostas muito diferentes. Contribuíam a cadeia de 5 a 7 chamadas de LLM, o rewriter que reescrevia a pergunta e o resolvedor ReAct.
 
 ## Decisão Tomada
-1. **Um modelo de embedding local e único**, rodando em CPU pelo `fastembed` (ONNX, int8). O app não troca de modelo e não tem tela para isso. A chave fica em `analytics_index/modelo_local.py` (`MODELO_PADRAO`).
+1. **Um modelo de embedding local e único**, rodando em CPU pelo `fastembed` (ONNX, int8). O app não troca de modelo e não tem tela para isso. O modelo é o `e5-small-int8` (`intfloat/multilingual-e5-small`, 384 dimensões), escolhido pela comparação no `dados.db` real (US-EMB-05). A chave fica em `analytics_index/modelo_local.py` (`MODELO_PADRAO`).
 2. **Os vetores dos valores vão prontos dentro do `dados.db`.** O `publicar_dados.sh` roda `scripts/gerar_embeddings_dados.py` numa cópia do banco antes de cifrar. O script faz `SELECT DISTINCT` por coluna das `embed_columns`, quebra as `multi_valor_columns` em `; ` e grava `adito_valor_embedding` (float16, normalizado) e `adito_embedding_meta` (modelo, dimensão, data). Essas tabelas ficam fora das `exposed_views`, então o validador de SQL não deixa a LLM ler delas.
 3. **O modelo é baixado como o `dados.db`, mas sem criptografia**, da mesma release `dados`: `modelo.json` (chave, tamanho e SHA-256) mais `modelo-<chave>-<sha12>.tar.gz`. O app confere o hash, extrai em `data_dir()/models/<chave>/` e carrega em segundo plano na abertura. Quem publica os dados também publica o modelo, e só quando a chave muda.
 4. **Modelo diferente nos vetores desliga a busca semântica.** O app não tenta reaproveitar nem converter vetores. O painel admin avisa ("Busca semântica de valores desligada"). Sinônimos e valores idênticos continuam funcionando.
 5. **Sai toda chamada de embedding por API.** Os exemplos do `examples.json` e os itens manuais são embedados na máquina, com cache em memória. DDL e regras não passam por busca.
-6. **O resolvedor ReAct e o rewriter saem do grafo.** No lugar deles entra `value_resolver`, um código determinístico: n-gramas da pergunta, depois `sinonimos.json` do contexto, depois valor idêntico do catálogo, depois similaridade no índice local acima de um limite. Os valores achados vão num bloco à parte do prompt, e a pergunta original do usuário viaja junto com a instrução do orquestrador até o gerador.
+6. **O resolvedor ReAct e o rewriter saem do grafo.** No lugar deles entra `value_resolver`, um código determinístico: n-gramas da pergunta, depois `sinonimos.json` do contexto, depois valor idêntico do catálogo, depois similaridade no índice local de pelo menos 0,90, e o valor ainda precisa ter letras em comum com o termo (`parecido_em_letras` de pelo menos 0,75), o que corta falsos positivos como "futebol" virando um título. Os valores achados vão num bloco à parte do prompt, e a pergunta original do usuário viaja junto com a instrução do orquestrador até o gerador.
 7. **O validador recusa filtro com valor que não existe** nas colunas indexadas, sugere o valor mais próximo e manda para o corretor uma vez.
 
 ## Justificativa

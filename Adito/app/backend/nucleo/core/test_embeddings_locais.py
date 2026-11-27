@@ -250,14 +250,21 @@ class ResolvedorValoresTests(unittest.TestCase):
 
     def test_sinonimo_identico_e_semantico(self):
         sinonimos = {"ic": [{"coluna": "programa_fomento", "valores": ["pibic", "pivic"]}]}
-        achados = self.vr.resolver_valores(
-            ["bolsas de IC no campus cariacca em Engenharias"], self.indice, embedder_falso(), sinonimos,
-        )
+        with patch.object(self.vr, "SIMILARIDADE_MINIMA", 0.80):  # o motor falso de trigramas tem outra escala
+            achados = self.vr.resolver_valores(
+                ["bolsas de IC no campus cariacca em Engenharias"], self.indice, embedder_falso(), sinonimos,
+            )
         por_valor = {a["valor"]: a for a in achados}
         self.assertEqual(por_valor["pibic"]["origem"], "sinônimo")
         self.assertEqual(por_valor["Engenharias"]["origem"], "idêntico")
         self.assertEqual(por_valor["Cariacica"]["origem"], "semântico")
         self.assertEqual(por_valor["Cariacica"]["termo"], "cariacca")
+
+    def test_letras_em_comum_cortam_semantico_sem_parentesco(self):
+        self.assertGreater(valores.parecido_em_letras("Engenarias", "Engenharias"), 0.9)
+        self.assertEqual(valores.parecido_em_letras("pesquisa aplicada", "PESQUISA_APLICADA"), 1.0)
+        self.assertEqual(valores.parecido_em_letras("predição de transtornos", "Uso de IA na predição de transtornos III"), 1.0)
+        self.assertLess(valores.parecido_em_letras("futebol", "Educação Física e Esporte"), self.vr.LETRAS_MINIMO)
 
     def test_nao_inventa_valor_quando_nada_passa_do_minimo(self):
         self.assertEqual(self.vr.resolver_valores(["quantos registros xyz?"], self.indice, embedder_falso(), {}), [])

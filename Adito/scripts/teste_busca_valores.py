@@ -72,13 +72,13 @@ def casos_do_banco(indice, rnd: random.Random) -> list[dict]:
     return casos
 
 
-def medir(banco: Path, contexto: Path, chave: str, casos_extra: list[dict]) -> dict:
+def medir(banco: Path, contexto: Path, chave: str, casos_extra: list[dict], letras: float = 0.75) -> dict:
     os.environ["ADITO_EMBEDDING_MODELO"] = chave
     sys.path.insert(0, str(NUCLEO))
     sys.path.insert(0, str(AQUI))
     import numpy as np
     from analytics_index.modelo_local import EmbedderLocal
-    from analytics_index.valores import carregar_indice, normalizar_texto
+    from analytics_index.valores import carregar_indice, normalizar_texto, parecido_em_letras
     from gerar_embeddings_dados import gerar
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -105,12 +105,15 @@ def medir(banco: Path, contexto: Path, chave: str, casos_extra: list[dict]) -> d
 
     linhas = []
     for caso, hits in zip(casos, achados):
-        certo = [i for i, h in enumerate(hits)
-                 if h["coluna"] == caso["coluna"] and normalizar_texto(h["valor"]) == normalizar_texto(caso["valor"])]
+        # Mesmo texto em outra coluna (ex.: "Ciências Agrárias" em grande_area e area_conhecimento) conta como acerto.
+        certo = [i for i, h in enumerate(hits) if normalizar_texto(h["valor"]) == normalizar_texto(caso["valor"])]
         linhas.append({**caso, "pos": certo[0] if certo else None,
                        "sim_top": hits[0]["similaridade"] if hits else 0.0,
+                       "letras_top": parecido_em_letras(caso["termo"], hits[0]["valor"]) if hits else 0.0,
                        "top": hits[0]["valor"] if hits else None})
-    sims_neg = [h[0]["similaridade"] if h else 0.0 for h in achados[len(casos):]]
+    negativos = [(h[0]["similaridade"], parecido_em_letras(t, h[0]["valor"])) if h else (0.0, 0.0)
+                 for t, h in zip(NEGATIVOS, achados[len(casos):])]
+    sims_neg = [s for s, _ in negativos]
 
     def taxa(pred) -> float:
         return round(sum(1 for x in linhas if pred(x)) / max(1, len(linhas)), 3)
@@ -126,6 +129,11 @@ def medir(banco: Path, contexto: Path, chave: str, casos_extra: list[dict]) -> d
             "acerto_top1": taxa(lambda x, t=t: x["pos"] == 0 and x["sim_top"] >= t),
             "valor_errado": taxa(lambda x, t=t: x["pos"] != 0 and x["sim_top"] >= t),
             "falso_positivo_negativos": round(float(np.mean([s >= t for s in sims_neg])), 3),
+            "com_letras": {
+                "acerto_top1": taxa(lambda x, t=t: x["pos"] == 0 and x["sim_top"] >= t and x["letras_top"] >= letras),
+                "valor_errado": taxa(lambda x, t=t: x["pos"] != 0 and x["sim_top"] >= t and x["letras_top"] >= letras),
+                "falso_positivo_negativos": round(float(np.mean([s >= t and l >= letras for s, l in negativos])), 3),
+            },
         }
         for t in LIMITES
     }
@@ -154,12 +162,13 @@ def main() -> int:
     parser.add_argument("--contexto", type=Path, default=CONTEXTO_PADRAO)
     parser.add_argument("--casos", type=Path, help="JSON com casos escritos à mão")
     parser.add_argument("--saida", type=Path, help="grava o resultado completo em JSON")
+    parser.add_argument("--letras", type=float, default=0.75, help="mínimo de letras em comum (filtro do resolvedor)")
     parser.add_argument("--um", help=argparse.SUPPRESS)  # processo filho: mede um modelo só
     args = parser.parse_args()
     extra = json.loads(args.casos.read_text(encoding="utf-8")) if args.casos else []
 
     if args.um:
-        print(json.dumps(medir(args.banco, args.contexto, args.um, extra), ensure_ascii=False))
+        print(json.dumps(medir(args.banco, args.contexto, args.um, extra, args.letras), ensure_ascii=False))
         return 0
 
     sys.path.insert(0, str(NUCLEO))
@@ -168,7 +177,8 @@ def main() -> int:
     resultados = []
     for chave in args.modelos or list(MODELOS):
         print(f"→ {chave}…", flush=True)
-        cmd = [sys.executable, __file__, str(args.banco), "--contexto", str(args.contexto), "--um", chave]
+        cmd = [sys.executable, __file__, str(args.banco), "--contexto", str(args.contexto), "--um", chave,
+               "--letras", str(args.letras)]
         if args.casos:
             cmd += ["--casos", str(args.casos)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -184,8 +194,11 @@ def main() -> int:
             print(f"    {tipo:<10} {t['casos']:>4} casos  top1 {t['top1']:.0%}  top3 {t['top3']:.0%}")
         print(f"    maior similaridade de um negativo: {r['negativos_sim_max']}")
         for limite, t in r["limites"].items():
+            c = t["com_letras"]
             print(f"    limite {limite}: acerta {t['acerto_top1']:.0%}, valor errado {t['valor_errado']:.0%}, "
-                  f"negativos aceitos {t['falso_positivo_negativos']:.0%}")
+                  f"negativos aceitos {t['falso_positivo_negativos']:.0%} | com letras >= {args.letras}: "
+                  f"acerta {c['acerto_top1']:.0%}, valor errado {c['valor_errado']:.0%}, "
+                  f"negativos aceitos {c['falso_positivo_negativos']:.0%}")
     if args.saida:
         args.saida.write_text(json.dumps(resultados, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"✓ resultado em {args.saida}")

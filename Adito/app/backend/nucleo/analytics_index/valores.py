@@ -12,6 +12,7 @@ diferentes não se comparam) e o motivo aparece no painel admin.
 """
 from __future__ import annotations
 
+import difflib
 import logging
 import re
 import threading
@@ -36,6 +37,20 @@ def normalizar_texto(valor: object) -> str:
     texto = unicodedata.normalize("NFKD", str(valor or ""))
     texto = "".join(c for c in texto if not unicodedata.combining(c))
     return re.sub(r"\s+", " ", texto.lower()).strip()
+
+
+def parecido_em_letras(termo: str, valor: str) -> float:
+    """0 a 1: quanto o termo se parece, letra a letra, com o valor ou com um pedaço dele do mesmo tamanho.
+
+    Serve de segundo filtro da busca semântica: o modelo aproxima "futebol" de algum título, mas as letras não.
+    """
+    t, v = normalizar_texto(termo).replace("_", " "), normalizar_texto(valor).replace("_", " ")
+    if not t or not v:
+        return 0.0
+    palavras = v.split()
+    n = max(1, len(t.split()))
+    janelas = {" ".join(palavras[i:i + n]) for i in range(max(1, len(palavras) - n + 1))} | {v}
+    return max(difflib.SequenceMatcher(None, t, j).ratio() for j in janelas)
 
 
 @dataclass

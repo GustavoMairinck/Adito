@@ -91,7 +91,7 @@ O Adito acha os valores citados na pergunta (campus, programa, área, título...
 - **Modelo na mesma release, sem criptografia:** quando a chave do modelo do app é diferente da do `modelo.json` publicado, o script também publica o modelo (`scripts/empacotar_modelo.py` gera `modelo.json` e `modelo-<chave>-<sha12>.tar.gz`). O app baixa na primeira abertura, confere tamanho e SHA-256 e guarda em `<pasta de dados>/models/<chave>/`.
 - **Modelo diferente:** se os vetores do `dados.db` forem de outro modelo, a busca semântica fica desligada e a Base de conhecimento mostra o aviso. O chat continua com os sinônimos (`contexts/<contexto>/sinonimos.json`) e os valores idênticos.
 - **Comparar modelos:** `python3 Adito/scripts/teste_busca_valores.py caminho/dados.db` mede acerto, falso positivo por limite, tempo e memória de cada modelo, sem LLM.
-- **Variáveis:** `ADITO_EMBEDDING_MODELO` (troca o modelo, só para testes), `ADITO_MODELOS_DIR` (pasta dos modelos), `ADITO_MODELO_SEM_DOWNLOAD=1` (não baixa) e `ADITO_VALOR_SIMILARIDADE_MIN` (limite do resolvedor, 0,80 até a calibração).
+- **Variáveis:** `ADITO_EMBEDDING_MODELO` (troca o modelo, só para testes), `ADITO_MODELOS_DIR` (pasta dos modelos), `ADITO_MODELO_SEM_DOWNLOAD=1` (não baixa) e `ADITO_VALOR_SIMILARIDADE_MIN` (limite do resolvedor, 0,90) e `ADITO_VALOR_LETRAS_MIN` (letras em comum exigidas do valor semântico, 0,75).
 
 ## Pendências conhecidas
 

@@ -19,7 +19,7 @@
 
 ### Contexto Adicional
 
-O modelo padrão (`minilm-l12-int8`) e o limite de 0,80 são provisórios, marcados com `shortcut:` no código.
+Rodada de 27/11/2026 no `dados.db` real (10 mil valores): minilm-l12 35% em 1º, e5-small 57%, e5-large 56% (top 3: 46%, 68%, 74%). Nos e5, termos inexistentes passavam de 0,85. Decisão do Gustavo: **e5-small, limite 0,90 e filtro de letras em comum** (`parecido_em_letras`, mínimo 0,75), a confirmar numa segunda rodada.
 
 Origem: análise de 27/11/2026 (`/mnt/project-files/embeddings/analise-fluxo-resposta-embeddings.md`) e [ADR-0009](../../../Docs/ADR/ADR-0009-embeddings-locais-no-dados-db.md).
 

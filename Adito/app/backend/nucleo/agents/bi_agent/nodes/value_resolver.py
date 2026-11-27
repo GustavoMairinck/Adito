@@ -19,7 +19,7 @@ from collections.abc import Container
 from functools import lru_cache
 from pathlib import Path
 
-from analytics_index.valores import indice_valores, normalizar_texto
+from analytics_index.valores import indice_valores, normalizar_texto, parecido_em_letras
 from core.contexts import get_contexto
 from core.datastore import REPO_APP_DIR, data_dir
 from core.rich_logging import log_kv, log_node_end, log_node_start, log_warning
@@ -29,8 +29,12 @@ from ..state import BiAgentState
 MAX_PALAVRAS = 4
 POR_TRECHO = 3
 MAX_VALORES = 12
-# shortcut: limite provisório; calibrar com o teste de busca do dados.db real (scripts/teste_busca_valores.py).
-SIMILARIDADE_MINIMA = float(os.getenv("ADITO_VALOR_SIMILARIDADE_MIN", "0.80"))
+# No e5 até termos que não existem passam de 0,85; a 0,90 somem (teste no dados.db real, 27/11/2026).
+# shortcut: confirmar 0,90 e o filtro de letras numa nova rodada do scripts/teste_busca_valores.py.
+SIMILARIDADE_MINIMA = float(os.getenv("ADITO_VALOR_SIMILARIDADE_MIN", "0.90"))
+# Segundo filtro do semântico: letras em comum com o valor (ou um pedaço dele). Corta "futebol" → título.
+# shortcut: provisório, calibrar com scripts/teste_busca_valores.py.
+LETRAS_MINIMO = float(os.getenv("ADITO_VALOR_LETRAS_MIN", "0.75"))
 # Num mesmo trecho, fica quem estiver a até isso do melhor (ex.: "Serra" em várias views).
 MARGEM_NO_TRECHO = 0.03
 
@@ -127,7 +131,10 @@ def resolver_valores(textos: list[str], indice, embedder, sinonimos: dict, views
                     {"coluna": h["coluna"], "valor": h["valor"], "views": [h["view"]],
                      "similaridade": h["similaridade"], "origem": "semântico"}
                     for h in hits
+                    if parecido_em_letras(trecho[2], h["valor"]) >= LETRAS_MINIMO
                 ]
+                if not achados[trecho]:
+                    del achados[trecho]
 
     # Sobreposição: o trecho de maior similaridade (e, no empate, o mais longo) fica com as palavras.
     ordem = sorted(achados, key=lambda t: (-max(h["similaridade"] for h in achados[t]), -(t[1] - t[0])))

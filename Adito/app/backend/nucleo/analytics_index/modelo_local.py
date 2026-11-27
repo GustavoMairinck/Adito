@@ -64,8 +64,9 @@ MODELOS: dict[str, Modelo] = {
     ),
 }
 
-# shortcut: padrão provisório até o eval escolher o modelo; depois vira constante sem variável de ambiente.
-MODELO_PADRAO = "minilm-l12-int8"
+# Escolhido em 27/11/2026 pela comparação no dados.db real (scripts/teste_busca_valores.py, ADR-0009):
+# empata com o e5-large no acerto em 1º, gera 9x mais rápido e ocupa 4x menos.
+MODELO_PADRAO = "e5-small-int8"
 
 MANIFESTO_MODELO = "modelo.json"
 URL_PADRAO = "https://github.com/SmartIdea-ifes-serra/Adito/releases/download/dados/"
