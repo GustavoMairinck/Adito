@@ -174,6 +174,23 @@ Exportação direta dos dados completos retornados em tabelas e gráficos das re
 > - **Vertical Slice 1 (5 pts):** `US-EXP-01` (gerador CSV PT-BR + OOXML `.xlsx` em TS puro sem dependências npm/Python, comando Rust `exportar_arquivo` com diálogo nativo "Salvar como..." via `tauri-plugin-dialog = "2"` + fallback navegador, testes Rust e Vitest).  
 > - **Vertical Slice 2 (3 pts):** `US-EXP-02` (botão dropdown acessível **"Exportar"** teleportado no Chat, toast de confirmação/erro com cancelamento silencioso e testes Vitest + Playwright E2E).
 
+---
+
+### 🗂️ EPIC-16 — Embeddings locais no `dados.db` e respostas mais estáveis (Em teste no fork desde 27/11/2026)
+
+| ID | Título | Epic | Estimativa (pts) | Prioridade | Depende de | Requisitos | Status |
+|----|--------|------|------------------|------------|------------|------------|--------|
+| [US-EMB-01](stories/US-EMB-01_modelo-local-e-vetores-no-dados-db.md) | Modelo de embedding local e vetores dos valores dentro do dados.db | EPIC-16 | 5 | 🔴 Alta (slice 1) | — | ADR-0009 (decisões 1 a 4) | 🧪 Em teste no fork |
+| [US-EMB-02](stories/US-EMB-02_exemplos-e-base-de-conhecimento-sem-api.md) | Exemplos e Base de conhecimento sem embeddings por API | EPIC-16 | 3 | 🔴 Alta (slice 1) | US-EMB-01 | ADR-0009 (decisão 5) | 🧪 Em teste no fork |
+| [US-EMB-03](stories/US-EMB-03_valores-da-pergunta-sem-llm-e-pergunta-original.md) | Valores da pergunta achados sem LLM, sinônimos do contexto e pergunta original até o SQL | EPIC-16 | 5 | 🔴 Alta (slice 2) | US-EMB-01 | ADR-0009 (decisão 6) | 🧪 Em teste no fork |
+| [US-EMB-04](stories/US-EMB-04_validador-recusa-valor-inexistente.md) | Validador recusa filtro com valor que não existe no dados.db | EPIC-16 | 2 | 🟠 Alta (slice 2) | US-EMB-01 | ADR-0009 (decisão 7) | 🧪 Em teste no fork |
+| [US-EMB-05](stories/US-EMB-05_comparar-modelos-e-calibrar-limites.md) | Comparar modelos de embedding e calibrar os limites de similaridade sem LLM | EPIC-16 | 2 | 🟠 Alta (slice 3) | US-EMB-01, US-EMB-03 | ADR-0009 (riscos) | 🚧 Em andamento |
+
+> Total EPIC-16: 17 pts (Nível ScrumAIDev 1, branch `feat/embeddings-locais` no fork, uma branch com um commit por tarefa).  
+> - **Vertical Slice 1 (8 pts):** `US-EMB-01` e `US-EMB-02` (modelo local, vetores gerados na publicação, Base de conhecimento sem API).  
+> - **Vertical Slice 2 (7 pts):** `US-EMB-03` e `US-EMB-04` (resolvedor determinístico, sinônimos, pergunta original e conferência de valores no validador).  
+> - **Vertical Slice 3 (2 pts):** `US-EMB-05` (comparação de modelos e calibração no `dados.db` real).
+
 > 10/11/2026: o usuário pediu para implementar os slices 1 e 2 direto, sem sprint planning ("sem esse trem de sprint"). Status por story na própria story.
 >
 > Total: 34 pts. Primeiro vertical slice: US-ETL-01 + US-ETL-02 (SRC completo até o bruto, 8 pts). Segundo: US-ETL-03 + US-ETL-06 (primeiro cruzamento SRC ↔ SigPesq, 10 pts). Terceiro: US-ETL-08 (ponte PostgreSQL `unificado` → JSON para as 6 views de fatos, 5 pts). Todas Nível ScrumAIDev 1, sem Spec nem Contract governados.

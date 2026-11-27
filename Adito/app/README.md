@@ -146,7 +146,7 @@ Atalho: `../../rodar_desktop.sh` (na raiz do repositório) sobe o Vite e a janel
 ### Primeira vez no app
 
 1. **Para usar o chat**, abra **Configurações** → cole a chave do Gemini → **Salvar**. O app testa a chave antes de guardar.
-2. **Administração** → **Carregar Contextos**. Valida os contextos e, com a chave configurada, gera os embeddings. A exploração das tabelas funciona com os contextos validados.
+2. **Administração** → **Carregar Contextos**. Valida os contextos e monta a Base de conhecimento, sem chave de IA. Os vetores de busca dos valores já vêm no `dados.db`. A exploração das tabelas funciona com os contextos validados.
 3. **Chat** → escolha o contexto e pergunte, por exemplo: "quantas ações de extensão foram cadastradas por ano?".
 
 Mudou algo em `contexts/` ou trocou o `dados.db`? Repita o passo 2.
@@ -234,7 +234,7 @@ A partir de `backend/nucleo`, com o mesmo `app.db` do app (ou outro, via `ADITO_
 ../../.venv/bin/python -m core.cli --help
 ```
 
-Comandos `load-context`, `sync-embeddings`, `rebuild-embeddings` e `flush-data` (substituem os antigos do `manage.py`).
+Comandos `load-context` e `flush-data` (substituem os antigos do `manage.py`).
 
 ---
 

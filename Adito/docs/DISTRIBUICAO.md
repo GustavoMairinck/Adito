@@ -46,9 +46,10 @@ ADITO_DADOS_CHAVE=<chave> make publicar-dados
 ```
 
 O script ([`Adito/scripts/publicar_dados.sh`](../scripts/publicar_dados.sh)) faz o seguinte:
-1. tranca o `Adito/app/data/dados.db`;
-2. gera o `manifest.json` (versão = data de hoje, SHA-256 e `chave_id`);
-3. sobe tudo na release `dados`, marcada como pré-lançamento para nunca virar o "release mais recente" do app.
+1. copia o `Adito/app/data/dados.db` (o original não muda) e grava na cópia os vetores de busca (veja "Modelo de embedding e vetores de busca");
+2. tranca a cópia e gera o `manifest.json` (versão = data de hoje, SHA-256 e `chave_id`);
+3. publica o modelo de embedding, se a release ainda não tiver o modelo do app;
+4. sobe tudo na release `dados`, marcada como pré-lançamento para nunca virar o "release mais recente" do app.
 
 O pacote novo sobe antes do manifesto e o anterior é mantido, então ninguém que esteja no meio de um download quebra. Outro arquivo ou outra versão: `make publicar-dados ARGS="caminho/dados.db 2026-12-01"`.
 
@@ -82,6 +83,16 @@ make instalador
 
 Os arquivos saem em `Adito/app/src-tauri/target/release/bundle/` (`deb/` e `appimage/`).
 
+## Modelo de embedding e vetores de busca
+
+O Adito acha os valores citados na pergunta (campus, programa, área, título...) com um modelo de embedding que roda na máquina, sem API de IA ([ADR-0009](../../Docs/ADR/ADR-0009-embeddings-locais-no-dados-db.md)).
+
+- **Vetores no `dados.db`:** o `publicar_dados.sh` roda `scripts/gerar_embeddings_dados.py` na cópia do banco. Ele grava `adito_valor_embedding` e `adito_embedding_meta` com o modelo usado. Para gerar à mão: `python3 Adito/scripts/gerar_embeddings_dados.py caminho/da/copia/dados.db`.
+- **Modelo na mesma release, sem criptografia:** quando a chave do modelo do app é diferente da do `modelo.json` publicado, o script também publica o modelo (`scripts/empacotar_modelo.py` gera `modelo.json` e `modelo-<chave>-<sha12>.tar.gz`). O app baixa na primeira abertura, confere tamanho e SHA-256 e guarda em `<pasta de dados>/models/<chave>/`.
+- **Modelo diferente:** se os vetores do `dados.db` forem de outro modelo, a busca semântica fica desligada e a Base de conhecimento mostra o aviso. O chat continua com os sinônimos (`contexts/<contexto>/sinonimos.json`) e os valores idênticos.
+- **Comparar modelos:** `python3 Adito/scripts/teste_busca_valores.py caminho/dados.db` mede acerto, falso positivo por limite, tempo e memória de cada modelo, sem LLM.
+- **Variáveis:** `ADITO_EMBEDDING_MODELO` (troca o modelo, só para testes), `ADITO_MODELOS_DIR` (pasta dos modelos), `ADITO_MODELO_SEM_DOWNLOAD=1` (não baixa) e `ADITO_VALOR_SIMILARIDADE_MIN` (limite do resolvedor, 0,80 até a calibração).
+
 ## Pendências conhecidas
 
 - **Compactação:** o ADR-0007 fala em compactar antes de cifrar. Hoje o pacote só é cifrado (~7,6 MB). Compactar exige mais uma biblioteca e fica para quando o tamanho pesar.
@@ -95,5 +106,6 @@ Os arquivos saem em `Adito/app/src-tauri/target/release/bundle/` (`deb/` e `appi
 | Comandos `dados_status`, `dados_verificar` e `dados_instalar` | `Adito/app/src-tauri/src/lib.rs` |
 | Gerar a chave e empacotar (CLI) | `Adito/app/src-tauri/examples/empacotar_dados.rs` |
 | Atualizador do app | `tauri.conf.json` → `plugins.updater`; `capabilities/default.json` |
+| Modelo local, índice e vetores dos valores | `Adito/app/backend/nucleo/analytics_index/modelo_local.py`, `valores.py`; `Adito/scripts/gerar_embeddings_dados.py`, `empacotar_modelo.py` |
 | Estado das atualizações no front | `frontend-vue/src/common/composables/useAtualizacoes.ts` |
 | Botão do canto e tela do primeiro uso | `AtualizacaoDisponivel.vue`, `PrimeiroUsoDados.vue` |
