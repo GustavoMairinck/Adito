@@ -145,6 +145,19 @@ async def roteiro(api) -> list[dict]:
     ctxs = await call("contextos", "contextos.list")
     cid = ctxs[0]["id"] if isinstance(ctxs, list) and ctxs else None
 
+    await call("explorer.tables", "explorer.tables", {"contexto_id": cid})
+    await call("explorer.tables sem contexto", "explorer.tables", {})
+    base = {"contexto_id": cid, "table": VIEW}
+    await call("explorer.rows padrão", "explorer.rows", base)
+    await call("explorer.rows busca", "explorer.rows", {**base, "search": "Projeto 0", "page_size": "50"})
+    await call("explorer.rows ordenado", "explorer.rows", {**base, "sort": "ano", "direction": "desc", "page": "2"})
+    await call("explorer.rows filtro+grupo", "explorer.rows",
+               {**base, "filter_column": "grande_area", "filter_value": "Exatas", "group_by": "programa_fomento"})
+    await call("explorer.rows coluna sensível", "explorer.rows", {**base, "sort": "cpf_orientador"})
+    await call("explorer.rows tabela inexistente", "explorer.rows", {**base, "table": "nao_existe"})
+    await call("explorer.rows página inválida", "explorer.rows", {**base, "page": "0"})
+    await call("explorer.rows dim", "explorer.rows", {**base, "table": "dim_area"})
+
     await call("kpis", "dashboard.kpis")
     await call("kpis filtrado", "dashboard.kpis", {"ano": "2025", "area": "hum"})
     await call("top_projects", "dashboard.top_projects")
@@ -187,6 +200,19 @@ async def roteiro(api) -> list[dict]:
         await call(f"message_rows {i}", "chat.message_rows", {"id": m["id"]})
     if msgs:
         await call("message_rows de pergunta", "chat.message_rows", {"id": msgs[0]["id"]})
+
+    # Relatório (EPIC-14): mensagem da conversa por modelo fixo, sem LLM; uma seção boa e uma com SQL quebrado.
+    conversa = next((c for c in convs if c["id"] == conv_id), None) if isinstance(convs, list) else None
+    analises = [m for m in (conversa or {}).get("messages", [])
+                if m["role"] == "assistant" and (m.get("metadata") or {}).get("type") == "analysis"]
+    relatorio = await call("reports.create", "chat.reports.create", {
+        "conversation_id": conv_id, "title": "Relatório do contrato",
+        "sections": [{"message_id": m["id"], "title": f"Seção {i + 1}"} for i, m in enumerate(analises)],
+    })
+    await call("reports.create sem seções", "chat.reports.create",
+               {"conversation_id": conv_id, "title": "Vazio", "sections": []})
+    await call("report_rows", "chat.report_rows", {"id": relatorio.get("id") if isinstance(relatorio, dict) else None})
+    await call("report_rows de resposta comum", "chat.report_rows", {"id": analises[0]["id"] if analises else None})
     await call("query_executions", "admin.query_executions", {"limit": "100"})
     await call("query_executions inválidas", "admin.query_executions", {"limit": "100", "is_valid": "false"})
     await call("conversations.delete", "chat.conversations.delete", {"id": conv_id})

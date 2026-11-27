@@ -25,6 +25,20 @@ export interface TauriMockOptions {
   dadosNovos?: boolean
   /** Primeiro uso: ainda não há dados.db baixado. */
   semDados?: boolean
+  /** Versão nova do executável publicada (ex.: '0.2.0'). */
+  appNovaVersao?: string
+  /** Pré-ativa o modo opt-in de atualização automática no localStorage antes do boot. */
+  autoUpdateEnabled?: boolean
+  /** Linhas devolvidas na resposta do chat (padrão: projetos por grande área, 2 linhas). */
+  chatData?: Array<Record<string, unknown>>
+  /** Tipo de gráfico sugerido pelo agente de painéis na resposta do chat (padrão: nenhum). */
+  chatChartType?: string
+  /** Linhas por palavra da pergunta (a primeira palavra encontrada vence); senão vale `chatData`. */
+  chatDataByQuestion?: Record<string, Array<Record<string, unknown>>>
+  /** Pasta simulada escolhida no diálogo "Salvar como..." durante a exportação. */
+  exportDir?: string
+  /** Simula o usuário cancelando o diálogo "Salvar como..." na exportação. */
+  exportCancel?: boolean
 }
 
 /**
@@ -43,9 +57,19 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     role: options.role ?? 'admin',
     dadosNovos: options.dadosNovos ?? false,
     semDados: options.semDados ?? false,
+    appNovaVersao: options.appNovaVersao ?? null,
+    autoUpdateEnabled: options.autoUpdateEnabled ?? false,
+    chatData: options.chatData ?? null,
+    chatChartType: options.chatChartType ?? null,
+    chatDataByQuestion: options.chatDataByQuestion ?? null,
+    exportDir: options.exportDir ?? '/mock/Documentos',
+    exportCancel: options.exportCancel ?? false,
   }
 
   await page.addInitScript((cfg) => {
+    if (cfg.autoUpdateEnabled) {
+      localStorage.setItem('adito:auto_update', 'true')
+    }
     const callbacks = new Map<number, (raw: unknown) => void>()
     let nextCbId = 1
     let llmConfigured = cfg.llmConfigured
@@ -53,6 +77,18 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let activeModel: string | null = null
     let activeBaseUrl: string | null = null
     let dadosInstalados = !cfg.semDados
+    let dadosVersaoAtual = cfg.semDados ? null : '2026-11-01'
+    let dadosNovosPendentes = cfg.dadosNovos
+    const updaterTelemetry = {
+      checks: 0,
+      downloads: 0,
+      installs: 0,
+      relaunches: 0,
+      dadosInstalls: 0,
+    }
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_UPDATER__ = updaterTelemetry
+    const exportedFiles: Array<{ nome: string; bytes: number[] }> = []
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_EXPORTS__ = exportedFiles
 
     const PROVIDERS = [
       { id: 'gemini', label: 'Gemini', protocol: 'gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', default_model: 'gemini-3.5-flash-lite', supports_embeddings: true, default_embedding_model: 'gemini-embedding-2', requires_key: true, allow_custom_base_url: false },
@@ -102,12 +138,74 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       },
     ]
 
+    // Exposto para os testes conferirem o que foi fixado no painel.
+    ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_WIDGETS__ = widgets
+
     const widgetRows: Record<string, Array<Record<string, unknown>>> = {
       'w-1': [
         { ano: 2023, total: 85 },
         { ano: 2024, total: 120 },
       ],
     }
+
+    // Explorar dados: projetos sintéticos (sem nomes de pessoas) para catálogo, busca, filtro e gráfico.
+    const AREAS = ['Engenharias', 'Ciências Exatas e da Terra', 'Ciências Humanas', 'Ciências Biológicas']
+    const explorerRows: Record<string, Array<Record<string, unknown>>> = {
+      vfact_projeto_pesquisa_resolved: Array.from({ length: 33 }, (_, i) => ({
+        id_projeto: i + 1,
+        titulo_projeto: i === 0 ? 'Robótica educacional 100%' : `Projeto ${String(i + 1).padStart(2, '0')}`,
+        grande_area: AREAS[i % AREAS.length],
+        ano: 2023 + (i % 2),
+      })),
+      vfact_orientacao_bolsa_resolved: [
+        { id_orientacao: 1, modalidade: 'PIBIC', ano: 2024 },
+        { id_orientacao: 2, modalidade: 'PIBITI', ano: 2024 },
+      ],
+      vfact_extensao_acao_resolved: [],
+    }
+    const explorerColumns = (name: string) => {
+      const sample = explorerRows[name]?.[0]
+      if (!sample) return []
+      return Object.entries(sample).map(([column, value]) => ({ name: column, type: typeof value === 'number' ? 'INTEGER' : 'TEXT' }))
+    }
+    function explorerQuery(params: Record<string, unknown>) {
+      const all = explorerRows[String(params.table)] || []
+      const search = String(params.search || '').toLowerCase()
+      const filterColumn = String(params.filter_column || '')
+      const filterValue = String(params.filter_value || '')
+      let rows = all.filter((row) => (
+        (!search || Object.values(row).some((value) => String(value).toLowerCase().includes(search)))
+        && (!filterColumn || !filterValue || String(row[filterColumn]) === filterValue)
+      ))
+      const sort = String(params.sort || Object.keys(all[0] || {})[0] || '')
+      const desc = params.direction === 'desc'
+      rows = [...rows].sort((a, b) => {
+        const x = a[sort] as string | number
+        const y = b[sort] as string | number
+        return (x < y ? -1 : x > y ? 1 : 0) * (desc ? -1 : 1)
+      })
+      const pageSize = Number(params.page_size || 25)
+      const page = Math.min(Number(params.page || 1), Math.max(1, Math.ceil(rows.length / pageSize)))
+      const groupBy = String(params.group_by || '')
+      const counts = new Map<unknown, number>()
+      if (groupBy) for (const row of rows) counts.set(row[groupBy], (counts.get(row[groupBy]) || 0) + 1)
+      return {
+        rows: rows.slice((page - 1) * pageSize, page * pageSize),
+        total: rows.length,
+        page,
+        page_size: pageSize,
+        distribution: [...counts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 12),
+      }
+    }
+    // Relatórios (EPIC-14): linhas e SQL de cada resposta do stream, para o relatório reexecutar.
+    const chatRowsByMessage: Record<string, Array<Record<string, unknown>>> = {}
+    const chatSqlByMessage: Record<string, string> = {}
+    const reports: Record<string, { metadata: Record<string, unknown> } & Record<string, unknown>> = {}
+    let reportSeq = 1
+    let chatAnswerSeq = 0
 
     const conversations: Array<Record<string, unknown>> = [
       {
@@ -212,11 +310,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return CONTEXTOS
         case 'dashboard.kpis': {
           const ano = String(params.ano || '')
+          const atualizado = dadosVersaoAtual === '2026-11-22'
           return {
-            total_investido: ano === '2023' ? 'R$ 84.000,00' : 'R$ 320.000,00',
-            projetos_ativos: ano === '2023' ? 48 : 236,
+            total_investido: ano === '2023' ? 'R$ 84.000,00' : atualizado ? 'R$ 410.000,00' : 'R$ 320.000,00',
+            projetos_ativos: ano === '2023' ? 48 : atualizado ? 310 : 236,
             pagamentos_ano_vigente: 'R$ 95.000,00',
-            equipe_alocada: ano === '2023' ? 24 : 89,
+            equipe_alocada: ano === '2023' ? 24 : atualizado ? 105 : 89,
           }
         }
         case 'dashboard.top_projects':
@@ -279,6 +378,54 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           const idx = widgets.findIndex((w) => w.id === params.id)
           if (idx >= 0) widgets.splice(idx, 1)
           return { ok: true }
+        }
+        case 'explorer.tables':
+          return {
+            tables: CONTEXTOS[0].views.map((view) => ({
+              name: view.name,
+              label: view.description,
+              description: view.description,
+              kind: 'fact',
+              columns: explorerColumns(view.name),
+              available: explorerColumns(view.name).length > 0,
+            })),
+          }
+        case 'explorer.rows':
+          return explorerQuery(params)
+        case 'chat.reports.create': {
+          const sections = (params.sections as Array<Record<string, unknown>>) || []
+          const report = {
+            id: `rep-${reportSeq++}`,
+            role: 'assistant',
+            content: String(params.title || ''),
+            created_at: '2026-11-25T14:30:00Z',
+            metadata: {
+              type: 'report',
+              title: String(params.title || ''),
+              contexto_nome: CONTEXTOS[0].name,
+              sections: sections.map((section) => ({
+                source_message_id: section.message_id,
+                title: section.title,
+                sql: chatSqlByMessage[String(section.message_id)] || 'SELECT 1',
+                field_formats: { total: 'integer' },
+                chart_type: section.chart_type ?? null,
+              })),
+            },
+          }
+          reports[report.id] = report
+          ;(window as unknown as Record<string, unknown>).__TAURI_MOCK_LAST_REPORT__ = { params, report }
+          return report
+        }
+        case 'chat.report_rows': {
+          const report = reports[String(params.id)]
+          const sections = (report?.metadata.sections || []) as Array<Record<string, unknown>>
+          return {
+            sections: sections.map((section) => {
+              const sql = String(section.sql || '')
+              if (sql.includes('quebrado')) return { data: [], error: 'os dados mudaram desde a pergunta' }
+              return { data: chatRowsByMessage[String(section.source_message_id)] || [], error: null }
+            }),
+          }
         }
         case 'chat.conversations.list':
           return conversations
@@ -429,19 +576,73 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         // Distribuição: por padrão os dados já estão instalados e nada novo foi publicado.
         if (cmd === 'dados_status') {
           return dadosInstalados
-            ? { instalado: true, versao: '2026-11-01', desenvolvimento: false, chave_configurada: true }
+            ? { instalado: true, versao: dadosVersaoAtual || '2026-11-01', desenvolvimento: false, chave_configurada: true }
             : { instalado: false, versao: null, desenvolvimento: false, chave_configurada: false }
         }
         if (cmd === 'dados_verificar') {
-          const novos = cfg.dadosNovos || !dadosInstalados
-          return { versao: novos ? '2026-11-22' : '2026-11-01', tamanho: 8000000, atualizacao: novos, precisa_chave: !dadosInstalados }
+          const novos = dadosNovosPendentes || !dadosInstalados
+          return { versao: novos ? '2026-11-22' : (dadosVersaoAtual || '2026-11-01'), tamanho: 8000000, atualizacao: novos, precisa_chave: !dadosInstalados }
         }
         if (cmd === 'dados_instalar') {
           if (!dadosInstalados && args.chave !== 'a'.repeat(64)) {
             throw 'Essa chave não abre esta versão dos dados.'
           }
           dadosInstalados = true
+          dadosVersaoAtual = '2026-11-22'
+          dadosNovosPendentes = false
+          updaterTelemetry.dadosInstalls += 1
           return '2026-11-22'
+        }
+        // Plugins oficiais de atualização (tauri-plugin-updater e tauri-plugin-process).
+        if (cmd === 'plugin:updater|check') {
+          updaterTelemetry.checks += 1
+          if (!cfg.appNovaVersao) return null
+          return {
+            rid: 1001,
+            currentVersion: '0.1.0',
+            version: cfg.appNovaVersao,
+            date: '2026-11-25T15:00:00Z',
+            body: 'Nova versão do Adito',
+            rawJson: {},
+          }
+        }
+        if (cmd === 'plugin:updater|download') {
+          updaterTelemetry.downloads += 1
+          sendChannel(args.onEvent, [
+            { msg: { event: 'Started', data: { contentLength: 100 } }, delayMs: 0 },
+            { msg: { event: 'Progress', data: { chunkLength: 100 } }, delayMs: 5 },
+            { msg: { event: 'Finished' }, delayMs: 10 },
+          ])
+          return 2001
+        }
+        if (cmd === 'plugin:updater|install') {
+          updaterTelemetry.installs += 1
+          return undefined
+        }
+        if (cmd === 'plugin:updater|download_and_install') {
+          updaterTelemetry.downloads += 1
+          updaterTelemetry.installs += 1
+          sendChannel(args.onEvent, [
+            { msg: { event: 'Started', data: { contentLength: 100 } }, delayMs: 0 },
+            { msg: { event: 'Finished' }, delayMs: 5 },
+          ])
+          return undefined
+        }
+        if (cmd === 'plugin:resources|close') {
+          return undefined
+        }
+        if (cmd === 'plugin:process|restart') {
+          updaterTelemetry.relaunches += 1
+          return undefined
+        }
+        if (cmd === 'exportar_arquivo') {
+          if (cfg.exportCancel) {
+            return { nome: '', caminho: '', cancelado: true }
+          }
+          const nome = String(args.nome || 'adito-dados.csv')
+          const bytes = Array.isArray(args.bytes) ? (args.bytes as number[]) : []
+          exportedFiles.push({ nome, bytes })
+          return { nome, caminho: `${cfg.exportDir}/${nome}`, cancelado: false }
         }
         if (cmd === 'core_call') {
           return handleRpc(String(args.method), (args.params as Record<string, unknown>) || {})
@@ -465,7 +666,19 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             : `conv-live-${liveConversationSeq++}`
           const delay = Number(cfg.chatStreamDelayMs || 0)
           const finalDelay = delay > 0 ? delay : 15
-          const mockSql = 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area'
+          const byQuestion = Object.entries(cfg.chatDataByQuestion || {})
+            .find(([word]) => question.toLowerCase().includes(word.toLowerCase()))
+          const answerRows = byQuestion?.[1] || cfg.chatData || [
+            { grande_area: 'Engenharias', total: 120 },
+            { grande_area: 'Ciências Exatas', total: 116 },
+          ]
+          const answerId = `msg-live-${streamId}`
+          const answerSql = byQuestion || cfg.chatData
+            ? `SELECT … /* resposta ${++chatAnswerSeq}: ${question.replace(/\*\//g, '')} */`
+            : 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area'
+          chatRowsByMessage[answerId] = answerRows
+          chatSqlByMessage[answerId] = answerSql
+          const mockSql = answerSql
           const mockTrace = {
             compact: false,
             duration_ms: 420,
@@ -484,8 +697,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
                 subtitle: 'Buscando dados na base do IFES e aplicando regras de verificação.',
                 status: 'done',
                 header_status: 'Consultando base...',
-                details: ['2 registros encontrados.'],
-                code: mockSql,
+                details: [`${answerRows.length} registros encontrados.`],
+                code: answerSql,
                 language: 'sql',
               },
               {
@@ -543,15 +756,13 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
               msg: {
                 event: 'result',
                 data: {
-                  message_id: `msg-live-${streamId}`,
+                  message_id: answerId,
                   conversation_id: resolvedConvId,
                   type: 'analysis',
                   text: `Resposta para "${question}": existem **236 projetos** de pesquisa ativos no Campus Serra.`,
-                  sql: mockSql,
-                  data: [
-                    { grande_area: 'Engenharias', total: 120 },
-                    { grande_area: 'Ciências Exatas', total: 116 },
-                  ],
+                  sql: answerSql,
+                  data: answerRows,
+                  chart_type: cfg.chatChartType,
                   trace: mockTrace,
                 },
               },

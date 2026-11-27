@@ -6,6 +6,7 @@ import {
   AreaChart,
   Check,
   CheckCircle2,
+  Database,
   KeyRound,
   Loader2,
   MessageSquare,
@@ -152,6 +153,7 @@ function closeSearch() {
 const menuItems = [
   { icon: MessageSquare, label: 'Chat', path: '/chat' },
   { icon: AreaChart, label: 'Meu painel', path: '/meu-dashboard' },
+  { icon: Database, label: 'Explorar dados', path: '/explorar' },
   { icon: Settings, label: 'Administração', path: '/admin', adminOnly: true },
   { icon: KeyRound, label: 'Configurações', path: '/configuracoes' },
 ]

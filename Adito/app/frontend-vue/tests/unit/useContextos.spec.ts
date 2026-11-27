@@ -6,10 +6,13 @@ vi.mock('@/common/api/core', () => ({
   call: (...args: unknown[]) => callMock(...args),
 }))
 
+import { nextTick } from 'vue'
 import { useContextos } from '@/common/composables/useContextos'
+import { _resetAtualizacoes, useAtualizacoes } from '@/common/composables/useAtualizacoes'
 
 describe('common/composables/useContextos', () => {
   beforeEach(() => {
+    _resetAtualizacoes()
     callMock.mockReset()
     localStorage.clear()
     const { select } = useContextos()
@@ -46,5 +49,39 @@ describe('common/composables/useContextos', () => {
     select(null)
     expect(selectedId.value).toBeNull()
     expect(localStorage.getItem('adito_contexto_selecionado')).toBeNull()
+  })
+
+  it('recarrega contextos automaticamente quando dadosReloadSeq incrementa', async () => {
+    callMock
+      .mockResolvedValueOnce([
+        {
+          id: 'ctx-1',
+          slug: 'pesquisa-v1',
+          name: 'Pesquisa v1',
+          description: 'Base v1',
+          views: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'ctx-1',
+          slug: 'pesquisa-v2',
+          name: 'Pesquisa v2',
+          description: 'Base atualizada',
+          views: [],
+        },
+      ])
+
+    const { loadContextos, contextos } = useContextos()
+    await loadContextos()
+    expect(contextos.value[0]?.name).toBe('Pesquisa v1')
+
+    const { dadosReloadSeq } = useAtualizacoes()
+    dadosReloadSeq.value += 1
+    await nextTick()
+    await Promise.resolve()
+
+    expect(callMock).toHaveBeenCalledTimes(2)
+    expect(contextos.value[0]?.name).toBe('Pesquisa v2')
   })
 })

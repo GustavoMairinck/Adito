@@ -4,9 +4,14 @@ import { useRoute } from 'vue-router'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
+import { exportarTabela } from '@/common/api/export'
 import { useToast } from '@/common/composables/useToast'
+import type { ExportFormat } from '@/common/utils/exportData'
 import ChatConversation from '@/modules/chat/components/ChatConversation.vue'
 import ChatInputArea from '@/modules/chat/components/ChatInputArea.vue'
+import ChatReportForm, { type ReportOption } from '@/modules/chat/components/ChatReportForm.vue'
+import { isReportEligible, questionFor } from '@/modules/chat/utils/report'
+import type { ChatChartType } from '@/modules/chat/utils/chartType'
 import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialog.vue'
 import ContextoSelector from '@/modules/chat/components/ContextoSelector.vue'
 import { useContextos } from '@/common/composables/useContextos'
@@ -14,6 +19,7 @@ import { useAuth } from '@/modules/auth/composables/useAuth'
 import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import type { ChatMessage, ReasoningTrace } from '@/modules/chat/types'
 import { applyTraceEvent, createInitialTrace } from '@/modules/chat/utils/trace'
 
@@ -26,8 +32,16 @@ const {
   updateConversationById,
   replaceConversationId,
   setConversationContexto,
-  currentConversation
+  currentConversation,
+  createReport,
+  reloadReports
 } = useChatHistory()
+
+// Relatórios guardam só o SQL: quando o dados.db é atualizado em segundo plano, recalcula os números.
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq > 0) void reloadReports(currentConvId.value)
+})
 
 const {
   askQuestionStream,
@@ -56,6 +70,57 @@ const {
 } = useChatPin(showToast)
 
 const input = ref('')
+
+// ── Relatório (EPIC-14): modelo fixo a partir das respostas da conversa, sem LLM ──
+const reportFormOpen = ref(false)
+const reportSaving = ref(false)
+const reportError = ref('')
+const reportOptions = computed<ReportOption[]>(() => {
+  const all = messages.value
+  return all
+    .filter(isReportEligible)
+    .map(message => ({
+      id: message.id,
+      question: questionFor(all, message),
+      chartType: message.chartType ?? message.suggestedChartType ?? null,
+    }))
+})
+const canCreateReport = computed(() =>
+  reportOptions.value.length > 0
+  && !!currentConvId.value
+  && !currentConvId.value.startsWith('local-')
+  && !isCurrentConvLoading.value
+)
+
+const openReportForm = () => {
+  reportError.value = ''
+  reportFormOpen.value = true
+}
+
+const generateReport = async (payload: { title: string; sections: Array<{ message_id: string; title: string; chart_type?: string | null }> }) => {
+  const convId = currentConvId.value
+  if (!convId) return
+  reportSaving.value = true
+  reportError.value = ''
+  try {
+    await createReport(convId, payload.title, payload.sections)
+    reportFormOpen.value = false
+  } catch (error: any) {
+    reportError.value = error?.data?.sections?.[0] || error?.data?.title?.[0] || 'Não foi possível gerar o relatório. Tente novamente.'
+  } finally {
+    reportSaving.value = false
+  }
+}
+
+const rememberChartType = ({ id, type }: { id: string; type: ChatChartType }) => {
+  if (!currentConvId.value) return
+  updateConversationById(currentConvId.value, conversation => ({
+    ...conversation,
+    messages: conversation.messages.map(message => (message.id === id ? { ...message, chartType: type } : message)),
+  }))
+}
+
+watch(currentConvId, () => { reportFormOpen.value = false })
 const healthOnline = ref<boolean | null>(null)
 const reconnecting = ref(false)
 const conversationToDelete = ref<{ id: string; title: string } | null>(null)
@@ -136,6 +201,7 @@ const scrollToBottom = async () => {
 
 watch(messages, scrollToBottom, { deep: true })
 watch(isCurrentConvLoading, scrollToBottom)
+watch(reportFormOpen, open => { if (open) scrollToBottom() })
 
 const cancelCurrentQuestion = () => {
   if (conversationToDelete.value || pinModalOpen.value) return
@@ -373,26 +439,55 @@ const toggleSql = (messageId: string) => {
   }))
 }
 
-const openPinModal = (message: ChatMessage) => {
-  let questionOriginal = ''
+const findQuestionForMessage = (message: ChatMessage): string => {
   if (message.userMessageId) {
     const userMsg = messages.value.find(m => m.id === message.userMessageId)
-    if (userMsg) {
-      questionOriginal = userMsg.text
-    }
+    if (userMsg) return userMsg.text
   }
-  if (!questionOriginal) {
-    const index = messages.value.findIndex(m => m.id === message.id)
-    if (index > 0) {
-      const prevMsg = messages.value[index - 1]
-      if (prevMsg && prevMsg.type === 'user') {
-        questionOriginal = prevMsg.text
-      }
-    }
+  const index = messages.value.findIndex(m => m.id === message.id)
+  if (index > 0) {
+    const prevMsg = messages.value[index - 1]
+    if (prevMsg && prevMsg.type === 'user') return prevMsg.text
   }
+  return ''
+}
+
+const openPinModal = (message: ChatMessage) => {
+  const questionOriginal = findQuestionForMessage(message)
   openPinModalBase(message, questionOriginal, currentConversation.value?.contextoId)
 }
 
+const isExporting = ref(false)
+
+const extractFolderName = (caminho: string | null): string => {
+  if (!caminho) return ''
+  const parts = caminho.split(/[\\/]+/).filter(Boolean)
+  return parts.length >= 2 ? parts[parts.length - 2] : ''
+}
+
+const handleExport = async ({ message, format }: { message: ChatMessage; format: ExportFormat }) => {
+  if (isExporting.value || !message.table?.length) return
+  isExporting.value = true
+  try {
+    const label = findQuestionForMessage(message) || currentConversation.value?.title
+    const res = await exportarTabela(message.table, format, {
+      fieldFormats: message.fieldFormats,
+      label,
+    })
+    if (res.cancelado) return
+    if (res.modo === 'tauri') {
+      const folder = extractFolderName(res.caminho)
+      showToast(folder ? `Arquivo salvo em ${folder}: ${res.nome}` : `Arquivo salvo: ${res.nome}`, 'success')
+    } else {
+      showToast(`Arquivo salvo: ${res.nome}`, 'success')
+    }
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error)
+    showToast(`Não foi possível exportar os dados: ${detail}`, 'error')
+  } finally {
+    isExporting.value = false
+  }
+}
 const confirmDeleteConversation = async () => {
   if (!conversationToDelete.value) return
   try {
@@ -438,6 +533,8 @@ const confirmDeleteConversation = async () => {
     >
       <div
         v-if="toast"
+        role="status"
+        data-testid="chat-toast"
         :class="[
           'fixed right-4 bottom-4 z-[70] max-w-sm rounded-2xl px-4 py-3 shadow-2xl border flex items-start gap-3',
           toast.type === 'success'
@@ -462,8 +559,23 @@ const confirmDeleteConversation = async () => {
           :llm-configured="llmConfigured"
           @toggle-sql="toggleSql"
           @pin="openPinModal"
+          @export="handleExport"
           @suggest="sendQuestion($event)"
-        />
+          @chart-type="rememberChartType"
+        >
+          <template #after-messages>
+            <ChatReportForm
+              v-if="reportFormOpen && reportOptions.length"
+              :key="currentConvId ?? 'none'"
+              :options="reportOptions"
+              :default-title="currentConversation?.title || 'Relatório'"
+              :saving="reportSaving"
+              :error="reportError"
+              @cancel="reportFormOpen = false"
+              @generate="generateReport"
+            />
+          </template>
+        </ChatConversation>
         <div
           v-if="healthOnline === false"
           role="alert"
@@ -502,6 +614,8 @@ const confirmDeleteConversation = async () => {
           v-model="input"
           :loading="isCurrentConvLoading"
           :disable-escape="!!conversationToDelete || pinModalOpen"
+          :can-create-report="canCreateReport"
+          @create-report="openReportForm"
           @send="sendQuestion()"
           @cancel="cancelCurrentQuestion()"
         />

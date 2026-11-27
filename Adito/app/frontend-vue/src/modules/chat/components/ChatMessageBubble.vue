@@ -1,12 +1,32 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
-import VueApexCharts from 'vue3-apexcharts'
-import { ArrowLeftRight, Code, Database, Lightbulb, Pin, Copy, Check, Minimize2, Square } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  AreaChart,
+  BarChart2,
+  BarChartHorizontal,
+  Check,
+  ChevronDown,
+  Code,
+  Copy,
+  Database,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Lightbulb,
+  PieChart,
+  Pin,
+  Square,
+  TrendingUp
+} from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
 import AditoReasoningTrace from '@/modules/chat/components/AditoReasoningTrace.vue'
-import type { ApexOptions } from 'apexcharts'
-import type { ChatMessage, FieldFormat } from '@/modules/chat/types'
+import type { ChatMessage } from '@/modules/chat/types'
+import type { ExportFormat } from '@/common/utils/exportData'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
+import { CHAT_CHART_TYPES, canUsePie, initialChartType, type ChatChartType } from '@/modules/chat/utils/chartType'
+import { formatFieldValue } from '@/modules/chat/utils/format'
+import ChatResultChart from '@/modules/chat/components/ChatResultChart.vue'
+import ChatResultTable from '@/modules/chat/components/ChatResultTable.vue'
 
 const props = defineProps<{
   message: ChatMessage
@@ -15,7 +35,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
+  (e: 'export', payload: { message: ChatMessage; format: ExportFormat }): void
   (e: 'suggest', question: string): void
+  (e: 'chart-type', payload: { id: string; type: ChatChartType }): void
 }>()
 
 const hasRenderableTable = computed(() => {
@@ -37,12 +59,109 @@ const hasFinalResponseContent = computed(() => {
   )
 })
 
-const isDark = ref(false)
+const canExportTable = computed(() => hasRenderableTable.value && !props.message.isScalarResult)
+
+const exportMenuOpen = ref(false)
+const exportMenuRef = ref<HTMLElement | null>(null)
+const exportButtonRef = ref<HTMLButtonElement | null>(null)
+const exportDropdownRef = ref<HTMLElement | null>(null)
+const exportMenuStyle = ref<Record<string, string>>({})
+let exportListenersAttached = false
+
+function updateExportMenuPosition() {
+  if (typeof window === 'undefined' || !exportMenuRef.value) return
+  const rect = exportMenuRef.value.getBoundingClientRect()
+  const dropdownRect = exportDropdownRef.value?.getBoundingClientRect()
+  const menuWidth = dropdownRect && dropdownRect.width > 0 ? Math.ceil(dropdownRect.width) : 212
+  const menuHeight = dropdownRect && dropdownRect.height > 0 ? Math.ceil(dropdownRect.height) : 96
+  const margin = 8
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - menuWidth - margin))
+  const spaceBelow = window.innerHeight - rect.bottom
+
+  if (spaceBelow < menuHeight + 16 && rect.top > spaceBelow) {
+    exportMenuStyle.value = {
+      left: `${left}px`,
+      bottom: `${window.innerHeight - rect.top + 6}px`,
+      minWidth: '212px',
+    }
+  } else {
+    exportMenuStyle.value = {
+      left: `${left}px`,
+      top: `${rect.bottom + 6}px`,
+      minWidth: '212px',
+    }
+  }
+}
+
+function attachExportListeners() {
+  if (exportListenersAttached || typeof document === 'undefined' || typeof window === 'undefined') return
+  document.addEventListener('mousedown', handleExportOutsideClick)
+  document.addEventListener('keydown', handleExportKeydown, true)
+  window.addEventListener('resize', handleExportViewportChange)
+  window.addEventListener('scroll', handleExportViewportChange, true)
+  exportListenersAttached = true
+}
+
+function detachExportListeners() {
+  if (!exportListenersAttached || typeof document === 'undefined' || typeof window === 'undefined') return
+  document.removeEventListener('mousedown', handleExportOutsideClick)
+  document.removeEventListener('keydown', handleExportKeydown, true)
+  window.removeEventListener('resize', handleExportViewportChange)
+  window.removeEventListener('scroll', handleExportViewportChange, true)
+  exportListenersAttached = false
+}
+
+watch(exportMenuOpen, (open) => {
+  if (open) {
+    updateExportMenuPosition()
+    attachExportListeners()
+    nextTick(() => updateExportMenuPosition())
+  } else {
+    detachExportListeners()
+  }
+})
+
+function toggleExportMenu() {
+  exportMenuOpen.value = !exportMenuOpen.value
+}
+
+function closeExportMenu() {
+  exportMenuOpen.value = false
+}
+
+function triggerExport(format: ExportFormat) {
+  exportMenuOpen.value = false
+  emit('export', { message: props.message, format })
+}
+
+function handleExportOutsideClick(event: MouseEvent) {
+  if (!exportMenuOpen.value) return
+  const target = event.target as Node | null
+  if (target && (exportMenuRef.value?.contains(target) || exportDropdownRef.value?.contains(target))) return
+  closeExportMenu()
+}
+
+function handleExportViewportChange() {
+  if (!exportMenuOpen.value || !exportMenuRef.value) return
+  const rect = exportMenuRef.value.getBoundingClientRect()
+  if (rect.bottom < 0 || rect.top > window.innerHeight) {
+    closeExportMenu()
+    return
+  }
+  updateExportMenuPosition()
+}
+
+function handleExportKeydown(event: KeyboardEvent) {
+  if (!exportMenuOpen.value || event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  closeExportMenu()
+  exportButtonRef.value?.focus()
+}
 const rowLimit = ref<number | 'all'>(10)
 const rowLimitOptions: Array<number | 'all'> = [5, 10, 15, 'all']
 const isCopied = ref(false)
 const isSqlCopied = ref(false)
-let observer: MutationObserver | null = null
 
 
 const copyToClipboard = async () => {
@@ -119,84 +238,8 @@ const copySqlToClipboard = async () => {
   }
 }
 
-const fmt = (n: number, dec = 1) =>
-  new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: dec }).format(n)
-
-const formatNumber = (value: number) => {
-  if (value === undefined || value === null || Number.isNaN(value)) return '0'
-  const abs = Math.abs(value)
-  if (abs >= 1_000_000_000) return `${fmt(value / 1_000_000_000)}B`
-  if (abs >= 1_000_000)     return `${fmt(value / 1_000_000)}M`
-  if (abs >= 1_000)         return `${fmt(value / 1_000)}K`
-  return fmt(value, 2)
-}
-
-function formatDateValue(value: unknown) {
-  if (value === null || value === undefined || value === '') return 'nulo'
-  const text = String(value)
-  const datePart = text.split('T')[0]
-  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-    const [year, month, day] = datePart.split('-')
-    return `${day}/${month}/${year}`
-  }
-  return text
-}
-
-function formatTableValue(key: string | number, value: unknown) {
-  if (value === null || value === undefined) return 'nulo'
-
-  const rawFormat = props.message.fieldFormats?.[String(key)]
-  const format = String(rawFormat || '').replace(/^FieldFormat\./, '').toLowerCase() as FieldFormat | ''
-
-  if (format === 'text') return String(value)
-  if (format === 'date') return formatDateValue(value)
-
-  const numericValue = Number(value)
-
-  if (format === 'currency') {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericValue)
-  }
-  if (format === 'integer') {
-    return new Intl.NumberFormat('pt-BR', { useGrouping: true, maximumFractionDigits: 0 }).format(numericValue)
-  }
-  if (format === 'percent') {
-    return `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)}%`
-  }
-  if (format === 'decimal') {
-    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)
-  }
-
-  // Sem formato definido: tenta auto-detectar pelo valor
-  if (!Number.isFinite(numericValue)) return String(value)
-
-  // Número inteiro
-  if (Number.isInteger(numericValue)) {
-    return new Intl.NumberFormat('pt-BR').format(numericValue)
-  }
-  // Número com decimais — formata com separadores pt-BR
-  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numericValue)
-}
-
-const NUMERIC_FORMATS = new Set<string>(['integer', 'decimal', 'currency', 'percent'])
-const NON_NUMERIC_FORMATS = new Set<string>(['text', 'date'])
-
-function isNumericColumn(key: string | number): boolean {
-  const colKey = String(key)
-  const rawFormat = props.message.fieldFormats?.[colKey]
-  if (rawFormat) {
-    const normalized = String(rawFormat).replace(/^FieldFormat\./, '').toLowerCase()
-    if (NUMERIC_FORMATS.has(normalized)) return true
-    if (NON_NUMERIC_FORMATS.has(normalized)) return false
-  }
-  const rows = props.message.table || []
-  for (const row of rows) {
-    const val = row?.[colKey]
-    if (val === null || val === undefined || val === '') continue
-    if (typeof val === 'boolean') return false
-    return Number.isFinite(Number(val))
-  }
-  return false
-}
+const formatTableValue = (key: string | number, value: unknown) =>
+  formatFieldValue(props.message.fieldFormats, key, value)
 
 const renderedText = computed(() => renderMarkdown(props.message.text || ''))
 
@@ -210,315 +253,43 @@ const displayedRows = computed(() => {
   return (props.message.table || []).slice(0, displayedRowLimit.value)
 })
 
-const showOriginalChart = ref(false)
-const isChartAxisSwapped = ref(false)
+const chartTypeIcons = {
+  bar: BarChart2,
+  horizontal_bar: BarChartHorizontal,
+  line: TrendingUp,
+  area: AreaChart,
+  pie: PieChart
+} as const
 
-const toggleChartAxes = () => {
-  isChartAxisSwapped.value = !isChartAxisSwapped.value
+// Tipo escolhido pelo usuário. Até ele escolher, vale a sugestão do agente de painéis e, sem
+// sugestão, o formato dos dados (as linhas de uma conversa antiga só chegam depois de abri-la).
+const selectedChartType = ref<ChatChartType | null>(props.message.chartType ?? null)
+const isPieAvailable = computed(() => canUsePie(props.message.chart?.series))
+const pieUnavailableReason = 'Pizza só funciona com uma única série de valores, sem números negativos'
+
+const chartType = computed<ChatChartType>(() => {
+  const type = selectedChartType.value ?? initialChartType(props.message.suggestedChartType, props.message.table)
+  return type === 'pie' && !isPieAvailable.value ? 'bar' : type
+})
+
+const selectChartType = (type: ChatChartType) => {
+  if (type === 'pie' && !isPieAvailable.value) return
+  selectedChartType.value = type
+  // O relatório usa o tipo que está na tela (FR08).
+  emit('chart-type', { id: props.message.id, type })
 }
 
-const chartOrientationKey = computed(() => (isChartAxisSwapped.value ? 'horizontal' : 'vertical'))
+const chartTypeTitle = (type: ChatChartType, label: string) => {
+  if (type === 'pie' && !isPieAvailable.value) return pieUnavailableReason
+  return `Mostrar em ${label.toLowerCase()}`
+}
 
-const hasOthersOption = computed(() => {
-  if (!props.message.chart) return false
-  const chartData = props.message.chart
-  if (!chartData.series || chartData.series.length === 0) return false
-  
-  // Garantir que todos os valores sejam convertidos para números reais (NaN ou undefined viram 0)
-  const data = chartData.series[0].data.map(v => {
-    const n = Number.parseFloat(String(v))
-    return Number.isNaN(n) ? 0 : n
-  })
-
-  if (data.length <= 1) return false
-
-  // Se a quantidade de dados for menor ou igual à quantidade limitadora (5, 10, 15 ou todos), não precisa agrupar
-  const limit = typeof rowLimit.value === 'number' ? rowLimit.value : Infinity
-  if (data.length <= limit) return false
-  
-  const maxVal = Math.max(...data)
-  if (maxVal <= 0) return false
-  
-  // Considera "pequeno" o que for menor que 5% do valor máximo
-  const threshold = maxVal * 0.05
-  const smallCount = data.filter(v => v > 0 && v < threshold).length
-  
-  // Para agrupar, vamos exigir que haja pelo menos 2 categorias pequenas 
-  // (se houver apenas 1, não faz muito sentido agrupá-la em 'Outros')
-  // Nota: Se preferir agrupar mesmo sendo 1, podemos mudar para >= 1. O ideal para "Outros" é > 1.
-  return smallCount >= 1 || data.filter(v => v === 0).length > 0
-})
-
-const displayedChart = computed(() => {
-  if (!props.message.chart) return null
-
-  const original = props.message.chart
-  if (showOriginalChart.value || !hasOthersOption.value) {
-    return {
-      categories: original.categories.slice(0, displayedRowLimit.value),
-      series: original.series.map(series => ({
-        ...series,
-        data: series.data.slice(0, displayedRowLimit.value)
-      }))
-    }
-  }
-
-  // Agrupar pequenos em "Outros"
-  const categories = original.categories
-  const seriesList = original.series
-
-  // Somar totais por categoria para suportar multi-series de forma robusta
-  const categoryTotals = categories.map((_, i) => {
-    return seriesList.reduce((sum, series) => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return sum + (Number.isNaN(val) ? 0 : val)
-    }, 0)
-  })
-
-  const maxTotal = Math.max(...categoryTotals)
-  const threshold = maxTotal * 0.05
-
-  const largeIndices: number[] = []
-  const smallIndices: number[] = []
-
-  categoryTotals.forEach((val, i) => {
-    if (val >= threshold) {
-      largeIndices.push(i)
-    } else {
-      smallIndices.push(i)
-    }
-  })
-
-  if (smallIndices.length === 0 || largeIndices.length === 0) {
-    return {
-      categories: categories.slice(0, displayedRowLimit.value),
-      series: seriesList.map(series => ({
-        ...series,
-        data: series.data.slice(0, displayedRowLimit.value)
-      }))
-    }
-  }
-
-  const newCategories = largeIndices.map(i => categories[i])
-  newCategories.push('Outros')
-
-  const newSeries = seriesList.map(series => {
-    const newData = largeIndices.map(i => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return Number.isNaN(val) ? 0 : val
-    })
-    const smallSum = smallIndices.reduce((sum, i) => {
-      const val = Number.parseFloat(String(series.data[i]))
-      return sum + (Number.isNaN(val) ? 0 : val)
-    }, 0)
-    newData.push(smallSum)
-    return {
-      ...series,
-      data: newData
-    }
-  })
-
-  return {
-    categories: newCategories.slice(0, displayedRowLimit.value),
-    series: newSeries.map(series => ({
-      ...series,
-      data: series.data.slice(0, displayedRowLimit.value)
-    }))
-  }
-})
-
-const displayedChartHasOthersBar = computed(() => {
-  return displayedChart.value?.categories.includes('Outros') ?? false
-})
-
-onMounted(() => {
-  if (typeof document !== 'undefined') {
-    isDark.value = document.documentElement.classList.contains('dark')
-    observer = new MutationObserver(() => {
-      isDark.value = document.documentElement.classList.contains('dark')
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-  }
-})
+const pinMessage = () => {
+  emit('pin', { ...props.message, chartType: chartType.value })
+}
 
 onBeforeUnmount(() => {
-  observer?.disconnect()
-})
-const chartOptions = computed<ApexOptions>(() => {
-  const categories = displayedChart.value?.categories || []
-  const isHorizontal = isChartAxisSwapped.value
-  const seriesCount = displayedChart.value?.series.length || 0
-
-  return {
-    chart: {
-      type: 'bar',
-      toolbar: { show: false },
-      background: 'transparent',
-      animations: {
-        enabled: true,
-        easing: 'easeinout',
-        speed: 700
-      },
-      events: {
-        dataPointSelection: (_event: any, _chartContext: any, config?: any) => {
-          const label = config?.w?.globals?.labels?.[config.dataPointIndex]
-          if (label === 'Outros') {
-            showOriginalChart.value = true
-          }
-        },
-        click: (_event: any, _chartContext: any, config?: any) => {
-          if (config && config.dataPointIndex !== undefined && config.dataPointIndex !== -1) {
-            const label = config?.w?.globals?.labels?.[config.dataPointIndex]
-            if (label === 'Outros') {
-              showOriginalChart.value = true
-            }
-          }
-        },
-        xAxisLabelClick: (_event: any, _chartContext: any, config?: any) => {
-          if (config && config.labelIndex !== undefined) {
-            const label = config?.w?.globals?.labels?.[config.labelIndex] || config?.config?.xaxis?.categories?.[config.labelIndex]
-            if (label === 'Outros') {
-              showOriginalChart.value = true
-            }
-          }
-        }
-      }
-    },
-    dataLabels: { enabled: false },
-    grid: {
-      borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(22,70,43,0.08)',
-      strokeDashArray: 3,
-      xaxis: { lines: { show: false } }
-    },
-    xaxis: isHorizontal
-      ? {
-          categories,
-          labels: {
-            show: true,
-            formatter: (value: number) => formatNumber(Number(value)),
-            style: {
-              fontSize: '11px',
-              fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-            }
-          },
-          axisBorder: { show: false },
-          axisTicks: { show: false }
-        }
-      : {
-          categories,
-          labels: {
-            show: categories.length <= 50,
-            rotate: -45,
-            rotateAlways: categories.length > 8,
-            hideOverlappingLabels: true,
-            trim: true,
-            maxHeight: 100,
-            style: {
-              fontSize: '10px',
-              fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-            }
-          },
-          axisBorder: { show: false },
-          axisTicks: { show: categories.length <= 50 }
-        },
-    yaxis: isHorizontal
-      ? {
-          labels: {
-            formatter: (value: unknown) => String(value ?? ''),
-            style: {
-              fontSize: '10px',
-              fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-            }
-          }
-        }
-      : {
-          labels: {
-            formatter: (value: number) => formatNumber(value),
-            style: {
-              fontSize: '11px',
-              fontWeight: 600,
-              colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-            }
-          }
-        },
-    tooltip: {
-      enabled: true,
-      shared: true,
-      intersect: false,
-      theme: isDark.value ? 'dark' : 'light',
-      custom: ({ series, dataPointIndex, w }: any) => {
-        const label = w.globals.labels[dataPointIndex]
-        const background = isDark.value ? '#1A221D' : '#ffffff'
-        const border = isDark.value ? 'rgba(54,146,81,0.25)' : '#E2E8DF'
-        const textColor = isDark.value ? '#F0F4F1' : '#241920'
-        const muted = isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-        const seriesColors = ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
-
-        const seriesRows = series
-          .map((serieData: number[], i: number) => {
-            const value = serieData[dataPointIndex]
-            const name = w.globals.seriesNames[i]
-            const color = seriesColors[i % seriesColors.length]
-            return `
-              <div class="flex items-center justify-between gap-4 mt-1.5">
-                <div class="flex items-center gap-1.5">
-                  <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${color};flex-shrink:0;"></span>
-                  <span style="color:${muted};" class="text-xs font-medium">${name}</span>
-                </div>
-                <span class="font-bold text-sm" style="color:${color}">${formatNumber(value)}</span>
-              </div>
-            `
-          })
-          .join('')
-
-        return `
-          <div style="background:${background}; border:1px solid ${border}; color:${textColor}; box-shadow:rgba(0,0,0,0.16) 0px 6px 16px; min-width:200px; padding:12px 16px; border-radius:10px;">
-            <div style="color:${muted}; font-size:11px; font-weight:500; margin-bottom:4px;">Categoria</div>
-            <div style="font-weight:600; font-size:13px; line-height:1.3; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid ${border};">${label}</div>
-            ${seriesRows}
-          </div>
-        `
-      }
-    },
-    plotOptions: {
-      bar: {
-        borderRadius: 6,
-        borderRadiusApplication: 'end',
-        columnWidth: isHorizontal ? '58%' : '58%',
-        barHeight: isHorizontal ? '58%' : undefined,
-        horizontal: isHorizontal,
-        distributed: seriesCount <= 1
-      }
-    },
-    legend: {
-      show: seriesCount > 1,
-      position: 'top',
-      horizontalAlign: 'left',
-      fontSize: '12px',
-      labels: {
-        colors: isDark.value ? 'rgba(255,255,255,0.72)' : '#465249'
-      }
-    },
-    colors: ['#2B7A42', '#749E30', '#1E5E3A', '#0d9488', '#d97706', '#C50707', '#4f46e5', '#0284c7']
-  }
-})
-// Filtra séries com escalas incompatíveis para evitar gráficos ilegíveis.
-// Mantém apenas séries cujo valor máximo é >= 0.1% do maior valor entre todas.
-const chartSeries = computed(() => {
-  const series = displayedChart.value?.series || []
-  if (series.length <= 1) return [...series]
-
-  const seriesMaxes = series.map(s =>
-    Math.max(...s.data.map(v => Math.abs(Number(v) || 0)))
-  )
-  const overallMax = Math.max(...seriesMaxes)
-  if (overallMax === 0) return [...series]
-
-  const threshold = overallMax * 0.001
-  return series.filter((_, i) => seriesMaxes[i] >= threshold)
+  detachExportListeners()
 })
 </script>
 
@@ -730,117 +501,59 @@ const chartSeries = computed(() => {
           </button>
         </div>
 
-        <div v-if="displayedChartHasOthersBar && !showOriginalChart && message.chart?.series?.length && hasRenderableTable" class="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 py-3 rounded-xl border border-border-subtle bg-surface-elevated/50 text-xs shadow-sm dark:border-white/[0.06] gap-3">
-          <template v-if="showOriginalChart">
-            <span class="text-text-secondary font-semibold flex items-center gap-2">
-              <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-              Exibindo os dados originais expandidos
-            </span>
-            <button 
-              type="button" 
-              class="px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg font-bold transition-all flex items-center gap-1.5 border border-accent/20 hover:border-accent shadow-sm shrink-0"
-              @click="showOriginalChart = false"
-            >
-              <Minimize2 class="w-4 h-4" />
-              Reagrupar 'Outros'
-            </button>
-          </template>
-          <template v-else>
-            <span class="text-text-muted font-medium flex items-center gap-2">
-              <span class="text-base leading-none">💡</span>
-              <span>Categorias pequenas agrupadas. Clique na coluna ou na palavra <strong>'Outros'</strong> no gráfico abaixo para expandir.</span>
-            </span>
-          </template>
-        </div>
-
-        <div
-          v-if="showOriginalChart && hasOthersOption && message.chart?.series?.length && hasRenderableTable"
-          class="mt-4 flex justify-end"
-        >
-          <button
-            type="button"
-            class="px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg font-bold transition-all flex items-center gap-1.5 border border-accent/20 hover:border-accent shadow-sm shrink-0"
-            @click="showOriginalChart = false"
-          >
-            <Minimize2 class="w-4 h-4" />
-            Reagrupar 'Outros'
-          </button>
-        </div>
-
         <div
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
           class="mt-4 flex justify-end px-1"
         >
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
-            :title="isChartAxisSwapped ? 'Restaurar o eixo original' : 'Inverter os eixos X e Y'"
-            @click="toggleChartAxes"
+          <div
+            class="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-elevated/45 p-1 dark:border-white/[0.06] dark:bg-white/5"
+            role="group"
+            aria-label="Tipo de gráfico"
           >
-            <ArrowLeftRight class="w-4 h-4" />
-            {{ isChartAxisSwapped ? 'Restaurar eixos' : 'Inverter eixos' }}
-          </button>
+            <button
+              v-for="option in CHAT_CHART_TYPES"
+              :key="option.value"
+              type="button"
+              :class="[
+                'rounded-md p-1.5 transition-all',
+                chartType === option.value
+                  ? 'border border-border-subtle bg-surface text-primary shadow-premium dark:bg-slate-700 dark:text-white'
+                  : 'border border-transparent text-text-secondary hover:bg-surface/60 hover:text-primary dark:hover:text-white',
+                option.value === 'pie' && !isPieAvailable ? 'cursor-not-allowed opacity-40 hover:bg-transparent hover:text-text-secondary' : 'cursor-pointer'
+              ]"
+              :title="chartTypeTitle(option.value, option.label)"
+              :aria-label="option.label"
+              :aria-pressed="chartType === option.value"
+              :aria-disabled="option.value === 'pie' && !isPieAvailable ? 'true' : undefined"
+              :data-chart-type="option.value"
+              @click="selectChartType(option.value)"
+            >
+              <component :is="chartTypeIcons[option.value]" class="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        <div
+        <ChatResultChart
           v-if="message.chart?.series?.length && hasRenderableTable && tableRowCount > 1"
-          class="mt-4 h-[320px] rounded-lg border border-border-subtle bg-surface-elevated/50 p-3 dark:border-white/[0.06] dark:bg-surface-elevated md:h-[360px] md:p-4"
-        >
-          <VueApexCharts :key="chartOrientationKey" type="bar" height="100%" :options="chartOptions" :series="chartSeries" />
-        </div>
+          :chart="message.chart"
+          :type="chartType"
+          :row-limit="rowLimit"
+        />
 
-        <div
+        <ChatResultTable
           v-if="hasRenderableTable && !message.isScalarResult"
-          class="mt-4 overflow-auto max-h-[450px] w-full border border-border-subtle rounded-lg bg-surface/30 dark:border-white/[0.06] custom-scrollbar"
-        >
-          <table class="w-full text-sm min-w-[600px] border-collapse">
-            <thead class="sticky top-0 z-10 bg-surface-elevated/95 dark:bg-surface-elevated/95 shadow-[0_1px_0_rgba(0,0,0,0.05)] dark:shadow-[0_1px_0_rgba(255,255,255,0.05)]">
-              <tr class="border-b border-border-subtle dark:border-white/[0.04]">
-                <th
-                  v-for="key in Object.keys(message.table?.[0] || {})"
-                  :key="key"
-                  :class="[
-                    'py-2.5 px-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted select-none',
-                    isNumericColumn(key)
-                      ? 'text-right'
-                      : 'text-left'
-                  ]"
-                >
-                  {{ key.replace(/_/g, ' ') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border-subtle/40 dark:divide-white/[0.04]">
-              <tr
-                v-for="(row, i) in displayedRows"
-                :key="i"
-                class="transition-colors hover:bg-accent/[0.06] dark:hover:bg-accent/[0.08]"
-              >
-                <td
-                  v-for="(value, key) in row"
-                  :key="key"
-                  :class="[
-                    'py-2.5 px-4 whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-sm transition-colors',
-                    isNumericColumn(key)
-                      ? 'text-right tabular-nums text-text-primary font-medium'
-                      : 'text-left text-text-secondary'
-                  ]"
-                  :title="formatTableValue(key, value)"
-                >
-                  {{ formatTableValue(key, value) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          :rows="displayedRows"
+          :field-formats="message.fieldFormats"
+        />
         <div v-if="hasRenderableTable && !message.isScalarResult && tableRowCount > 1" class="mt-2 flex items-center justify-between px-1">
           <p class="text-[11px] text-text-muted font-medium">
             Mostrando {{ displayedRows.length }} de {{ tableRowCount }} registros
           </p>
         </div>
 
-        <div v-if="message.sql" class="mt-4 flex flex-wrap gap-2">
+        <div v-if="message.sql || canExportTable" class="mt-4 flex flex-wrap gap-2">
           <button
+            v-if="message.sql"
             class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
             @click="emit('toggle-sql', message.id)"
           >
@@ -849,13 +562,64 @@ const chartSeries = computed(() => {
           </button>
 
           <button
-            v-if="hasRenderableTable"
+            v-if="message.sql && hasRenderableTable"
             class="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
-            @click="emit('pin', message)"
+            @click="pinMessage"
           >
             <Pin class="w-4 h-4" />
             Fixar no Dashboard
           </button>
+
+          <div v-if="canExportTable" ref="exportMenuRef" class="relative">
+            <button
+              ref="exportButtonRef"
+              type="button"
+              data-testid="chat-export-btn"
+              aria-haspopup="menu"
+              :aria-expanded="exportMenuOpen"
+              class="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2 text-xs font-semibold text-primary transition-colors hover:border-accent/30 hover:text-accent dark:text-slate-200"
+              @click="toggleExportMenu"
+            >
+              <Download class="w-4 h-4" aria-hidden="true" />
+              <span>Exportar</span>
+              <ChevronDown
+                class="w-3.5 h-3.5 transition-transform duration-150"
+                :class="{ 'rotate-180': exportMenuOpen }"
+                aria-hidden="true"
+              />
+            </button>
+
+            <Teleport to="body">
+              <div
+                v-if="exportMenuOpen"
+                ref="exportDropdownRef"
+                role="menu"
+                aria-label="Opções de exportação"
+                data-testid="chat-export-menu"
+                :style="exportMenuStyle"
+                class="fixed z-[75] rounded-xl border border-border-subtle bg-surface p-1.5 shadow-premium dark:border-white/10"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-text-primary transition-colors hover:bg-surface-elevated hover:text-accent"
+                  @click="triggerExport('csv')"
+                >
+                  <FileText class="h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+                  <span>Exportar CSV (.csv)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-medium text-text-primary transition-colors hover:bg-surface-elevated hover:text-accent"
+                  @click="triggerExport('xlsx')"
+                >
+                  <FileSpreadsheet class="h-4 w-4 shrink-0 text-emerald-600 dark:text-[#68d388]" aria-hidden="true" />
+                  <span>Exportar Excel (.xlsx)</span>
+                </button>
+              </div>
+            </Teleport>
+          </div>
         </div>
 
         <div v-if="message.sql && message.showSQL" class="mt-3 rounded-lg border border-border-subtle bg-surface-elevated overflow-hidden dark:border-white/[0.06] dark:bg-black/20">

@@ -41,6 +41,15 @@ Adotar uma estratégia de distribuição baseada em **GitHub Releases público**
   - *Ausência de `libfuse2` no Ubuntu 22.04+:* `.AppImage` pode falhar ao abrir sem FUSE2 (mitigado documentando o uso de `--appimage-extract-and-run` e oferecendo `.deb` para quem tem `sudo`).
   - *Limitação de auto-update em `.deb`/`.msi`:* mitigado exibindo link direto de download manual quando o formato instalado não suporta substituição sem privilégio elevado.
 
+## Adenda — Modo Opt-in de Atualização Automática e Auto-Reload (25/11/2026)
+
+A decisão original de **auto-update assistido** permanece válida e inalterada como **comportamento padrão** para todas as instalações do Adito. Para atender usuários frequentes que desejam manter o aplicativo e o banco `dados.db` atualizados sem cliques repetitivos, foi adicionada uma preferência **opt-in** em **Configurações** (*"Atualização automática (app e dados)"*, desligada por padrão e persistida em `localStorage`):
+
+1. **Verificação periódica e ao retornar foco:** o cliente verifica atualizações ao abrir o app, periodicamente a cada 30 minutos em segundo plano e ao retomar o foco da janela (com cooldown mínimo de 15 minutos), falhando silenciosamente quando offline.
+2. **Download separado do reinício controlado:** quando o modo opt-in está ativo e há nova versão do executável, o pacote é baixado em segundo plano via `update.download()` (evitando encerramento abrupto do instalador NSIS no Windows durante o download). O app aguarda qualquer consulta ativa no chat encerrar (`!useChatApi().isLoading`) e exibe uma contagem regressiva discreta de **10 segundos** com ações **"Reiniciar agora"** e **"Adiar"** (que silencia a contagem automática para aquela versão na sessão atual).
+3. **Prioridade do executável e atualização automática de `dados.db`:** quando houver atualização simultânea do executável e de `dados.db`, o executável tem prioridade exclusiva. Sem update de executável pendente e com chave institucional válida no cofre (`!precisa_chave`), o `dados.db` é atualizado em segundo plano com o chat livre (mantendo aviso manual quando `precisa_chave === true`).
+4. **Auto-reload das telas sem consumo automático de cota BYOK:** toda atualização concluída de `dados.db` (automática ou manual) incrementa o sinal reativo `dadosReloadSeq` para recarregar automaticamente **Dashboard**, **Meu painel**, **Contextos/Chat** e **Administração** com um toast discreto, **sem** disparar reindexação automática de embeddings/RAG.
+
 ## Referências
 * [ADR 0008: Nome do produto volta a ser Adito](./ADR-0008-volta-ao-nome-adito.md)
 * [ADR 0007: Distribuição e Atualização Criptografada do Banco `dados.db`](./ADR-0007-distribuicao-criptografada-dados-db.md)

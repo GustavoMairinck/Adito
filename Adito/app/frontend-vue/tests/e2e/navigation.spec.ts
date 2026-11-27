@@ -12,6 +12,10 @@ test.describe('Navegação principal e layout', () => {
     await page.getByRole('link', { name: 'Meu painel' }).click()
     await expect(page).toHaveURL(/#\/meu-dashboard/)
 
+    await page.getByRole('link', { name: 'Explorar dados' }).click()
+    await expect(page).toHaveURL(/#\/explorar/)
+    await expect(page.getByRole('heading', { name: 'Explorar dados' })).toBeVisible()
+
     await page.getByRole('link', { name: 'Administração' }).click()
     await expect(page).toHaveURL(/#\/admin/)
     await expect(page.getByRole('button', { name: 'Base de conhecimento' })).toBeVisible()

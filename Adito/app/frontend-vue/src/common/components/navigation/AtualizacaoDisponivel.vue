@@ -14,6 +14,8 @@ const {
   dadosNovos,
   temAtualizacao,
   instalandoApp,
+  baixandoAppEmSegundoPlano,
+  appProntoParaReinicio,
   instalandoDados,
   progressoApp,
   erro,
@@ -42,7 +44,7 @@ function depois() {
 }
 
 const podeBaixar = computed(() => {
-  if (ocupado.value) return false
+  if (ocupado.value || baixandoAppEmSegundoPlano.value) return false
   if (dadosNovos.value?.precisa_chave && !chave.value.trim()) return false
   return !!app.value || !!dadosNovos.value
 })
@@ -153,7 +155,12 @@ onBeforeUnmount(() => {
                   <span>Nova versão do Adito</span>
                 </div>
                 <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  Versão {{ app.version }}. O download instala a atualização e reinicia o aplicativo. Suas conversas e painéis são preservados.
+                  <template v-if="appProntoParaReinicio">
+                    Versão {{ app.version }} baixada e pronta para instalar. Suas conversas e painéis são preservados.
+                  </template>
+                  <template v-else>
+                    Versão {{ app.version }}. O download instala a atualização e reinicia o aplicativo. Suas conversas e painéis são preservados.
+                  </template>
                 </p>
               </div>
 
@@ -196,12 +203,17 @@ onBeforeUnmount(() => {
                 >
                   <template v-if="instalandoApp">
                     <Loader2 class="h-4 w-4 animate-spin" />
+                    <span>{{ appProntoParaReinicio ? 'Reiniciando…' : (progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…') }}</span>
+                  </template>
+                  <template v-else-if="baixandoAppEmSegundoPlano">
+                    <Loader2 class="h-4 w-4 animate-spin" />
                     <span>{{ progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…' }}</span>
                   </template>
                   <template v-else-if="instalandoDados">
                     <Loader2 class="h-4 w-4 animate-spin" />
                     <span>Baixando…</span>
                   </template>
+                  <template v-else-if="appProntoParaReinicio && !dadosNovos">Reiniciar para atualizar</template>
                   <template v-else>Baixar agora</template>
                 </button>
               </div>

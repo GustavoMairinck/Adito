@@ -27,7 +27,7 @@ def rpc(name: str, stream: bool = False):
 
 def load_handlers() -> dict[str, Method]:
     """Importa os módulos de métodos (cada um se registra ao ser importado)."""
-    from . import admin, chat, core_methods, dashboard  # noqa: F401
+    from . import admin, chat, core_methods, dashboard, explorer  # noqa: F401
 
     return METHODS
 

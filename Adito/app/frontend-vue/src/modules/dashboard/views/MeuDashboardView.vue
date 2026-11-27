@@ -30,6 +30,7 @@ import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 
 import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
+import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import { usePersonalDashboard, type Widget } from '@/modules/dashboard/composables/usePersonalDashboard'
 import WidgetTable from '@/modules/dashboard/components/WidgetTable.vue'
 import { chartKeys } from '@/common/utils/chartKeys'
@@ -299,6 +300,16 @@ const onLayoutUpdated = (newLayout: any[]) => {
 }
 
 onMounted(loadDash)
+
+const { dadosReloadSeq } = useAtualizacoes()
+watch(dadosReloadSeq, (seq) => {
+  if (seq <= 0) return
+  if (isEditingLayout.value) {
+    widgets.value.forEach((w: Widget) => refreshWidgetData(w.id))
+  } else {
+    void loadDash()
+  }
+})
 
 // --- Delete Modal ---
 

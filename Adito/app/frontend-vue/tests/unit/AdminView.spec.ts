@@ -25,6 +25,7 @@ vi.mock('@/modules/auth/composables/useAuth', () => ({
 }))
 
 import AdminView from '@/modules/admin/views/AdminView.vue'
+import { _resetAtualizacoes, useAtualizacoes } from '@/common/composables/useAtualizacoes'
 
 function mockAdminCalls(embeddings: Record<string, unknown>) {
   callMock.mockImplementation(async (method: string) => {
@@ -51,6 +52,7 @@ function mockAdminCalls(embeddings: Record<string, unknown>) {
 
 describe('AdminView.vue — banners de embeddings na Base de conhecimento', () => {
   beforeEach(() => {
+    _resetAtualizacoes()
     callMock.mockReset()
   })
 
@@ -116,5 +118,34 @@ describe('AdminView.vue — banners de embeddings na Base de conhecimento', () =
 
     expect(wrapper.text()).not.toContain('não gera embeddings')
     expect(wrapper.text()).not.toContain('Reindexação recomendada')
+  })
+
+  it('recarrega status e contextos quando dadosReloadSeq incrementa sem disparar retrain automático', async () => {
+    mockAdminCalls({
+      supports_embeddings: true,
+      provider: 'gemini',
+      provider_label: 'Gemini',
+      embedding_model: 'gemini-embedding-2',
+      expected_dim: 1024,
+      stored_dims: [1024],
+      needs_retrain: false,
+      incompatible_vectors: 0,
+    })
+
+    const wrapper = mount(AdminView, { global: { directives: { motion: {} } } })
+    await flushPromises()
+    callMock.mockClear()
+
+    const { dadosReloadSeq } = useAtualizacoes()
+    dadosReloadSeq.value += 1
+    await flushPromises()
+
+    const metodos = callMock.mock.calls.map((c) => c[0])
+    expect(metodos).toContain('admin.contextos')
+    expect(metodos).toContain('admin.system_status')
+    expect(metodos).toContain('admin.trainings.list')
+    expect(metodos).not.toContain('admin.trainings.retrain')
+    expect(metodos).not.toContain('admin.bootstrap')
+    wrapper.unmount()
   })
 })

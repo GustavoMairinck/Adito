@@ -91,23 +91,24 @@ def main() -> int:
         ctxs = n.call("contextos.list")["result"]
         cid = ctxs[0]["id"]
         check("contextos", [c["slug"] for c in ctxs] == ["ctx-contrato"], ctxs)
-        erro = n.call("widgets.refresh", {"id": "00000000-0000-0000-0000-000000000000"})
+        erro = n.call("explorer.rows", {"contexto_id": cid, "table": "nao_existe"})
         check("erro com status 404", erro == {"id": erro["id"], "ok": False,
-              "error": {"status": 404, "data": {"detail": "No Widget matches the given query."}}}, erro)
+              "error": {"status": 404, "data": {"detail": "Tabela indisponível neste contexto."}}}, erro)
         desconhecido = n.call("nao.existe")
         check("método desconhecido", desconhecido["error"]["status"] == 404, desconhecido)
         stream = n.call("chat.stream", {"question": "x", "contexto_id": cid})
         check("chat sem chave → 503", stream["error"]["status"] == 503, stream)
 
         print("[3] Concorrência")
-        ids = [n.request("dashboard.kpis"), n.request("dashboard.charts")]
+        ids = [n.request("explorer.rows", {"contexto_id": cid, "table": "vfact_orientacao_bolsa_resolved", "page": p})
+               for p in (1, 2)]
         respostas = {}
         while len(respostas) < 2:
             msg = n.read()
             respostas[msg["id"]] = msg
         check("duas respostas, cada uma no seu id", sorted(respostas) == sorted(ids)
               and all(r["ok"] for r in respostas.values()))
-        check("respostas certas", "total_investido" in respostas[ids[0]]["result"] and "por_ano" in respostas[ids[1]]["result"])
+        check("páginas certas", [respostas[i]["result"]["page"] for i in ids] == [1, 2])
 
         print("[4] Linha inválida e cancelamento")
         n.proc.stdin.write("isto não é json\n")
@@ -122,9 +123,9 @@ def main() -> int:
         lat = []
         for _ in range(30):
             t0 = time.monotonic()
-            n.call("dashboard.kpis")
+            n.call("explorer.rows", {"contexto_id": cid, "table": "vfact_orientacao_bolsa_resolved", "search": "Projeto"})
             lat.append((time.monotonic() - t0) * 1000)
-        print(f"       dashboard.kpis mediana {statistics.median(lat):.1f} ms")
+        print(f"       explorer.rows mediana {statistics.median(lat):.1f} ms")
         lat = []
         for _ in range(30):
             t0 = time.monotonic()

@@ -3,6 +3,7 @@ import { call, stream } from '@/common/api/core'
 import type { ChatMessage, TraceStreamEvent, TraceStreamEventName } from '@/modules/chat/types'
 import { chartKeys } from '@/common/utils/chartKeys'
 import { normalizeTrace } from '@/modules/chat/utils/trace'
+import { isChatChartType } from '@/modules/chat/utils/chartType'
 
 function parseNumeric(value: unknown) {
   if (value === null || value === undefined || value === '') return null
@@ -87,6 +88,7 @@ function mapResponseToMessage(data: any): ChatMessage {
     related_attributes: data.related_attributes,
     fieldFormats: data.field_formats,
     trace: normalizeTrace(data.trace),
+    suggestedChartType: isChatChartType(data.chart_type) ? data.chart_type : undefined,
   }
 }
 

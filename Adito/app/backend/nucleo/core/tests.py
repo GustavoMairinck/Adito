@@ -528,6 +528,178 @@ class BaseConhecimentoTests(AppDbTestCase):
         self.assertIn("cota diária", erro)
 
 
+class ExplorerTests(AppDbTestCase):
+    def setUp(self):
+        super().setUp()
+        tenant_env = patch.dict(os.environ, {'DEFAULT_TENANT_NAME': 'Campus Serra'})
+        tenant_env.start()
+        self.addCleanup(tenant_env.stop)
+        user = get_local_user()
+        self.contexto = Contexto(
+            tenant_id=user.tenant_id, slug='unificado', name='Modelo unificado',
+            views=[
+                {'name': 'v_fato_projeto', 'sensitive_columns': ['cpf']},
+                {'name': 'dim_area'},
+                {'name': 'iniciativa', 'label': 'Iniciativas'},
+                {'name': 'projetos_pesquisa', 'kind': 'fact', 'label': 'Projetos de pesquisa'},
+            ],
+        ).insert()
+        self.foreign = Contexto(
+            tenant_id=Tenant(name='Outro campus').insert().id, slug='outro', name='Outro contexto',
+        ).insert()
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.db_path = Path(self.folder.name) / 'dados.db'
+        self.env = patch.dict(os.environ, {'ADITO_DADOS_DB': str(self.db_path)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            conn.execute('''
+                CREATE TABLE area (id INTEGER PRIMARY KEY, nome TEXT);
+            ''')
+            conn.execute("INSERT INTO area VALUES (1, 'Computação')")
+            conn.execute("INSERT INTO area VALUES (2, 'Educação')")
+            conn.execute('''
+                CREATE TABLE projeto (id INTEGER PRIMARY KEY, titulo TEXT, id_area INTEGER, ano INTEGER, cpf TEXT);
+            ''')
+            conn.execute('''
+                CREATE VIEW v_fato_projeto AS
+                    SELECT p.id, p.titulo, a.nome AS area, p.ano, p.cpf
+                    FROM projeto p JOIN area a ON a.id = p.id_area;
+            ''')
+            conn.execute("CREATE VIEW dim_area AS SELECT * FROM area;")
+            conn.execute("CREATE VIEW iniciativa AS SELECT id, titulo FROM projeto;")
+            conn.execute("CREATE VIEW projetos_pesquisa AS SELECT id, titulo FROM projeto;")
+            conn.executemany('INSERT INTO projeto VALUES (?, ?, ?, ?, ?)', [
+                (i, 'Projeto 100%_IFES' if i == 1 else f'Projeto {i}', 1 + i % 2, 2025 + i % 2, 'restrito')
+                for i in range(1, 34)
+            ])
+            conn.commit()
+        finally:
+            conn.close()
+
+    def catalog(self, **params):
+        return Resposta(*call('explorer.tables', {'contexto_id': str(self.contexto.id), **params}))
+
+    def rows(self, **params):
+        return Resposta(*call('explorer.rows', {
+            'contexto_id': str(self.contexto.id), 'table': 'v_fato_projeto', **params,
+        }))
+
+    def test_catalog_uses_context_metadata_and_hides_sensitive_columns(self):
+        response = self.catalog()
+        self.assertEqual(response.status_code, 200)
+        tables = response.data['tables']
+        self.assertEqual([table['kind'] for table in tables], ['fact', 'dimension', 'entity', 'fact'])
+        self.assertEqual(tables[2]['label'], 'Iniciativas')
+        self.assertNotIn('cpf', [column['name'] for column in tables[0]['columns']])
+
+    def test_paginated_rows_sorting_and_last_page(self):
+        first = self.rows()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data['total'], 33)
+        self.assertEqual(len(first.data['rows']), 25)
+        self.assertEqual(first.data['rows'][0]['id'], 1)
+        self.assertNotIn('cpf', first.data['rows'][0])
+        last = self.rows(page=999, sort='id', direction='desc')
+        self.assertEqual(last.data['page'], 2)
+        self.assertEqual(len(last.data['rows']), 8)
+        self.assertEqual(last.data['rows'][-1]['id'], 1)
+
+    def test_search_escapes_wildcards_and_sql_is_parameterized(self):
+        self.assertEqual(self.rows(search='100%_').data['total'], 1)
+        self.assertEqual(self.rows(search="' OR 1=1 --").data['total'], 0)
+        self.assertEqual(self.rows(search='restrito').data['total'], 0)
+
+    def test_search_ignores_accents_and_case_with_literal_wildcards(self):
+        # A busca usa LIKE ... ESCAPE (3 argumentos); deve seguir sem acento e sem caixa.
+        self.assertEqual(self.rows(search='educacao').data['total'], 17)
+        self.assertEqual(self.rows(search='COMPUTACAO').data['total'], 16)
+        self.assertEqual(self.rows(search='EDUCAÇÃO').data['total'], 17)
+        self.assertEqual(self.rows(search='100%_ifes').data['total'], 1)
+        self.assertEqual(self.rows(search='100_%').data['total'], 0)
+
+    def test_filters_and_distribution_use_all_matching_rows(self):
+        response = self.rows(filter_column='ano', filter_value='2026', group_by='area')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total'], 17)
+        self.assertEqual(response.data['distribution'], [{'value': 'Educação', 'count': 17}])
+        all_rows = self.rows(group_by='area')
+        self.assertEqual(sum(item['count'] for item in all_rows.data['distribution']), 33)
+
+    def test_dimensions_entities_and_empty_results(self):
+        self.assertEqual(self.rows(table='dim_area').data['total'], 2)
+        self.assertEqual(self.rows(table='iniciativa').data['total'], 33)
+        empty = self.rows(search='inexistente')
+        self.assertEqual(empty.data['rows'], [])
+        self.assertEqual(empty.data['total'], 0)
+        self.assertEqual(empty.data['page'], 1)
+
+    def test_null_and_binary_values_and_relations_with_only_sensitive_columns(self):
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            conn.execute('CREATE TABLE dim_nullable (codigo INTEGER, arquivo BLOB)')
+            conn.executemany('INSERT INTO dim_nullable VALUES (?, ?)', [(None, b'\xff'), (0, b'')])
+            conn.commit()
+        finally:
+            conn.close()
+        self.contexto.views.append({'name': 'dim_nullable'})
+        self.contexto.views[2]['sensitive_columns'] = ['id', 'titulo']
+        self.contexto.update('views')
+        response = self.rows(table='dim_nullable', group_by='codigo')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['total'], 2)
+        self.assertIsNone(response.data['rows'][0]['codigo'])
+        self.assertEqual(response.data['rows'][0]['arquivo'], '0xff')
+        self.assertFalse(self.catalog().data['tables'][2]['available'])
+        self.assertEqual(self.rows(table='iniciativa').status_code, 400)
+
+    def test_rejects_unexposed_tables_sensitive_columns_and_invalid_parameters(self):
+        self.assertEqual(self.rows(table='projeto').status_code, 404)
+        self.assertEqual(self.rows(table='projeto; DROP TABLE area').status_code, 404)
+        for params in [
+            {'sort': 'cpf'}, {'filter_column': 'cpf', 'filter_value': 'restrito'},
+            {'group_by': 'cpf'}, {'sort': 'id DESC; DROP TABLE area'},
+            {'page': 0}, {'page_size': 1000}, {'direction': 'invalido'},
+            {'contexto_id': 'invalido'}, {'filter_value': '2026'},
+        ]:
+            with self.subTest(params=params):
+                self.assertEqual(self.rows(**params).status_code, 400)
+
+    def test_requires_an_active_context_from_same_tenant(self):
+        self.assertEqual(self.catalog(contexto_id=str(self.foreign.id)).status_code, 404)
+        self.assertEqual(self.rows(contexto_id=str(self.foreign.id)).status_code, 404)
+        self.contexto.is_active = False
+        self.contexto.update('is_active')
+        self.assertEqual(self.catalog().status_code, 404)
+
+    def test_exploration_works_without_a_gemini_key(self):
+        with patch.dict(os.environ, {'GEMINI_API_KEY': '', 'GOOGLE_API_KEY': ''}):
+            self.assertEqual(self.catalog().status_code, 200)
+            response = self.rows()
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['total'], 33)
+
+    def test_missing_database_and_stale_context_return_actionable_errors(self):
+        with self.assertLogs('rpc.explorer', level='ERROR'), patch.dict(
+            os.environ, {'ADITO_DADOS_DB': str(self.db_path) + '.missing'},
+        ):
+            self.assertEqual(self.catalog().status_code, 503)
+            self.assertEqual(self.rows().status_code, 503)
+        close_dados()
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            conn.execute('DROP VIEW v_fato_projeto')
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertFalse(self.catalog().data['tables'][0]['available'])
+        self.assertEqual(self.rows().status_code, 400)
+
+
 class ChaveGeminiTests(AppDbTestCase):
     """Teste da chave do Gemini antes de guardá-la no cofre (config.test_llm_key)."""
 
@@ -2432,6 +2604,139 @@ class ChatCancelamentoTests(AppDbTestCase):
                 cancel_event=threading.Event(),
             )
         self.assertEqual(QueryExecution.select(), [])
+
+
+class RelatorioTests(AppDbTestCase):
+    """EPIC-14: relatório como mensagem da conversa, por modelo fixo e sem LLM."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import threading
+        from rpc.chat import persist_assistant_response, prepare_conversation
+
+        _, tenant = session.current()
+        self.ctx = Contexto(tenant_id=tenant.id, slug="ctx-relatorio", name="Pesquisa e Extensão", views=[]).insert()
+        self.conv, user_msg = prepare_conversation("Projetos por área?", None, self.ctx.id)
+
+        def resposta(tipo, sql, chart_type=None):
+            return persist_assistant_response(self.conv, user_msg, "Pergunta", {
+                "answer": "Resposta", "sql": sql, "data": [{"area": "A", "total": 1}], "valid": True,
+                "type": tipo, "field_formats": {"total": "integer"}, "chart_type": chart_type,
+            }, cancel_event=threading.Event())["message_id"]
+
+        self.analise = resposta("analysis", "SELECT area, total FROM v", "pie")
+        self.analise2 = resposta("analysis", "SELECT ano, total FROM v2")
+        self.fallback = resposta("fallback", "SELECT 1")
+        self.sem_sql = resposta("chat", None)
+
+    def criar(self, sections, **extra):
+        return call("chat.reports.create", {
+            "conversation_id": str(self.conv.id), "title": "Relatório de projetos", "sections": sections, **extra,
+        })
+
+    def test_cria_relatorio_como_mensagem_da_conversa_sem_llm_nem_query_execution(self) -> None:
+        from core.records import Message, QueryExecution
+
+        antes = len(QueryExecution.select())
+        with patch("agents.config.get_chat_llm", side_effect=AssertionError("relatório não usa LLM")):
+            status, body = self.criar([
+                {"message_id": self.analise2, "title": "Projetos por ano"},
+                {"message_id": self.analise, "title": "Projetos por área", "chart_type": "horizontal_bar"},
+            ])
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["role"], "assistant")
+        meta = body["metadata"]
+        self.assertEqual(meta["type"], "report")
+        self.assertEqual(meta["title"], "Relatório de projetos")
+        self.assertEqual(meta["contexto_nome"], "Pesquisa e Extensão")
+        self.assertEqual([s["title"] for s in meta["sections"]], ["Projetos por ano", "Projetos por área"])
+        self.assertEqual(meta["sections"][0]["sql"], "SELECT ano, total FROM v2")
+        # Tipo escolhido na tela vence o sugerido; sem escolha, vale o da resposta (aqui, nenhum).
+        self.assertEqual([s["chart_type"] for s in meta["sections"]], [None, "horizontal_bar"])
+        self.assertEqual(meta["sections"][1]["field_formats"], {"total": "integer"})
+        self.assertEqual(len(QueryExecution.select()), antes)
+        salvo = Message.first("id = ?", [db.to_db_id(body["id"])])
+        self.assertEqual(salvo.metadata["type"], "report")
+
+    def test_rejeita_secoes_invalidas(self) -> None:
+        from core.records import Message
+
+        outra, _ = __import__("rpc.chat", fromlist=["prepare_conversation"]).prepare_conversation("Outra", None, self.ctx.id)
+        casos = [
+            [],
+            [{"message_id": self.fallback, "title": "Aviso"}],
+            [{"message_id": self.sem_sql, "title": "Conversa"}],
+            [{"message_id": self.analise, "title": ""}],
+            [{"message_id": self.analise, "title": "A"}, {"message_id": self.analise, "title": "B"}],
+            [{"message_id": self.analise, "title": "A", "chart_type": "metric_card"}],
+            [{"message_id": "nao-e-uuid", "title": "A"}],
+            [{"message_id": self.analise, "title": "A"}] * 21,
+        ]
+        for sections in casos:
+            with self.subTest(sections=str(sections)[:80]):
+                self.assertEqual(self.criar(sections)[0], 400)
+        self.assertEqual(self.criar([{"message_id": self.analise, "title": "A"}], title="  ")[0], 400)
+        # Resposta de outra conversa não entra
+        status, _ = call("chat.reports.create", {
+            "conversation_id": str(outra.id), "title": "T", "sections": [{"message_id": self.analise, "title": "A"}],
+        })
+        self.assertEqual(status, 400)
+        # Relatório não vira seção de outro relatório
+        _, rel = self.criar([{"message_id": self.analise, "title": "A"}])
+        self.assertEqual(self.criar([{"message_id": rel["id"], "title": "R"}])[0], 400)
+        self.assertEqual(len([m for m in Message.select("conversation_id = ?", [db.to_db_id(self.conv.id)])
+                              if (m.metadata or {}).get("type") == "report"]), 1)
+
+    def test_report_rows_reexecuta_cada_secao_e_isola_falhas(self) -> None:
+        _, rel = self.criar([
+            {"message_id": self.analise, "title": "Área"},
+            {"message_id": self.analise2, "title": "Ano"},
+        ])
+
+        def fake_execute(sql, contexto_id=None, max_rows=None, dados_path=None):
+            self.assertEqual(str(contexto_id), str(self.ctx.id))
+            if "v2" in sql:
+                return [{"error": "no such table: v2"}]
+            return [{"area": "Engenharias", "total": 120}]
+
+        with patch("rpc.chat.execute_query", side_effect=fake_execute), \
+                patch("agents.config.get_chat_llm", side_effect=AssertionError("relatório não usa LLM")):
+            status, body = call("chat.report_rows", {"id": rel["id"]})
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["sections"][0], {"data": [{"area": "Engenharias", "total": 120}], "error": None})
+        self.assertEqual(body["sections"][1]["data"], [])
+        self.assertTrue(body["sections"][1]["error"])
+        # Resposta comum não é relatório
+        self.assertEqual(call("chat.report_rows", {"id": self.analise})[0], 404)
+        self.assertEqual(call("chat.report_rows", {"id": "x"})[0], 404)
+
+    def test_message_rows_e_report_rows_usam_a_mesma_regra_de_erro(self) -> None:
+        _, rel = self.criar([{"message_id": self.analise, "title": "Área"}])
+        legitimo = [{"area": "Engenharias", "error": "nenhum"}, {"area": "Humanas", "error": "nenhum"}]
+
+        with patch("rpc.chat.execute_query", return_value=legitimo):
+            status_msg, body_msg = call("chat.message_rows", {"id": self.analise})
+            status_rel, body_rel = call("chat.report_rows", {"id": rel["id"]})
+        # Coluna "error" ao lado de outras é dado nos dois métodos
+        self.assertEqual(status_msg, 200, body_msg)
+        self.assertEqual(body_msg["data"], legitimo)
+        self.assertEqual(status_rel, 200, body_rel)
+        self.assertEqual(body_rel["sections"][0], {"data": legitimo, "error": None})
+
+        falha = [{"error": "no such table: v1"}]
+        with patch("rpc.chat.execute_query", return_value=falha):
+            self.assertEqual(call("chat.message_rows", {"id": self.analise})[0], 409)
+            status_rel, body_rel = call("chat.report_rows", {"id": rel["id"]})
+        self.assertEqual(body_rel["sections"][0]["data"], [])
+        self.assertTrue(body_rel["sections"][0]["error"])
+
+    def test_relatorio_aparece_no_historico_da_conversa(self) -> None:
+        _, rel = self.criar([{"message_id": self.analise, "title": "Área"}])
+        status, conversas = call("chat.conversations.list")
+        self.assertEqual(status, 200)
+        mensagens = next(c for c in conversas if c["id"] == self.conv.id)["messages"]
+        self.assertEqual(mensagens[-1]["id"], rel["id"])
+        self.assertEqual(mensagens[-1]["metadata"]["type"], "report")
 
 
 if __name__ == "__main__":

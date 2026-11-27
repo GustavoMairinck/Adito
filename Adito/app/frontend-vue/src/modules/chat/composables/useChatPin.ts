@@ -35,7 +35,8 @@ export function useChatPin(showToast: (msg: string, type?: string) => void) {
       const chartType = currentPinMessage.value?.isScalarResult
         ? 'metric_card'
         : currentPinMessage.value?.chart
-          ? 'bar'
+          // O widget nasce com o tipo de gráfico que estava na tela do chat.
+          ? (currentPinMessage.value?.chartType || 'bar')
           : 'table'
 
       const grid_w = chartType === 'metric_card' ? 4 : 6
