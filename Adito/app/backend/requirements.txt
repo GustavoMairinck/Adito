@@ -13,6 +13,8 @@ sqlalchemy
 pandas
 langgraph-checkpoint-sqlite
 rich
+# Embedding local (ONNX em CPU, sem API): vetores dos valores e das perguntas (analytics_index/modelo_local.py).
+fastembed==0.9.1
 
 # O núcleo fala com o Tauri por stdin/stdout (rpc/server.py): sem servidor HTTP nem Django.
 # O bi_agent roda no mesmo processo (agents/bi_agent/tool.py); sem servidor MCP.

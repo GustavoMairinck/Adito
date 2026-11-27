@@ -11,7 +11,7 @@
 # com o sufixo da plataforma que o Tauri exige.
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 BACKEND = Path(SPECPATH)
 NUCLEO = BACKEND / "nucleo"
@@ -32,6 +32,9 @@ externos = (
     + collect_submodules("langfuse")
     + collect_submodules("sqlglot.dialects")
     + collect_submodules("tiktoken_ext")
+    + collect_submodules("fastembed")
+    + collect_submodules("onnxruntime")
+    + collect_submodules("tokenizers")
 )
 
 dados = [
@@ -40,7 +43,7 @@ dados = [
     # contextos padrão (views, regras e exemplos do agente); REPO_APP_DIR aponta para cá empacotado
     (str(APP / "contexts"), "contexts"),
 ]
-for pacote in ("langchain_core", "langchain_google_genai", "langchain_openai", "openai", "tiktoken", "langgraph", "google.genai", "certifi"):
+for pacote in ("langchain_core", "langchain_google_genai", "langchain_openai", "openai", "tiktoken", "langgraph", "google.genai", "certifi", "fastembed", "onnxruntime", "tokenizers"):
     try:
         dados += collect_data_files(pacote)
     except Exception:
@@ -49,7 +52,8 @@ for pacote in ("langchain_core", "langchain_google_genai", "langchain_openai", "
 a = Analysis(
     [str(NUCLEO / "desktop_server.py")],
     pathex=[str(NUCLEO)],
-    binaries=[],
+    # bibliotecas nativas do ONNX Runtime (o modelo em si é baixado do release na primeira abertura)
+    binaries=collect_dynamic_libs("onnxruntime"),
     datas=dados,
     hiddenimports=proprios + externos,
     excludes=[

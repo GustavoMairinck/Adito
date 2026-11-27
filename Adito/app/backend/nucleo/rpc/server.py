@@ -143,6 +143,11 @@ def main() -> None:
     server.send({"event": "ready", "data": info})
     logger.info("Núcleo pronto em %s ms", info["startup_ms"])
 
+    # Modelo de embedding local e vetores do dados.db: carregam em segundo plano, sem travar a abertura.
+    from analytics_index.modelo_local import preparar_em_segundo_plano
+
+    preparar_em_segundo_plano()
+
     async def run():
         try:
             await server.serve(sys.stdin.buffer)
