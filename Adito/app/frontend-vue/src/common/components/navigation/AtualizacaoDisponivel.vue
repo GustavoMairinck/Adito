@@ -43,39 +43,57 @@ function depois() {
   limparErro()
 }
 
-const podeBaixar = computed(() => {
-  if (ocupado.value || baixandoAppEmSegundoPlano.value) return false
-  if (dadosNovos.value?.precisa_chave && !chave.value.trim()) return false
-  return !!app.value || !!dadosNovos.value
+const temAmbasAtualizacoes = computed(() => Boolean(app.value && dadosNovos.value))
+
+const podeAtualizarApp = computed(() => Boolean(app.value) && !ocupado.value && !baixandoAppEmSegundoPlano.value)
+
+const podeAtualizarDados = computed(() => {
+  if (!dadosNovos.value || ocupado.value) return false
+  if (dadosNovos.value.precisa_chave && !chave.value.trim()) return false
+  return true
 })
 
-async function baixarAgora() {
-  if (!podeBaixar.value) return
-  if (dadosNovos.value) {
-    const ok = await instalarDados(dadosNovos.value.precisa_chave ? chave.value : undefined)
-    if (!ok) return
+const podeBaixarUnico = computed(() => {
+  if (app.value) return podeAtualizarApp.value
+  if (dadosNovos.value) return podeAtualizarDados.value
+  return false
+})
+
+async function atualizarDados() {
+  if (!podeAtualizarDados.value || !dadosNovos.value) return
+  const ok = await instalarDados(dadosNovos.value.precisa_chave ? chave.value : undefined)
+  if (ok) {
     chave.value = ''
-  }
-  if (app.value) {
-    await instalarApp()
-  }
-  if (!temAtualizacao.value) {
-    aberto.value = false
+    if (!temAtualizacao.value) aberto.value = false
   }
 }
 
+async function baixarUnico() {
+  if (app.value) {
+    if (!podeAtualizarApp.value) return
+    await instalarApp()
+    if (!temAtualizacao.value) aberto.value = false
+    return
+  }
+  await atualizarDados()
+}
+
 function aoTeclar(ev: KeyboardEvent) {
-  if (ev.key === 'Escape' && aberto.value && !ocupado.value) {
+  if (ev.key === 'Escape' && aberto.value) {
     ev.preventDefault()
-    depois()
+    ev.stopPropagation()
+    ev.stopImmediatePropagation()
+    if (!ocupado.value) {
+      depois()
+    }
   }
 }
 
 onMounted(() => {
-  window.addEventListener('keydown', aoTeclar)
+  window.addEventListener('keydown', aoTeclar, true)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', aoTeclar)
+  window.removeEventListener('keydown', aoTeclar, true)
 })
 </script>
 
@@ -148,11 +166,19 @@ onBeforeUnmount(() => {
               Há novidades para o Adito. Você pode baixar agora ou continuar e atualizar mais tarde.
             </p>
 
-            <form class="mt-5 space-y-3" @submit.prevent="baixarAgora">
+            <div class="mt-5 space-y-3">
               <div v-if="app" class="rounded-xl border border-border-subtle bg-surface p-4 dark:border-white/[0.1]">
-                <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                  <Download class="h-4 w-4 shrink-0 text-[var(--brand-primary)] dark:text-[#68d388]" />
-                  <span>Nova versão do Adito</span>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                    <Download class="h-4 w-4 shrink-0 text-[var(--brand-primary)] dark:text-[#68d388]" />
+                    <span>Nova versão do Adito</span>
+                  </div>
+                  <span
+                    v-if="temAmbasAtualizacoes"
+                    class="rounded-full bg-[var(--accent-light)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand-primary)] dark:bg-[#2B7A42]/25 dark:text-[#68d388]"
+                  >
+                    Recomendado primeiro
+                  </span>
                 </div>
                 <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
                   <template v-if="appProntoParaReinicio">
@@ -162,6 +188,24 @@ onBeforeUnmount(() => {
                     Versão {{ app.version }}. O download instala a atualização e reinicia o aplicativo. Suas conversas e painéis são preservados.
                   </template>
                 </p>
+                <button
+                  v-if="temAmbasAtualizacoes"
+                  type="button"
+                  class="mt-3 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--brand-dark)] disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!podeAtualizarApp"
+                  @click="instalarApp"
+                >
+                  <template v-if="instalandoApp">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    <span>{{ appProntoParaReinicio ? 'Reiniciando…' : (progressoApp > 0 ? `Baixando… ${Math.round(progressoApp * 100)}%` : 'Baixando…') }}</span>
+                  </template>
+                  <template v-else-if="baixandoAppEmSegundoPlano">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    <span>{{ progressoApp > 0 ? `Baixando em segundo plano… ${Math.round(progressoApp * 100)}%` : 'Baixando em segundo plano…' }}</span>
+                  </template>
+                  <template v-else-if="appProntoParaReinicio">Reiniciar para atualizar</template>
+                  <template v-else>Atualizar o app</template>
+                </button>
               </div>
 
               <div v-if="dadosNovos" class="rounded-xl border border-border-subtle bg-surface p-4 dark:border-white/[0.1]">
@@ -172,17 +216,31 @@ onBeforeUnmount(() => {
                 <p class="mt-1.5 text-xs leading-relaxed text-text-secondary">
                   Versão {{ dadosNovos.versao }} ({{ tamanhoMb(dadosNovos.tamanho) }}). Não precisa reinstalar o aplicativo.
                 </p>
-                <div v-if="dadosNovos.precisa_chave" class="mt-3 flex flex-col gap-2">
-                  <p class="text-xs text-amber-700 dark:text-amber-300">A chave dos dados mudou. Informe a nova chave.</p>
-                  <input
-                    v-model="chave"
-                    type="password"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="Nova chave dos dados"
-                    class="rounded-lg border border-border-subtle bg-surface-elevated/60 px-3 py-2 text-sm placeholder:text-text-muted focus:border-[var(--brand-primary)] focus:outline-none"
-                  />
-                </div>
+                <form class="mt-3 flex flex-col gap-2" @submit.prevent="atualizarDados">
+                  <template v-if="dadosNovos.precisa_chave">
+                    <p class="text-xs text-amber-700 dark:text-amber-300">A chave dos dados mudou. Informe a nova chave.</p>
+                    <input
+                      v-model="chave"
+                      type="password"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="Nova chave dos dados"
+                      class="rounded-lg border border-border-subtle bg-surface-elevated/60 px-3 py-2 text-sm placeholder:text-text-muted focus:border-[var(--brand-primary)] focus:outline-none"
+                    />
+                  </template>
+                  <button
+                    v-if="temAmbasAtualizacoes"
+                    type="submit"
+                    class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--brand-primary)]/40 bg-[var(--accent-light)] px-4 py-2 text-xs font-semibold text-[var(--brand-primary)] transition-colors hover:bg-[var(--brand-primary)] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#68d388]/40 dark:bg-[#2B7A42]/20 dark:text-[#68d388] dark:hover:bg-[#2B7A42] dark:hover:text-white"
+                    :disabled="!podeAtualizarDados"
+                  >
+                    <template v-if="instalandoDados">
+                      <Loader2 class="h-4 w-4 animate-spin" />
+                      <span>Baixando e conferindo…</span>
+                    </template>
+                    <template v-else>Atualizar os dados</template>
+                  </button>
+                </form>
               </div>
 
               <p v-if="erro" class="text-xs text-[#C50707] dark:text-red-300">{{ erro }}</p>
@@ -197,9 +255,11 @@ onBeforeUnmount(() => {
                   Deixar para depois
                 </button>
                 <button
-                  type="submit"
+                  v-if="!temAmbasAtualizacoes"
+                  type="button"
                   class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--brand-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!podeBaixar"
+                  :disabled="!podeBaixarUnico"
+                  @click="baixarUnico"
                 >
                   <template v-if="instalandoApp">
                     <Loader2 class="h-4 w-4 animate-spin" />
@@ -213,11 +273,11 @@ onBeforeUnmount(() => {
                     <Loader2 class="h-4 w-4 animate-spin" />
                     <span>Baixando…</span>
                   </template>
-                  <template v-else-if="appProntoParaReinicio && !dadosNovos">Reiniciar para atualizar</template>
+                  <template v-else-if="appProntoParaReinicio">Reiniciar para atualizar</template>
                   <template v-else>Baixar agora</template>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       </transition>

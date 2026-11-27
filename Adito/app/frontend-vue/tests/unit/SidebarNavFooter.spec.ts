@@ -128,10 +128,74 @@ describe('SidebarNav — rodapé e funcionalidades vinculadas', () => {
     expect(dialog?.textContent).toContain('Dados novos')
     expect(dialog?.textContent).toContain('2026-11-26')
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await flushPromises()
-    expect(document.body.querySelector('[role="dialog"][aria-label="Atualizações do Adito"]')).toBeNull()
+    const bubbleEscSpy = vi.fn()
+    window.addEventListener('keydown', bubbleEscSpy)
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      await flushPromises()
+      expect(document.body.querySelector('[role="dialog"][aria-label="Atualizações do Adito"]')).toBeNull()
+      // O modal captura o Esc antes do listener global do chat para não abortar geração em andamento
+      expect(bubbleEscSpy).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', bubbleEscSpy)
+    }
 
     wrapper.unmount()
+  })
+
+  it('mantém ações independentes sem bloqueio cruzado quando há atualização do app e dos dados simultaneamente', async () => {
+    apiMock.dadosStatus.mockResolvedValue({
+      instalado: true,
+      versao: '2026-11-01',
+      desenvolvimento: false,
+      chave_configurada: true,
+    })
+    apiMock.dadosVerificar.mockResolvedValue({
+      versao: '2026-11-26',
+      tamanho: 4_500_000,
+      atualizacao: true,
+      precisa_chave: true,
+    })
+    apiMock.appVerificar.mockResolvedValue({
+      version: '0.2.0',
+      downloadAndInstall: vi.fn(),
+    })
+
+    await useAtualizacoes().verificar()
+    const wrapper = mount(SidebarNav, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="atualizacao-disponivel"] button').trigger('click')
+    await flushPromises()
+
+    const dialog = document.body.querySelector('[role="dialog"][aria-label="Atualizações do Adito"]')!
+    const buttons = Array.from(dialog.querySelectorAll('button'))
+    const appBtn = buttons.find((b) => b.textContent?.includes('Atualizar o app'))
+    const dataBtn = buttons.find((b) => b.textContent?.includes('Atualizar os dados'))
+    expect(appBtn).toBeDefined()
+    expect(dataBtn).toBeDefined()
+    // Mesmo sem informar a nova chave dos dados, atualizar o app continua liberado
+    expect(appBtn!.disabled).toBe(false)
+    expect(dataBtn!.disabled).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('fechar busca da sidebar com Escape impede propagação para o listener do chat', async () => {
+    const wrapper = mount(SidebarNav, { attachTo: document.body })
+    await wrapper.get('button[aria-label="Buscar conversas"]').trigger('click')
+    expect(wrapper.find('input[aria-label="Filtrar conversas"]').exists()).toBe(true)
+
+    const bubbleEscSpy = vi.fn()
+    window.addEventListener('keydown', bubbleEscSpy)
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      await flushPromises()
+      expect(wrapper.find('input[aria-label="Filtrar conversas"]').exists()).toBe(false)
+      expect(bubbleEscSpy).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', bubbleEscSpy)
+      wrapper.unmount()
+    }
   })
 })

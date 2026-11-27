@@ -18,7 +18,16 @@ import { formatBaseVersion } from '@/modules/chat/utils/historyGroups'
 import ProviderSelect from '@/modules/settings/components/ProviderSelect.vue'
 
 const { user, loadLocalUser } = useAuth()
-const { status: baseStatus, dadosNovos, verificando, verificar, autoAtualizar, setAutoAtualizar } = useAtualizacoes()
+const {
+  status: baseStatus,
+  app: appUpdate,
+  dadosNovos,
+  verificando,
+  erroVerificacao,
+  verificar,
+  autoAtualizar,
+  setAutoAtualizar,
+} = useAtualizacoes()
 
 function handleAutoUpdateToggle(event: Event) {
   const checked = (event.target as HTMLInputElement).checked
@@ -36,17 +45,58 @@ const confirmRemoveOpen = ref(false)
 const showAdvanced = ref(false)
 const busy = ref(false)
 const message = ref<{ type: 'ok' | 'error'; text: string } | null>(null)
-const baseCheckFeedback = ref<string | null>(null)
+const baseCheckFeedback = ref<{ type: 'info' | 'error'; text: string } | null>(null)
 
 const formattedBaseSync = computed(() => formatBaseVersion(baseStatus.value?.versao))
 
 async function checkUpdatesNow() {
   baseCheckFeedback.value = null
   await verificar({ forcar: true })
+  if (baseStatus.value?.desenvolvimento) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: 'Modo desenvolvimento: a base local do repositório é usada diretamente.',
+    }
+    return
+  }
+  if (erroVerificacao.value) {
+    baseCheckFeedback.value = {
+      type: 'error',
+      text: 'Não foi possível verificar atualizações agora (sem conexão ou serviço indisponível).',
+    }
+    return
+  }
+  if (appUpdate.value && dadosNovos.value) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Há novas versões do aplicativo (${appUpdate.value.version}) e da base de dados (${formatBaseVersion(dadosNovos.value.versao) || dadosNovos.value.versao}) disponíveis.`,
+    }
+    return
+  }
+  if (appUpdate.value) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Nova versão do aplicativo disponível (${appUpdate.value.version}). Use "Atualização disponível" na barra lateral.`,
+    }
+    return
+  }
   if (dadosNovos.value) {
-    baseCheckFeedback.value = `Nova versão disponível (${formatBaseVersion(dadosNovos.value.versao) || dadosNovos.value.versao}).`
-  } else {
-    baseCheckFeedback.value = 'A base local já está na versão mais recente.'
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Nova versão de dados disponível (${formatBaseVersion(dadosNovos.value.versao) || dadosNovos.value.versao}).`,
+    }
+    return
+  }
+  if (!baseStatus.value) {
+    baseCheckFeedback.value = {
+      type: 'error',
+      text: 'Não foi possível consultar o status da base local no momento.',
+    }
+    return
+  }
+  baseCheckFeedback.value = {
+    type: 'info',
+    text: 'Aplicativo e base local já estão na versão mais recente.',
   }
 }
 
@@ -410,8 +460,15 @@ onMounted(() => {
           {{ verificando ? 'Verificando…' : 'Verificar atualizações agora' }}
         </button>
       </div>
-      <p v-if="baseCheckFeedback" role="status" class="mt-3 text-xs text-text-secondary">
-        {{ baseCheckFeedback }}
+      <p
+        v-if="baseCheckFeedback"
+        role="status"
+        :class="[
+          'mt-3 text-xs',
+          baseCheckFeedback.type === 'error' ? 'text-[#C50707] dark:text-red-300' : 'text-text-secondary',
+        ]"
+      >
+        {{ baseCheckFeedback.text }}
       </p>
     </section>
 

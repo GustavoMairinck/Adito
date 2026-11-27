@@ -7,7 +7,10 @@ então o router e o nó de ferramenta funcionam sem mudança.
 import asyncio
 from contextvars import ContextVar, Token
 import json
+import logging
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import StructuredTool
@@ -42,8 +45,8 @@ def _emit_trace(event: str, data: dict) -> None:
         return
     try:
         sink(event, data)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao emitir evento de trace (%s): %s", event, exc)
 
 
 ANSWER_SYSTEM_PROMPT = """

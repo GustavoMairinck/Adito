@@ -1,8 +1,11 @@
+import logging
 import threading
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import Embeddings
+
+logger = logging.getLogger(__name__)
 
 from core.contexts import build_system_prompt, get_contexto, read_policy_for
 from core.datastore import connect_dados
@@ -110,7 +113,7 @@ class BIAgent:
 
             check_cancelled()
             if on_progress is not None:
-                output: dict[str, Any] = {}
+                output: dict[str, Any] = dict(input_data)
                 for chunk in self.app.stream(input_data, config=config, stream_mode="updates"):
                     check_cancelled()
                     if not isinstance(chunk, dict):
@@ -120,8 +123,8 @@ class BIAgent:
                             output.update(node_update)
                             try:
                                 on_progress(node_name, node_update)
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("Falha ao emitir progresso do bi_agent (%s): %s", node_name, exc)
             else:
                 output = self.app.invoke(input_data, config=config)
             check_cancelled()
@@ -135,8 +138,8 @@ class BIAgent:
                 if on_progress is not None:
                     try:
                         on_progress("execute_start", {"sql": sql})
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Falha ao emitir execute_start do bi_agent: %s", exc)
                 data = self.execute_query(sql, contexto_id=str(contexto.id))
 
             return {

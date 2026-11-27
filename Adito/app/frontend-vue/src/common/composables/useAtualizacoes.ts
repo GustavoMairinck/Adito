@@ -63,6 +63,7 @@ const progressoApp = ref(0)
 const erro = ref<string | null>(null)
 
 const verificando = ref(false)
+const erroVerificacao = ref<string | null>(null)
 const appBaixadoVersao = ref<string | null>(null)
 const segundosParaReinicio = ref<number | null>(null)
 const versaoAdiada = ref<string | null>(null)
@@ -150,6 +151,7 @@ async function verificarAgora(): Promise<void> {
   if (verificacaoEmCurso) return verificacaoEmCurso
 
   verificando.value = true
+  erroVerificacao.value = null
   verificacaoEmCurso = (async () => {
     await carregarStatus()
     const emDesenvolvimento = Boolean(status.value?.desenvolvimento)
@@ -158,6 +160,11 @@ async function verificarAgora(): Promise<void> {
       emDesenvolvimento ? Promise.resolve(null) : appVerificar(),
     ])
     dadosRemoto.value = remoto.status === 'fulfilled' ? remoto.value : null
+    if (remoto.status === 'rejected') {
+      erroVerificacao.value = mensagem(remoto.reason)
+    } else if (!emDesenvolvimento && update.status === 'rejected') {
+      erroVerificacao.value = mensagem(update.reason)
+    }
 
     const appAnterior = app.value
     const appAnteriorEmUsoOuBaixado = Boolean(
@@ -478,6 +485,7 @@ export function useAtualizacoes() {
     instalandoDados,
     instalandoApp,
     verificando,
+    erroVerificacao,
     baixandoAppEmSegundoPlano,
     appProntoParaReinicio,
     segundosParaReinicio,
@@ -514,6 +522,7 @@ export function _resetAtualizacoes(opcoes?: { preservarPreferencia?: boolean }) 
   instalandoDados.value = false
   instalandoApp.value = false
   verificando.value = false
+  erroVerificacao.value = null
   baixandoAppEmSegundoPlano.value = false
   progressoApp.value = 0
   erro.value = null

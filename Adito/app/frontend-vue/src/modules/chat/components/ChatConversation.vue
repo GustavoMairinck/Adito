@@ -38,7 +38,6 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'open-conversations'): void
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
   (e: 'export', payload: { message: ChatMessage; format: ExportFormat }): void

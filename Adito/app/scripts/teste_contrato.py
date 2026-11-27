@@ -215,6 +215,12 @@ async def roteiro(api) -> list[dict]:
     await call("report_rows de resposta comum", "chat.report_rows", {"id": analises[0]["id"] if analises else None})
     await call("query_executions", "admin.query_executions", {"limit": "100"})
     await call("query_executions inválidas", "admin.query_executions", {"limit": "100", "is_valid": "false"})
+    await call("conversations.update", "chat.conversations.update", {
+        "id": conv_id, "title": "Conversa renomeada", "is_pinned": True,
+    })
+    await call("conversations.update título vazio", "chat.conversations.update", {
+        "id": conv_id, "title": "   ",
+    })
     await call("conversations.delete", "chat.conversations.delete", {"id": conv_id})
     await call("conversations.list depois", "chat.conversations.list")
     await call("query_executions depois", "admin.query_executions", {"limit": "100"})

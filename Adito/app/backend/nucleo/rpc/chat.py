@@ -341,8 +341,8 @@ class _TraceSession:
         try:
             fut = asyncio.run_coroutine_threadsafe(self._emit(event, payload), self._loop)
             fut.result(timeout=5)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao encaminhar evento de trace (%s): %s", event, exc)
 
     def step_status(self, step_id: str) -> str | None:
         with self._lock:

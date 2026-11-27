@@ -41,6 +41,8 @@ const baseStatusRef = ref<{ instalado: boolean; versao: string | null; desenvolv
   desenvolvimento: false,
   chave_configurada: true,
 })
+const appUpdateRef = ref<{ version: string } | null>(null)
+const erroVerificacaoRef = ref<string | null>(null)
 
 vi.mock('@/common/composables/useAtualizacoes', async () => {
   const actual = await vi.importActual<typeof import('@/common/composables/useAtualizacoes')>(
@@ -53,8 +55,10 @@ vi.mock('@/common/composables/useAtualizacoes', async () => {
       return {
         ...real,
         status: baseStatusRef,
+        app: appUpdateRef,
         dadosNovos: ref(null),
         verificando: ref(false),
+        erroVerificacao: erroVerificacaoRef,
         verificar: (...args: unknown[]) => verificarAtualizacoesMock(...args),
       }
     },
@@ -102,6 +106,14 @@ describe('ConfiguracoesView.vue', () => {
     clearKeyMock.mockReset().mockResolvedValue(undefined)
     loadLocalUserMock.mockReset().mockResolvedValue(userRef.value)
     verificarAtualizacoesMock.mockReset().mockResolvedValue(undefined)
+    baseStatusRef.value = {
+      instalado: true,
+      versao: '2026-11-20',
+      desenvolvimento: false,
+      chave_configurada: true,
+    }
+    appUpdateRef.value = null
+    erroVerificacaoRef.value = null
   })
 
   it('troca de provedor no dropdown customizado preenche modelo padrão e atualiza texto de privacidade para Mistral AI', async () => {
@@ -294,5 +306,32 @@ describe('ConfiguracoesView.vue', () => {
     await toggle.setValue(false)
     expect(toggle.element.checked).toBe(false)
     expect(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY)).toBe('false')
+  })
+
+  it('diferencia erro de rede, modo dev e atualização de aplicativo ao verificar atualizações manualmente', async () => {
+    const wrapper = mount(ConfiguracoesView)
+    await flushPromises()
+    const checkBtn = () => wrapper.findAll('button').find((b) => b.text().includes('Verificar atualizações agora'))!
+
+    // Caso 1: offline / erro de rede — não deve afirmar que está atualizado
+    erroVerificacaoRef.value = 'sem rede'
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Não foi possível verificar atualizações agora')
+    expect(wrapper.text()).not.toContain('já estão na versão mais recente')
+
+    // Caso 2: nova versão apenas do aplicativo
+    erroVerificacaoRef.value = null
+    appUpdateRef.value = { version: '0.2.0' }
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Nova versão do aplicativo disponível (0.2.0)')
+
+    // Caso 3: modo desenvolvimento
+    appUpdateRef.value = null
+    baseStatusRef.value = { instalado: true, versao: null, desenvolvimento: true, chave_configurada: false }
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modo desenvolvimento')
   })
 })

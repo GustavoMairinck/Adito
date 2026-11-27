@@ -79,6 +79,14 @@ const editInputRef = ref<HTMLInputElement | null>(null)
 const conversationToDelete = ref<{ id: string; title: string } | null>(null)
 const sidebarError = ref<string | null>(null)
 
+let mediaQueryList: MediaQueryList | null = null
+const handleMediaChange = (e: MediaQueryListEvent) => {
+  isMobile.value = e.matches
+  if (!e.matches && props.isOpen) {
+    emit('update:isOpen', false)
+  }
+}
+
 function handleGlobalShortcut(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
     if (document.querySelector('[data-testid="primeiro-uso-dados"]')) return
@@ -92,22 +100,18 @@ function handleGlobalShortcut(event: KeyboardEvent) {
   }
   if (event.key === 'Escape' && isSearchOpen.value) {
     event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
     closeSearch()
   }
 }
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    const mql = window.matchMedia('(max-width: 767px)')
-    isMobile.value = mql.matches
-
-    mql.addEventListener('change', (e) => {
-      isMobile.value = e.matches
-      if (!e.matches && props.isOpen) {
-        emit('update:isOpen', false)
-      }
-    })
-    window.addEventListener('keydown', handleGlobalShortcut)
+    mediaQueryList = window.matchMedia('(max-width: 767px)')
+    isMobile.value = mediaQueryList.matches
+    mediaQueryList.addEventListener('change', handleMediaChange)
+    window.addEventListener('keydown', handleGlobalShortcut, true)
   }
 
   if (typeof document !== 'undefined') {
@@ -122,8 +126,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
-    window.removeEventListener('keydown', handleGlobalShortcut)
+    window.removeEventListener('keydown', handleGlobalShortcut, true)
   }
+  mediaQueryList?.removeEventListener('change', handleMediaChange)
+  mediaQueryList = null
   themeObserver?.disconnect()
 })
 
@@ -175,13 +181,16 @@ const searchResults = computed<SearchMatch[]>(() => {
   const matches: SearchMatch[] = []
   for (const conv of conversations.value) {
     const titleHit = conv.title.toLowerCase().includes(q)
-    const matchingMsg = conv.messages.find(
-      (m) => m.id !== 'welcome' && (m.text || '').toLowerCase().includes(q),
-    )
+    const matchingMsg = conv.messages.find((m) => {
+      if (m.id === 'welcome') return false
+      const searchable = `${m.text || ''} ${m.report?.title || ''}`.toLowerCase()
+      return searchable.includes(q)
+    })
     if (!titleHit && !matchingMsg) continue
     let snippet: string | null = null
-    if (matchingMsg?.text) {
-      const text = matchingMsg.text.replace(/\s+/g, ' ').trim()
+    const rawContent = matchingMsg?.text || matchingMsg?.report?.title || ''
+    if (rawContent) {
+      const text = rawContent.replace(/\s+/g, ' ').trim()
       const pos = text.toLowerCase().indexOf(q)
       if (pos >= 0) {
         const start = Math.max(0, pos - 24)
@@ -232,8 +241,9 @@ function cancelRename() {
 async function saveRename(id: string) {
   if (editingId.value !== id) return
   const next = editingTitle.value.trim()
+  const currentTitle = conversations.value.find((c) => c.id === id)?.title
   cancelRename()
-  if (!next) return
+  if (!next || next === currentTitle) return
   try {
     sidebarError.value = null
     await handleRenameConversation(id, next)
@@ -691,7 +701,7 @@ function toggleTheme() {
 }
 
 .adito-sidebar--expanded {
-  width: var(--sidebar-expanded-width);
+  width: min(var(--sidebar-expanded-width), 85vw);
 }
 
 .icon-button--active {

@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 
-import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import { exportarTabela } from '@/common/api/export'
 import { useToast } from '@/common/composables/useToast'
 import type { ExportFormat } from '@/common/utils/exportData'
@@ -28,7 +27,6 @@ const { toast, showToast } = useToast()
 
 const {
   currentConvId,
-  handleDeleteConversation,
   updateConversationById,
   replaceConversationId,
   setConversationContexto,
@@ -123,7 +121,6 @@ const rememberChartType = ({ id, type }: { id: string; type: ChatChartType }) =>
 watch(currentConvId, () => { reportFormOpen.value = false })
 const healthOnline = ref<boolean | null>(null)
 const reconnecting = ref(false)
-const conversationToDelete = ref<{ id: string; title: string } | null>(null)
 
 const retryConnection = async () => {
   if (reconnecting.value) return
@@ -204,14 +201,14 @@ watch(isCurrentConvLoading, scrollToBottom)
 watch(reportFormOpen, open => { if (open) scrollToBottom() })
 
 const cancelCurrentQuestion = () => {
-  if (conversationToDelete.value || pinModalOpen.value) return
+  if (pinModalOpen.value) return
   if (!currentConvId.value || !isCurrentConvLoading.value) return
   cancelStream(currentConvId.value)
 }
 
 const handleGlobalKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'Escape') return
-  if (conversationToDelete.value || pinModalOpen.value) return
+  if (pinModalOpen.value) return
   if (!isCurrentConvLoading.value) return
   event.preventDefault()
   cancelCurrentQuestion()
@@ -488,32 +485,11 @@ const handleExport = async ({ message, format }: { message: ChatMessage; format:
     isExporting.value = false
   }
 }
-const confirmDeleteConversation = async () => {
-  if (!conversationToDelete.value) return
-  try {
-    await handleDeleteConversation(conversationToDelete.value.id)
-    showToast('Conversa excluida com sucesso.', 'success')
-    conversationToDelete.value = null
-  } catch (error: any) {
-    const detail = error?.response?.data?.detail || error?.message || 'Erro desconhecido.'
-    showToast(`Erro ao excluir conversa: ${detail}`, 'error')
-  }
-}
 </script>
 
 
 <template>
   <div class="flex flex-col h-full relative overflow-hidden">
-    <ConfirmModal
-      :is-open="!!conversationToDelete"
-      title="Excluir conversa"
-      :message="conversationToDelete ? `Tem certeza que deseja excluir a conversa '${conversationToDelete.title}'?` : ''"
-      confirm-text="Excluir conversa"
-      cancel-text="Cancelar"
-      @confirm="confirmDeleteConversation"
-      @close="conversationToDelete = null"
-    />
-
     <DashboardPinDialog
       :is-open="pinModalOpen"
       :title="pinTitle"
@@ -613,7 +589,7 @@ const confirmDeleteConversation = async () => {
         <ChatInputArea
           v-model="input"
           :loading="isCurrentConvLoading"
-          :disable-escape="!!conversationToDelete || pinModalOpen"
+          :disable-escape="pinModalOpen"
           :can-create-report="canCreateReport"
           @create-report="openReportForm"
           @send="sendQuestion()"

@@ -678,7 +678,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
             : 'SELECT grande_area, COUNT(*) AS total FROM vfact_projeto_pesquisa_resolved GROUP BY grande_area'
           chatRowsByMessage[answerId] = answerRows
           chatSqlByMessage[answerId] = answerSql
-          const mockSql = answerSql
           const mockTrace = {
             compact: false,
             duration_ms: 420,
@@ -745,7 +744,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
               delayMs: 10,
             },
             {
-              msg: { event: 'step_code', data: { step_id: 'query', language: 'sql', code: mockSql } },
+              msg: { event: 'step_code', data: { step_id: 'query', language: 'sql', code: answerSql } },
               delayMs: 12,
             },
             {

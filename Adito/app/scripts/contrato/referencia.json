@@ -2786,6 +2786,29 @@
   "body": []
  },
  {
+  "nome": "conversations.update",
+  "status": "2xx",
+  "body": {
+   "id": "<id6>",
+   "title": "Conversa renomeada",
+   "is_pinned": true,
+   "contexto": "<id2>",
+   "created_at": "<data>",
+   "updated_at": "<data>",
+   "createdAt": "<data>",
+   "updatedAt": "<data>"
+  }
+ },
+ {
+  "nome": "conversations.update título vazio",
+  "status": 400,
+  "body": {
+   "title": [
+    "This field may not be blank."
+   ]
+  }
+ },
+ {
   "nome": "conversations.delete",
   "status": "2xx",
   "body": null
