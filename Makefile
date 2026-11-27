@@ -157,7 +157,7 @@ test-etl: check-setup ## Executa os testes automatizados do ETL (pytest)
 
 test-core: check-setup ## Executa os testes unitários do núcleo Python (datastore, authorizer e regressão)
 	@echo -e "$(COLOR_CYAN)→ Executando testes unitários do núcleo Python...$(COLOR_RESET)"
-	@cd "$(APP_DIR)/backend/nucleo" && "$(APP_PYTHON)" -m unittest core.tests core.test_datastore_sqlite
+	@cd "$(APP_DIR)/backend/nucleo" && "$(APP_PYTHON)" -m unittest core.tests core.test_datastore_sqlite core.test_embeddings_locais
 
 test-mcp: check-setup ## Executa os testes de contrato e integração STDIO/MCP
 	@echo -e "$(COLOR_CYAN)→ Executando testes de STDIO e Contrato RPC...$(COLOR_RESET)"
