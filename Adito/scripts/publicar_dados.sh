@@ -4,13 +4,16 @@
 # Uso (a chave institucional vem do ambiente, nunca da linha de comando):
 #   ADITO_DADOS_CHAVE=<64 hex> Adito/scripts/publicar_dados.sh [caminho/dados.db] [versao]
 #
+# - grava numa cópia do dados.db os vetores de busca dos valores (gerar_embeddings_dados.py, modelo
+#   local, sem API) e publica o modelo (modelo.json + .tar.gz, sem criptografia) quando ele mudar;
 # - tranca o dados.db (AES-256-GCM) e gera o manifest.json com a versão e o SHA-256;
 # - publica os dois na release fixa de tag `dados`, marcada como pré-lançamento para nunca
 #   virar o "release mais recente" que o atualizador do app lê;
 # - cada pacote tem nome único (versão + início do SHA-256) e sobe ANTES do manifesto, então
 #   ninguém baixa um arquivo trocado por baixo do manifesto; mantém o pacote novo e o anterior.
 #
-# Precisa do `gh` autenticado com permissão de escrita no repositório e do Rust (cargo).
+# Precisa do `gh` autenticado com permissão de escrita no repositório, do Rust (cargo) e do Python do
+# app com o fastembed (ADITO_PYTHON, padrão Adito/app/.venv/bin/python).
 # Gerar a chave (uma vez, ou para trocar): make chave-dados
 set -euo pipefail
 
@@ -28,17 +31,37 @@ command -v gh >/dev/null || { echo "erro: instale e autentique o GitHub CLI (gh)
 [ -f "$BANCO" ] || { echo "erro: $BANCO não existe. Rode popular_banco.py antes." >&2; exit 1; }
 BANCO="$(cd "$(dirname "$BANCO")" && pwd)/$(basename "$BANCO")"
 
+PYTHON="${ADITO_PYTHON:-$ADITO_DIR/app/.venv/bin/python}"
+[ -x "$PYTHON" ] || PYTHON=python3
+
 SAIDA="$(mktemp -d)"
 trap 'rm -rf "$SAIDA"' EXIT
 
-echo "→ Trancando $BANCO (versão $VERSAO)…"
-(cd "$ADITO_DIR/app/src-tauri" && cargo run --quiet --example empacotar_dados -- empacotar "$BANCO" "$SAIDA" "$VERSAO")
-PACOTE="$(find "$SAIDA" -name 'dados-*.db.enc' -print -quit)"
+# O banco original não é alterado: os vetores vão numa cópia, que é a que sobe.
+COPIA="$SAIDA/dados.db"
+cp "$BANCO" "$COPIA"
+"$PYTHON" "$ADITO_DIR/scripts/gerar_embeddings_dados.py" "$COPIA"
+
+echo "→ Trancando $BANCO com os vetores (versão $VERSAO)…"
+mkdir -p "$SAIDA/pacote"
+(cd "$ADITO_DIR/app/src-tauri" && cargo run --quiet --example empacotar_dados -- empacotar "$COPIA" "$SAIDA/pacote" "$VERSAO")
+PACOTE="$(find "$SAIDA/pacote" -name 'dados-*.db.enc' -print -quit)"
 
 if ! gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
   echo "→ Criando a release '$TAG' (pré-lançamento) em $REPO…"
   gh release create "$TAG" -R "$REPO" --prerelease --title "Dados do Adito" \
     --notes "Base acadêmica cifrada (AES-256-GCM) lida pelo app Adito. Sem a chave institucional, o arquivo é ilegível. Não é um release do app."
+fi
+
+# Modelo de embedding: só sobe quando a chave publicada for diferente da do app.
+CHAVE_MODELO="$("$PYTHON" -c "import sys; sys.path.insert(0, '$ADITO_DIR/app/backend/nucleo'); from analytics_index.modelo_local import modelo_ativo; print(modelo_ativo().chave)")"
+CHAVE_PUBLICADA="$(gh release download "$TAG" -R "$REPO" -p modelo.json -O - 2>/dev/null \
+  | sed -n 's/.*"chave": *"\([^"]*\)".*/\1/p' || true)"
+if [ "$CHAVE_MODELO" != "$CHAVE_PUBLICADA" ]; then
+  echo "→ Publicando o modelo de embedding $CHAVE_MODELO…"
+  "$PYTHON" "$ADITO_DIR/scripts/empacotar_modelo.py" "$SAIDA/modelo"
+  gh release upload "$TAG" "$SAIDA"/modelo/modelo-*.tar.gz -R "$REPO" --clobber
+  gh release upload "$TAG" "$SAIDA/modelo/modelo.json" -R "$REPO" --clobber
 fi
 
 # Pacote que o manifesto atual aponta: alguém pode estar no meio do download dele.
@@ -47,7 +70,7 @@ ANTERIOR="$(gh release download "$TAG" -R "$REPO" -p manifest.json -O - 2>/dev/n
 
 echo "→ Enviando o pacote e depois o manifesto…"
 gh release upload "$TAG" "$PACOTE" -R "$REPO"
-gh release upload "$TAG" "$SAIDA/manifest.json" -R "$REPO" --clobber
+gh release upload "$TAG" "$SAIDA/pacote/manifest.json" -R "$REPO" --clobber
 
 # Mantém só o pacote novo e o anterior.
 NOVO="$(basename "$PACOTE")"

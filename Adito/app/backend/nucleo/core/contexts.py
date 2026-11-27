@@ -152,7 +152,7 @@ def validate_contexto(contexto: Contexto, dados_path=None) -> list[str]:
         if not columns:
             errors.append(f"View '{name}' não existe no dados.db.")
             continue
-        for key in ("sensitive_columns", "embed_columns", "local_search_columns"):
+        for key in ("sensitive_columns", "embed_columns", "local_search_columns", "multi_valor_columns"):
             missing = [column for column in view.get(key, []) if column.lower() not in columns]
             if missing:
                 errors.append(f"View '{name}': {key} inexistentes: {', '.join(missing)}.")

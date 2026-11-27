@@ -16,6 +16,10 @@
         "area_conhecimento",
         "orgao_fomento"
       ],
+      "multi_valor_columns": [
+        "campus",
+        "orgao_fomento"
+      ],
       "local_search_columns": [
         "coordenador_nome",
         "titulo_acao"
