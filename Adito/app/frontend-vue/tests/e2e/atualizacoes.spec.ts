@@ -25,7 +25,7 @@ test.describe('Distribuição: primeiro uso e atualizações', () => {
     await expect(painel.getByText('Dados novos')).toBeVisible()
     await expect(painel.getByText(/2026-11-22/)).toBeVisible()
 
-    await painel.getByRole('button', { name: 'Atualizar os dados' }).click()
+    await painel.getByRole('button', { name: 'Baixar agora' }).click()
     await expect(page.getByTestId('atualizacao-disponivel')).toHaveCount(0)
     expect(errors()).toEqual([])
   })
@@ -115,7 +115,7 @@ test.describe('Distribuição: primeiro uso e atualizações', () => {
     await expect(page.getByText('236')).toBeVisible()
 
     await page.getByRole('button', { name: 'Atualização disponível' }).click()
-    await page.getByRole('button', { name: 'Atualizar os dados' }).click()
+    await page.getByRole('button', { name: 'Baixar agora' }).click()
 
     await expect(page.getByTestId('toast-dados-atualizados')).toContainText('Dados atualizados para a versão 2026-11-22')
     await expect(page.getByText('310')).toBeVisible()

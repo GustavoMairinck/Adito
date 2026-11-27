@@ -993,7 +993,11 @@ class MigracaoV2Tests(unittest.TestCase):
                 "VALUES (?, ?, ?, '', '[]', '', ?, ?, ?, ?)", [cid, slug, slug, int(slug != "exemplo-vendas"), a, a, self.T],
             )
         for conv, ctx in ((self.CONV_PESQ, self.PESQ), (self.CONV_VENDAS, self.VENDAS)):
-            c.execute("INSERT INTO chat_conversation VALUES (?, 't', ?, ?, ?, ?, ?)", [conv, a, a, ctx, self.T, self.U])
+            c.execute(
+                "INSERT INTO chat_conversation (id, title, created_at, updated_at, contexto_id, tenant_id, user_id) "
+                "VALUES (?, 't', ?, ?, ?, ?, ?)",
+                [conv, a, a, ctx, self.T, self.U],
+            )
             msg = conv[:30] + "ff"
             c.execute("INSERT INTO chat_message VALUES (?, 'assistant', 'r', '{}', ?, ?)", [msg, a, conv])
             c.execute(
@@ -1019,7 +1023,7 @@ class MigracaoV2Tests(unittest.TestCase):
         from core.schema import TABELAS_DJANGO, VERSAO
 
         self.assertEqual(ensure_schema(), VERSAO)
-        self.assertEqual(VERSAO, 3)
+        self.assertEqual(VERSAO, 4)
         self.assertTrue(Path(str(self.app_db) + ".bak-v1").exists(), "faltou a cópia de segurança")
         self.assertFalse(set(TABELAS_DJANGO) & self._tabelas())
         colunas = [r[1] for r in db.execute("PRAGMA table_info(core_user)")]
@@ -1028,6 +1032,8 @@ class MigracaoV2Tests(unittest.TestCase):
         colunas_ate = {r[1] for r in db.execute("PRAGMA table_info(analytics_text_embedding)")}
         self.assertIn("embedding_provider", colunas_ate)
         self.assertIn("embedding_model", colunas_ate)
+        colunas_conv = {r[1] for r in db.execute("PRAGMA table_info(chat_conversation)")}
+        self.assertIn("is_pinned", colunas_conv)
         self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
         self.assertEqual(db.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
@@ -1070,6 +1076,59 @@ class MigracaoV2Tests(unittest.TestCase):
         self.assertFalse(pasta.exists())
         self.assertTrue((Path(self.pasta.name) / "contexts.removidos" / "exemplo-vendas" / "views.json").exists())
         self.assertEqual([r[0] for r in db.execute("SELECT slug FROM core_contexto WHERE slug = 'exemplo-vendas'")], [])
+
+
+class MigracaoV4EConversasUpdateTests(AppDbTestCase):
+    """Migração v3 → v4 (is_pinned) e RPC chat.conversations.update."""
+
+    def test_migra_banco_v3_sem_is_pinned_para_v4(self):
+        from core.schema import SCHEMA_SQL, VERSAO
+
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        banco_v3 = Path(pasta.name) / "v3.db"
+        sql_v3 = SCHEMA_SQL.read_text(encoding="utf-8").replace('"is_pinned" bool NOT NULL DEFAULT 0, ', "")
+        conn = sqlite3.connect(banco_v3)
+        conn.executescript(sql_v3)
+        conn.execute("PRAGMA user_version = 3")
+        conn.commit()
+        conn.close()
+
+        db.close()
+        with patch.dict(os.environ, {"ADITO_APP_DB": str(banco_v3), "ADITO_DATA_DIR": pasta.name}):
+            self.assertEqual(ensure_schema(), VERSAO)
+            self.assertTrue(Path(str(banco_v3) + ".bak-v3").exists())
+            cols = {r[1] for r in db.execute("PRAGMA table_info(chat_conversation)")}
+            self.assertIn("is_pinned", cols)
+            db.close()
+
+    def test_renomear_e_fixar_conversa_sem_alterar_updated_at_e_ordenacao(self):
+        from core.records import Conversation
+        from rpc.chat import conversations_list, conversations_update
+        from rpc.errors import ApiError
+
+        user = get_local_user()
+        c1 = Conversation(user_id=user.id, tenant_id=user.tenant_id, title="Primeira").insert()
+        c2 = Conversation(user_id=user.id, tenant_id=user.tenant_id, title="Segunda").insert()
+
+        original_updated_at = c1.updated_at
+
+        res = conversations_update({"id": c1.id, "title": "Primeira Renomeada", "is_pinned": True})
+        self.assertEqual(res["title"], "Primeira Renomeada")
+        self.assertTrue(res["is_pinned"])
+
+        reloaded = Conversation.first("id = ?", [db.to_db_id(c1.id)])
+        self.assertEqual(reloaded.updated_at, original_updated_at)
+
+        listed = conversations_list({})
+        self.assertEqual([c["id"] for c in listed], [c1.id, c2.id])
+        self.assertTrue(listed[0]["is_pinned"])
+        self.assertFalse(listed[1]["is_pinned"])
+
+        with self.assertRaises(ApiError):
+            conversations_update({"id": c1.id, "title": "   "})
+        with self.assertRaises(ApiError):
+            conversations_update({"id": c1.id})
 
 
 class AgentesMemoriaEscopoTests(unittest.TestCase):

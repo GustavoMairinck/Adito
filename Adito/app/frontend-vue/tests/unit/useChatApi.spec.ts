@@ -183,6 +183,42 @@ describe('modules/chat/composables/useChatApi', () => {
     expect(isConversationLoading('conv-real-42')).toBe(false)
   })
 
+  it('encaminha eventos step_* para onTraceEvent e normaliza trace no resultado', async () => {
+    const { askQuestionStream } = useChatApi()
+    streamMock.mockImplementation(async (_m, _p, onEvent) => {
+      onEvent('step_start', { step_id: 'routing', title: 'Orquestrador', header_status: 'Analisando contexto...' })
+      onEvent('step_detail', { step_id: 'routing', detail: 'Encaminhando para BI' })
+      onEvent('step_complete', { step_id: 'routing' })
+      onEvent('step_code', { step_id: 'query', language: 'sql', code: 'SELECT 1' })
+      onEvent('result', {
+        message_id: 'msg-trace-1',
+        conversation_id: 'conv-trace-1',
+        type: 'analysis',
+        text: 'Total **1**.',
+        sql: 'SELECT 1',
+        data: [{ total: 1 }],
+        trace: {
+          duration_ms: 1450,
+          compact: false,
+          steps: [
+            { id: 'routing', title: 'Orquestrador', status: 'done', details: ['Encaminhando para BI'] },
+            { id: 'query', title: 'Agente de dados', status: 'done', details: ['1 registro encontrado.'], code: 'SELECT 1', language: 'sql' },
+          ],
+        },
+      })
+    })
+
+    const receivedEvents: string[] = []
+    const msg = await askQuestionStream('Teste trace', 'local-1', {
+      onTraceEvent: (evt) => receivedEvents.push(evt.event),
+    })
+
+    expect(receivedEvents).toEqual(['step_start', 'step_detail', 'step_complete', 'step_code'])
+    expect(msg.trace?.durationMs).toBe(1450)
+    expect(msg.trace?.steps).toHaveLength(2)
+    expect(msg.trace?.steps[1].code).toBe('SELECT 1')
+  })
+
   it('limpa o estado de carregamento e retorna erro amigável quando o núcleo reinicia com status 503', async () => {
     const { askQuestionStream, isConversationLoading } = useChatApi()
     streamMock.mockRejectedValueOnce(Object.assign(new Error('O núcleo está reiniciando.'), { status: 503 }))

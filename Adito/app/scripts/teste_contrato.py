@@ -215,6 +215,12 @@ async def roteiro(api) -> list[dict]:
     await call("report_rows de resposta comum", "chat.report_rows", {"id": analises[0]["id"] if analises else None})
     await call("query_executions", "admin.query_executions", {"limit": "100"})
     await call("query_executions inválidas", "admin.query_executions", {"limit": "100", "is_valid": "false"})
+    await call("conversations.update", "chat.conversations.update", {
+        "id": conv_id, "title": "Conversa renomeada", "is_pinned": True,
+    })
+    await call("conversations.update título vazio", "chat.conversations.update", {
+        "id": conv_id, "title": "   ",
+    })
     await call("conversations.delete", "chat.conversations.delete", {"id": conv_id})
     await call("conversations.list depois", "chat.conversations.list")
     await call("query_executions depois", "admin.query_executions", {"limit": "100"})
@@ -250,7 +256,7 @@ async def roteiro(api) -> list[dict]:
 
 UUID_RE = re.compile(r"\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\b")
 TS_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?\b")
-VOLATEIS = {"latency_ms", "uptime", "url"}
+VOLATEIS = {"latency_ms", "uptime", "url", "duration_ms"}
 
 
 def normalizar(obj, ids: dict):

@@ -91,8 +91,15 @@ def _v3_embedding_metadata_em_analytics(conn: sqlite3.Connection) -> None:
         conn.execute('ALTER TABLE "analytics_text_embedding" ADD COLUMN "embedding_model" varchar(120) NULL')
 
 
+def _v4_conversa_fixada(conn: sqlite3.Connection) -> None:
+    """Versão 3 → 4: adiciona coluna is_pinned em chat_conversation para fixar conversas."""
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(chat_conversation)")}
+    if "is_pinned" not in colunas:
+        conn.execute('ALTER TABLE "chat_conversation" ADD COLUMN "is_pinned" bool NOT NULL DEFAULT 0')
+
+
 # Versão 1 = esquema herdado do Django. Cada item leva o banco da versão i+1 para i+2.
-MIGRACOES: list = [_v2_sem_django_e_sem_vendas, _v3_embedding_metadata_em_analytics]
+MIGRACOES: list = [_v2_sem_django_e_sem_vendas, _v3_embedding_metadata_em_analytics, _v4_conversa_fixada]
 VERSAO = 1 + len(MIGRACOES)
 
 

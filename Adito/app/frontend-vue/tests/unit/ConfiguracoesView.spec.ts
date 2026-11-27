@@ -34,6 +34,37 @@ vi.mock('@/modules/auth/composables/useAuth', () => ({
   }),
 }))
 
+const verificarAtualizacoesMock = vi.fn()
+const baseStatusRef = ref<{ instalado: boolean; versao: string | null; desenvolvimento: boolean; chave_configurada: boolean } | null>({
+  instalado: true,
+  versao: '2026-11-20',
+  desenvolvimento: false,
+  chave_configurada: true,
+})
+const appUpdateRef = ref<{ version: string } | null>(null)
+const erroVerificacaoRef = ref<string | null>(null)
+
+vi.mock('@/common/composables/useAtualizacoes', async () => {
+  const actual = await vi.importActual<typeof import('@/common/composables/useAtualizacoes')>(
+    '@/common/composables/useAtualizacoes',
+  )
+  return {
+    ...actual,
+    useAtualizacoes: () => {
+      const real = actual.useAtualizacoes()
+      return {
+        ...real,
+        status: baseStatusRef,
+        app: appUpdateRef,
+        dadosNovos: ref(null),
+        verificando: ref(false),
+        erroVerificacao: erroVerificacaoRef,
+        verificar: (...args: unknown[]) => verificarAtualizacoesMock(...args),
+      }
+    },
+  }
+})
+
 import ConfiguracoesView from '@/modules/settings/views/ConfiguracoesView.vue'
 import { _resetAtualizacoes, AUTO_UPDATE_STORAGE_KEY } from '@/common/composables/useAtualizacoes'
 
@@ -74,6 +105,15 @@ describe('ConfiguracoesView.vue', () => {
     testAndSaveConfigMock.mockReset()
     clearKeyMock.mockReset().mockResolvedValue(undefined)
     loadLocalUserMock.mockReset().mockResolvedValue(userRef.value)
+    verificarAtualizacoesMock.mockReset().mockResolvedValue(undefined)
+    baseStatusRef.value = {
+      instalado: true,
+      versao: '2026-11-20',
+      desenvolvimento: false,
+      chave_configurada: true,
+    }
+    appUpdateRef.value = null
+    erroVerificacaoRef.value = null
   })
 
   it('troca de provedor no dropdown customizado preenche modelo padrão e atualiza texto de privacidade para Mistral AI', async () => {
@@ -169,7 +209,36 @@ describe('ConfiguracoesView.vue', () => {
     expect(removeBtn).toBeDefined()
     await removeBtn!.trigger('click')
     await flushPromises()
+    // Exige confirmação via ConfirmModal (teleportado para body) antes de remover a chave
+    expect(clearKeyMock).not.toHaveBeenCalled()
+    const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Remover chave',
+    )
+    expect(confirmBtn).toBeDefined()
+    confirmBtn!.click()
+    await flushPromises()
     expect(clearKeyMock).toHaveBeenCalledWith('gemini')
+    wrapper.unmount()
+  })
+
+  it('alterna visibilidade da chave API e verifica atualizações da base local sob demanda', async () => {
+    const wrapper = mount(ConfiguracoesView)
+    await flushPromises()
+
+    const keyInput = wrapper.get<HTMLInputElement>('#llm-api-key')
+    expect(keyInput.attributes('type')).toBe('password')
+
+    const toggleBtn = wrapper.get('button[aria-label="Mostrar valor da chave"]')
+    await toggleBtn.trigger('click')
+    expect(keyInput.attributes('type')).toBe('text')
+
+    expect(wrapper.text()).toContain('Base de dados local')
+    expect(wrapper.text()).toContain('20/11/2026')
+    const checkBtn = wrapper.findAll('button').find((b) => b.text().includes('Verificar atualizações agora'))
+    expect(checkBtn).toBeDefined()
+    await checkBtn!.trigger('click')
+    await flushPromises()
+    expect(verificarAtualizacoesMock).toHaveBeenCalledWith({ forcar: true })
   })
 
   it('exibe erro amigável quando a validação falha', async () => {
@@ -237,5 +306,32 @@ describe('ConfiguracoesView.vue', () => {
     await toggle.setValue(false)
     expect(toggle.element.checked).toBe(false)
     expect(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY)).toBe('false')
+  })
+
+  it('diferencia erro de rede, modo dev e atualização de aplicativo ao verificar atualizações manualmente', async () => {
+    const wrapper = mount(ConfiguracoesView)
+    await flushPromises()
+    const checkBtn = () => wrapper.findAll('button').find((b) => b.text().includes('Verificar atualizações agora'))!
+
+    // Caso 1: offline / erro de rede — não deve afirmar que está atualizado
+    erroVerificacaoRef.value = 'sem rede'
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Não foi possível verificar atualizações agora')
+    expect(wrapper.text()).not.toContain('já estão na versão mais recente')
+
+    // Caso 2: nova versão apenas do aplicativo
+    erroVerificacaoRef.value = null
+    appUpdateRef.value = { version: '0.2.0' }
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Nova versão do aplicativo disponível (0.2.0)')
+
+    // Caso 3: modo desenvolvimento
+    appUpdateRef.value = null
+    baseStatusRef.value = { instalado: true, versao: null, desenvolvimento: true, chave_configurada: false }
+    await checkBtn().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modo desenvolvimento')
   })
 })

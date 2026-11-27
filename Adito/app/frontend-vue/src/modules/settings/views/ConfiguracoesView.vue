@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { CheckCircle2, ChevronDown, ChevronUp, Info, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
+import { CheckCircle2, ChevronDown, ChevronUp, Database, Eye, EyeOff, Info, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import {
   clearKey,
   DEFAULT_LLM_PROVIDERS,
@@ -11,12 +11,23 @@ import {
   type LlmConfigStatus,
   type LlmProviderSpec,
 } from '@/common/api/llmKey'
+import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
 import { useAuth } from '@/modules/auth/composables/useAuth'
+import { formatBaseVersion } from '@/modules/chat/utils/historyGroups'
 import ProviderSelect from '@/modules/settings/components/ProviderSelect.vue'
 
 const { user, loadLocalUser } = useAuth()
-const { autoAtualizar, setAutoAtualizar } = useAtualizacoes()
+const {
+  status: baseStatus,
+  app: appUpdate,
+  dadosNovos,
+  verificando,
+  erroVerificacao,
+  verificar,
+  autoAtualizar,
+  setAutoAtualizar,
+} = useAtualizacoes()
 
 function handleAutoUpdateToggle(event: Event) {
   const checked = (event.target as HTMLInputElement).checked
@@ -29,9 +40,65 @@ const selectedProviderId = ref<string>('gemini')
 const model = ref<string>(DEFAULT_LLM_PROVIDERS[0].default_model)
 const baseUrl = ref<string>('')
 const key = ref<string>('')
+const showKey = ref(false)
+const confirmRemoveOpen = ref(false)
 const showAdvanced = ref(false)
 const busy = ref(false)
 const message = ref<{ type: 'ok' | 'error'; text: string } | null>(null)
+const baseCheckFeedback = ref<{ type: 'info' | 'error'; text: string } | null>(null)
+
+const formattedBaseSync = computed(() => formatBaseVersion(baseStatus.value?.versao))
+
+async function checkUpdatesNow() {
+  baseCheckFeedback.value = null
+  await verificar({ forcar: true })
+  if (baseStatus.value?.desenvolvimento) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: 'Modo desenvolvimento: a base local do repositório é usada diretamente.',
+    }
+    return
+  }
+  if (erroVerificacao.value) {
+    baseCheckFeedback.value = {
+      type: 'error',
+      text: 'Não foi possível verificar atualizações agora (sem conexão ou serviço indisponível).',
+    }
+    return
+  }
+  if (appUpdate.value && dadosNovos.value) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Há novas versões do aplicativo (${appUpdate.value.version}) e da base de dados (${formatBaseVersion(dadosNovos.value.versao) || dadosNovos.value.versao}) disponíveis.`,
+    }
+    return
+  }
+  if (appUpdate.value) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Nova versão do aplicativo disponível (${appUpdate.value.version}). Use "Atualização disponível" na barra lateral.`,
+    }
+    return
+  }
+  if (dadosNovos.value) {
+    baseCheckFeedback.value = {
+      type: 'info',
+      text: `Nova versão de dados disponível (${formatBaseVersion(dadosNovos.value.versao) || dadosNovos.value.versao}).`,
+    }
+    return
+  }
+  if (!baseStatus.value) {
+    baseCheckFeedback.value = {
+      type: 'error',
+      text: 'Não foi possível consultar o status da base local no momento.',
+    }
+    return
+  }
+  baseCheckFeedback.value = {
+    type: 'info',
+    text: 'Aplicativo e base local já estão na versão mais recente.',
+  }
+}
 
 const selectedProvider = computed<LlmProviderSpec>(
   () => providers.value.find((p) => p.id === selectedProviderId.value) ?? providers.value[0]
@@ -149,6 +216,7 @@ async function save() {
 }
 
 async function remove() {
+  confirmRemoveOpen.value = false
   busy.value = true
   message.value = null
   const label = selectedProvider.value.label
@@ -281,16 +349,28 @@ onMounted(() => {
           <label for="llm-api-key" class="eyebrow px-0.5">
             Chave API {{ selectedIsLocal ? '(opcional para servidor local)' : '' }}
           </label>
-          <input
-            id="llm-api-key"
-            v-model="key"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            :disabled="busy"
-            :placeholder="keyPlaceholder"
-            class="min-h-[42px] min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm text-text-primary shadow-card placeholder:text-text-muted transition-colors hover:border-[var(--brand-primary)]/50 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 dark:hover:border-[#68d388]/50 dark:focus:border-[#68d388]"
-          />
+          <div class="relative flex items-center">
+            <input
+              id="llm-api-key"
+              v-model="key"
+              :type="showKey ? 'text' : 'password'"
+              autocomplete="off"
+              spellcheck="false"
+              :disabled="busy"
+              :placeholder="keyPlaceholder"
+              class="min-h-[42px] min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface py-2 pl-3 pr-10 text-sm text-text-primary shadow-card placeholder:text-text-muted transition-colors hover:border-[var(--brand-primary)]/50 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 dark:hover:border-[#68d388]/50 dark:focus:border-[#68d388]"
+            />
+            <button
+              type="button"
+              class="absolute right-2 rounded-md p-1.5 text-text-muted transition-colors hover:bg-surface-elevated hover:text-text-primary"
+              :aria-label="showKey ? 'Ocultar valor da chave' : 'Mostrar valor da chave'"
+              :title="showKey ? 'Ocultar chave' : 'Mostrar chave'"
+              @click="showKey = !showKey"
+            >
+              <EyeOff v-if="showKey" class="h-4 w-4" />
+              <Eye v-else class="h-4 w-4" />
+            </button>
+          </div>
           <p v-if="selectedHasSavedKey && !selectedIsLocal" class="text-xs text-[var(--brand-primary)] dark:text-[#68d388]">
             Já existe uma chave salva no cofre para {{ selectedProvider.label }}. Você pode trocar de provedor ou modelo
             sem precisar digitá-la novamente.
@@ -320,12 +400,22 @@ onMounted(() => {
             type="button"
             :disabled="busy"
             class="flex items-center justify-center gap-1.5 rounded-md border border-[#C50707]/30 px-3 py-2 text-sm text-[#C50707] hover:bg-[#C50707]/8 disabled:opacity-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/15"
-            @click="remove"
+            @click="confirmRemoveOpen = true"
           >
             <Trash2 class="h-4 w-4" /> Remover
           </button>
         </div>
       </form>
+
+      <ConfirmModal
+        :is-open="confirmRemoveOpen"
+        title="Remover chave de API"
+        :message="`Tem certeza que deseja remover a chave salva de ${selectedProvider.label} do cofre do sistema?`"
+        confirm-text="Remover chave"
+        cancel-text="Cancelar"
+        @confirm="remove"
+        @close="confirmRemoveOpen = false"
+      />
 
       <p
         v-if="message"
@@ -338,6 +428,47 @@ onMounted(() => {
         <CheckCircle2 v-if="message.type === 'ok'" class="mt-0.5 h-4 w-4 shrink-0" />
         <ShieldAlert v-else class="mt-0.5 h-4 w-4 shrink-0" />
         {{ message.text }}
+      </p>
+    </section>
+
+    <section class="rounded-xl border border-border-subtle bg-surface p-5 shadow-premium">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <Database class="h-5 w-5 text-[var(--brand-primary)] dark:text-[#68d388]" />
+          <div>
+            <h2 class="font-semibold text-text-primary">Base de dados local</h2>
+            <p class="text-xs text-text-secondary">
+              <template v-if="formattedBaseSync">
+                Última sincronização semanal: <strong class="text-text-primary">{{ formattedBaseSync }}</strong>
+              </template>
+              <template v-else-if="baseStatus?.desenvolvimento">
+                Usando base local do repositório (modo desenvolvimento).
+              </template>
+              <template v-else>
+                Sincronizada semanalmente (SigPesq, Lattes, CNPq e SRC).
+              </template>
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          :disabled="verificando"
+          class="btn-secondary inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
+          @click="checkUpdatesNow"
+        >
+          <RefreshCw :class="['h-3.5 w-3.5', verificando ? 'animate-spin' : '']" />
+          {{ verificando ? 'Verificando…' : 'Verificar atualizações agora' }}
+        </button>
+      </div>
+      <p
+        v-if="baseCheckFeedback"
+        role="status"
+        :class="[
+          'mt-3 text-xs',
+          baseCheckFeedback.type === 'error' ? 'text-[#C50707] dark:text-red-300' : 'text-text-secondary',
+        ]"
+      >
+        {{ baseCheckFeedback.text }}
       </p>
     </section>
 

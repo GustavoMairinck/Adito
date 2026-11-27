@@ -23,6 +23,74 @@ function makeTableRows(count: number) {
   }))
 }
 
+describe('modules/chat/components/ChatMessageBubble', () => {
+  it('alinha <th> e <td> à direita em coluna numérica mesmo quando a linha 0 está vazia/nula', () => {
+    const message: ChatMessage = {
+      id: 'm-align',
+      type: 'ai',
+      text: 'Tabela com célula nula na primeira linha.',
+      timestamp: '2026-11-25T14:00:00Z',
+      table: [
+        { area: 'Engenharias', total: null, investimento: '' },
+        { area: 'Exatas', total: 42, investimento: 1500.5 },
+      ],
+    }
+
+    const wrapper = mountBubble(message)
+
+    const ths = wrapper.findAll('thead th')
+    expect(ths[0].classes()).toContain('text-left')
+    expect(ths[1].classes()).toContain('text-right')
+    expect(ths[2].classes()).toContain('text-right')
+
+    const firstRowTds = wrapper.findAll('tbody tr')[0].findAll('td')
+    expect(firstRowTds[0].classes()).toContain('text-left')
+    expect(firstRowTds[1].classes()).toContain('text-right')
+    expect(firstRowTds[2].classes()).toContain('text-right')
+    wrapper.unmount()
+  })
+
+  it('renderiza AditoReasoningTrace sem exibir card vazio enquanto carrega e usa fallback loading sem trace', () => {
+    const withTrace: ChatMessage = {
+      id: 'm-trace-load',
+      type: 'ai',
+      text: '',
+      timestamp: '2026-11-25T14:00:00Z',
+      isLoading: true,
+      trace: {
+        steps: [
+          {
+            id: 'routing',
+            title: 'Orquestrador',
+            subtitle: 'Analisando...',
+            status: 'running',
+            headerStatus: 'Analisando contexto...',
+            details: [],
+          },
+        ],
+      },
+    }
+
+    const traceWrapper = mountBubble(withTrace)
+    expect(traceWrapper.find('[data-testid="adito-reasoning-trace"]').exists()).toBe(true)
+    expect(traceWrapper.find('.chat-loading-container').exists()).toBe(false)
+    traceWrapper.unmount()
+
+    const withoutTrace: ChatMessage = {
+      id: 'm-legacy-load',
+      type: 'ai',
+      text: '',
+      timestamp: '2026-11-25T14:00:00Z',
+      isLoading: true,
+      loadingStatus: 'Consultando base...',
+    }
+    const legacyWrapper = mountBubble(withoutTrace)
+    expect(legacyWrapper.find('.chat-loading-container').exists()).toBe(true)
+    expect(legacyWrapper.text()).toContain('Consultando base...')
+    legacyWrapper.unmount()
+  })
+})
+
 describe('ChatMessageBubble.vue — exportação CSV e Excel', () => {
   it('oculta botão Exportar em mensagens puramente textuais ou resultados escalares', () => {
     const textOnly = mountBubble({

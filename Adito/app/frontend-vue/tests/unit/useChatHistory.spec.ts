@@ -254,4 +254,58 @@ describe('modules/chat/composables/useChatHistory', () => {
     const preserved = history.conversations.value.find((c) => c.id === 'conv-remota-1')
     expect(preserved?.messages.some((m) => m.interrupted)).toBe(true)
   })
+
+  it('handleRenameConversation e handleTogglePinConversation atualizam com persistência e fazem rollback em erro', async () => {
+    callMock.mockImplementation(async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'chat.conversations.list') {
+        return [
+          {
+            id: 'conv-pin-1',
+            title: 'Título Original',
+            is_pinned: false,
+            contexto: 'ctx-1',
+            created_at: '2026-11-18T10:00:00Z',
+            updated_at: '2026-11-18T10:00:00Z',
+            messages: [
+              {
+                id: 'a-trace',
+                role: 'assistant',
+                content: 'Ok',
+                created_at: '2026-11-18T10:00:02Z',
+                metadata: {
+                  type: 'chat',
+                  trace: { duration_ms: 300, compact: true, steps: [{ id: 'routing', title: 'Orquestrador', status: 'done', details: [] }] },
+                },
+              },
+            ],
+          },
+        ]
+      }
+      if (method === 'chat.conversations.update') {
+        if (params?.title === 'Erro') throw new Error('Falha de escrita')
+        return { ok: true }
+      }
+      return null
+    })
+
+    const history = useChatHistory()
+    await history.syncFromBackend()
+
+    expect(history.conversations.value[0].messages[1].trace?.compact).toBe(true)
+
+    await history.handleRenameConversation('conv-pin-1', 'Novo Título')
+    expect(callMock).toHaveBeenCalledWith('chat.conversations.update', { id: 'conv-pin-1', title: 'Novo Título' })
+    expect(history.conversations.value[0].title).toBe('Novo Título')
+
+    await expect(history.handleRenameConversation('conv-pin-1', 'Erro')).rejects.toThrow('Falha de escrita')
+    expect(history.conversations.value[0].title).toBe('Novo Título')
+
+    await history.handleTogglePinConversation('conv-pin-1')
+    expect(callMock).toHaveBeenCalledWith('chat.conversations.update', { id: 'conv-pin-1', is_pinned: true })
+    expect(history.conversations.value[0].isPinned).toBe(true)
+
+    callMock.mockRejectedValueOnce(new Error('Falha ao desafixar'))
+    await expect(history.handleTogglePinConversation('conv-pin-1')).rejects.toThrow('Falha ao desafixar')
+    expect(history.conversations.value[0].isPinned).toBe(true)
+  })
 })

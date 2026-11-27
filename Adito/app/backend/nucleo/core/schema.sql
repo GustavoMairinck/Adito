@@ -1,4 +1,4 @@
--- Esquema do app.db (versão 3). Bancos antigos chegam aqui pela migração em core/schema.py.
+-- Esquema do app.db (versão 4). Bancos antigos chegam aqui pela migração em core/schema.py.
 
 CREATE TABLE IF NOT EXISTS "core_tenant" ("id" char(32) NOT NULL PRIMARY KEY, "name" varchar(255) NOT NULL, "is_active" bool NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL);
 
@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS "analytics_text_embedding_contexto_id_e815e2a7" ON "a
 CREATE INDEX IF NOT EXISTS "analytics_text_embedding_tenant_id_3cbc327b" ON "analytics_text_embedding" ("tenant_id");
 CREATE INDEX IF NOT EXISTS "ate_contexto_table_idx" ON "analytics_text_embedding" ("contexto_id", "source_table");
 
-CREATE TABLE IF NOT EXISTS "chat_conversation" ("id" char(32) NOT NULL PRIMARY KEY, "title" varchar(255) NOT NULL, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "contexto_id" char(32) NULL REFERENCES "core_contexto" ("id") DEFERRABLE INITIALLY DEFERRED, "tenant_id" char(32) NOT NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE TABLE IF NOT EXISTS "chat_conversation" ("id" char(32) NOT NULL PRIMARY KEY, "title" varchar(255) NOT NULL, "is_pinned" bool NOT NULL DEFAULT 0, "created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, "contexto_id" char(32) NULL REFERENCES "core_contexto" ("id") DEFERRABLE INITIALLY DEFERRED, "tenant_id" char(32) NOT NULL REFERENCES "core_tenant" ("id") DEFERRABLE INITIALLY DEFERRED, "user_id" char(32) NOT NULL REFERENCES "core_user" ("id") DEFERRABLE INITIALLY DEFERRED);
 CREATE INDEX IF NOT EXISTS "chat_conversation_contexto_id_bd6b437e" ON "chat_conversation" ("contexto_id");
 CREATE INDEX IF NOT EXISTS "chat_conversation_tenant_id_613bd5cb" ON "chat_conversation" ("tenant_id");
 CREATE INDEX IF NOT EXISTS "chat_conversation_user_id_15357b84" ON "chat_conversation" ("user_id");

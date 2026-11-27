@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { AlertCircle, CheckCircle2 } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 
-import ConfirmModal from '@/common/components/feedback/ConfirmModal.vue'
 import { exportarTabela } from '@/common/api/export'
 import { useToast } from '@/common/composables/useToast'
 import type { ExportFormat } from '@/common/utils/exportData'
@@ -13,7 +12,6 @@ import ChatReportForm, { type ReportOption } from '@/modules/chat/components/Cha
 import { isReportEligible, questionFor } from '@/modules/chat/utils/report'
 import type { ChatChartType } from '@/modules/chat/utils/chartType'
 import DashboardPinDialog from '@/modules/dashboard/components/DashboardPinDialog.vue'
-import ChatSidebar from '@/modules/chat/components/ChatSidebar.vue'
 import ContextoSelector from '@/modules/chat/components/ContextoSelector.vue'
 import { useContextos } from '@/common/composables/useContextos'
 import { useAuth } from '@/modules/auth/composables/useAuth'
@@ -21,17 +19,14 @@ import { useChatApi } from '@/modules/chat/composables/useChatApi'
 import { useChatHistory } from '@/modules/chat/composables/useChatHistory'
 import { useChatPin } from '@/modules/chat/composables/useChatPin'
 import { useAtualizacoes } from '@/common/composables/useAtualizacoes'
-import type { ChatMessage } from '@/modules/chat/types'
+import type { ChatMessage, ReasoningTrace } from '@/modules/chat/types'
+import { applyTraceEvent, createInitialTrace } from '@/modules/chat/utils/trace'
 
 const route = useRoute()
 const { toast, showToast } = useToast()
 
 const {
-  conversations,
   currentConvId,
-  setCurrentConvId,
-  handleNewConversation,
-  handleDeleteConversation,
   updateConversationById,
   replaceConversationId,
   setConversationContexto,
@@ -51,7 +46,6 @@ const {
   cancelStream,
   checkHealth,
   isConversationLoading,
-  activeConversationIds
 } = useChatApi()
 const { selectedId: selectedContextoId, loadContextos } = useContextos()
 
@@ -126,8 +120,21 @@ const rememberChartType = ({ id, type }: { id: string; type: ChatChartType }) =>
 
 watch(currentConvId, () => { reportFormOpen.value = false })
 const healthOnline = ref<boolean | null>(null)
-const isConvSidebarOpen = ref(false)
-const conversationToDelete = ref<{ id: string; title: string } | null>(null)
+const reconnecting = ref(false)
+
+const retryConnection = async () => {
+  if (reconnecting.value) return
+  reconnecting.value = true
+  try {
+    const ok = await checkHealth()
+    healthOnline.value = ok
+    if (ok) {
+      await loadContextos().catch(() => {})
+    }
+  } finally {
+    reconnecting.value = false
+  }
+}
 
 const messages = computed(() => currentConversation.value?.messages || [])
 const starterCategories = [
@@ -194,14 +201,14 @@ watch(isCurrentConvLoading, scrollToBottom)
 watch(reportFormOpen, open => { if (open) scrollToBottom() })
 
 const cancelCurrentQuestion = () => {
-  if (conversationToDelete.value || pinModalOpen.value) return
+  if (pinModalOpen.value) return
   if (!currentConvId.value || !isCurrentConvLoading.value) return
   cancelStream(currentConvId.value)
 }
 
 const handleGlobalKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'Escape') return
-  if (conversationToDelete.value || pinModalOpen.value) return
+  if (pinModalOpen.value) return
   if (!isCurrentConvLoading.value) return
   event.preventDefault()
   cancelCurrentQuestion()
@@ -258,7 +265,8 @@ const sendQuestion = async (questionText?: string) => {
   let serverConversationId: string | null = null
   let draftCounter = 1
   let currentDraftId = `${Date.now()}-draft-${draftCounter}`
-  let currentLoadingStatus: string | undefined = undefined
+  let currentLoadingStatus: string | undefined = 'Analisando sua pergunta...'
+  let currentTrace: ReasoningTrace = createInitialTrace()
 
   const createDraft = (id: string): ChatMessage => ({
     id,
@@ -266,7 +274,8 @@ const sendQuestion = async (questionText?: string) => {
     text: '',
     timestamp: new Date().toISOString(),
     isLoading: true,
-    loadingStatus: currentLoadingStatus
+    loadingStatus: currentLoadingStatus,
+    trace: currentTrace,
   })
 
   updateConversationById(targetConvId, (conversation) => ({
@@ -289,11 +298,13 @@ const sendQuestion = async (questionText?: string) => {
 
   const aiMessage = await askQuestionStream(userInput, activeConversationId, {
     onToken: (token) => {
+      currentLoadingStatus = 'Gerando resposta...'
       updateDraft((message) => ({
         ...message,
         text: `${message.text}${token}`,
         isChat: true,
-        isLoading: true
+        isLoading: true,
+        loadingStatus: currentLoadingStatus,
       }))
     },
     onStatus: (status, payload) => {
@@ -312,21 +323,32 @@ const sendQuestion = async (questionText?: string) => {
         loadingStatus: currentLoadingStatus
       }))
     },
+    onTraceEvent: (traceEvent) => {
+      currentTrace = applyTraceEvent(currentTrace, traceEvent)
+      updateDraft((message) => ({
+        ...message,
+        trace: currentTrace,
+      }))
+    },
     onResult: (message) => {
       streamedResults += 1
-      if (targetConvId.startsWith('local-') && message.conversationId && !serverConversationId) {
-        serverConversationId = String(message.conversationId)
+      const finalMessage: ChatMessage = {
+        ...message,
+        trace: message.trace ?? currentTrace,
+      }
+      if (targetConvId.startsWith('local-') && finalMessage.conversationId && !serverConversationId) {
+        serverConversationId = String(finalMessage.conversationId)
         replaceConversationId(targetConvId, serverConversationId)
         setConversationContexto(serverConversationId, contextoId)
         targetConvId = serverConversationId
       }
       updateConversationById(targetConvId, (conversation) => {
-        const alreadyExists = conversation.messages.some((item) => item.id === message.id)
+        const alreadyExists = conversation.messages.some((item) => item.id === finalMessage.id)
         if (streamedResults === 1) {
           return {
             ...conversation,
             messages: conversation.messages.map((item) =>
-              item.id === currentDraftId ? message : item
+              item.id === currentDraftId ? finalMessage : item
             ),
             updatedAt: new Date().toISOString()
           }
@@ -336,7 +358,7 @@ const sendQuestion = async (questionText?: string) => {
         }
 
         const replacedMessages = conversation.messages.map((item) =>
-          item.id === currentDraftId ? message : item
+          item.id === currentDraftId ? finalMessage : item
         )
         draftCounter++
         currentDraftId = `${Date.now()}-draft-${draftCounter}`
@@ -361,7 +383,7 @@ const sendQuestion = async (questionText?: string) => {
       ...conversation,
       messages: conversation.messages.map((m) =>
         m.id === currentDraftId
-          ? { ...m, isLoading: false, loadingStatus: undefined, interrupted: true }
+          ? { ...m, isLoading: false, loadingStatus: undefined, interrupted: true, trace: currentTrace }
           : m
       ),
       updatedAt: new Date().toISOString()
@@ -369,13 +391,27 @@ const sendQuestion = async (questionText?: string) => {
     return
   }
 
+  const finalFallbackMessage: ChatMessage = aiMessage.error
+    ? {
+        ...aiMessage,
+        trace:
+          aiMessage.trace ??
+          (currentTrace.steps.some((s) => s.status === 'error')
+            ? currentTrace
+            : applyTraceEvent(currentTrace, {
+                event: 'step_error',
+                data: { detail: aiMessage.text },
+              })),
+      }
+    : { ...aiMessage, trace: aiMessage.trace ?? currentTrace }
+
   updateConversationById(targetConvId, (conversation) => {
     let finalMessages = conversation.messages.filter(m => m.id !== currentDraftId)
 
     if (streamedResults === 0) {
-      const alreadyExists = finalMessages.some(m => m.id === aiMessage.id)
+      const alreadyExists = finalMessages.some(m => m.id === finalFallbackMessage.id)
       if (!alreadyExists) {
-        finalMessages.push(aiMessage)
+        finalMessages.push(finalFallbackMessage)
       }
     }
 
@@ -449,39 +485,11 @@ const handleExport = async ({ message, format }: { message: ChatMessage; format:
     isExporting.value = false
   }
 }
-
-const requestDeleteConversation = (id: string) => {
-  const conversation = conversations.value.find(item => item.id === id)
-  if (!conversation) return
-  conversationToDelete.value = { id, title: conversation.title }
-}
-
-const confirmDeleteConversation = async () => {
-  if (!conversationToDelete.value) return
-  try {
-    await handleDeleteConversation(conversationToDelete.value.id)
-    showToast('Conversa excluida com sucesso.', 'success')
-    conversationToDelete.value = null
-  } catch (error: any) {
-    const detail = error?.response?.data?.detail || error?.message || 'Erro desconhecido.'
-    showToast(`Erro ao excluir conversa: ${detail}`, 'error')
-  }
-}
 </script>
 
 
 <template>
   <div class="flex flex-col h-full relative overflow-hidden">
-    <ConfirmModal
-      :is-open="!!conversationToDelete"
-      title="Excluir conversa"
-      :message="conversationToDelete ? `Tem certeza que deseja excluir a conversa '${conversationToDelete.title}'?` : ''"
-      confirm-text="Excluir conversa"
-      cancel-text="Cancelar"
-      @confirm="confirmDeleteConversation"
-      @close="conversationToDelete = null"
-    />
-
     <DashboardPinDialog
       :is-open="pinModalOpen"
       :title="pinTitle"
@@ -517,23 +525,6 @@ const confirmDeleteConversation = async () => {
     </transition>
 
     <div class="flex flex-col lg:flex-row h-full relative overflow-hidden">
-      <ChatSidebar
-        :conversations="conversations"
-        :current-conv-id="currentConvId"
-        :open="isConvSidebarOpen"
-        :loading-conv-ids="activeConversationIds"
-        @select="setCurrentConvId($event); isConvSidebarOpen = false"
-        @new="handleNewConversation(); isConvSidebarOpen = false"
-        @delete="requestDeleteConversation($event)"
-        @close="isConvSidebarOpen = false"
-      />
-
-      <div
-        v-if="isConvSidebarOpen"
-        class="lg:hidden fixed inset-0 bg-black/40 z-30 animate-in fade-in"
-        @click="isConvSidebarOpen = false"
-      />
-
       <div class="flex-1 flex flex-col min-h-0 min-w-0">
         <ChatConversation
           :messages="messages"
@@ -541,7 +532,7 @@ const confirmDeleteConversation = async () => {
           :loading="isCurrentConvLoading"
           :health-online="healthOnline"
           :starter-categories="starterCategories"
-          @open-conversations="isConvSidebarOpen = true"
+          :llm-configured="llmConfigured"
           @toggle-sql="toggleSql"
           @pin="openPinModal"
           @export="handleExport"
@@ -561,14 +552,36 @@ const confirmDeleteConversation = async () => {
             />
           </template>
         </ChatConversation>
-        <RouterLink
-          v-if="!llmConfigured"
-          to="/configuracoes"
-          class="mx-4 mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+        <div
+          v-if="healthOnline === false"
+          role="alert"
+          class="mx-auto mt-2 w-full max-w-4xl px-4"
         >
-          <AlertCircle class="h-4 w-4 shrink-0" />
-          O chat está desativado: falta {{ user?.llm_is_local ? `configurar ${user?.llm_provider_label || 'o provedor local'}` : `a chave do ${user?.llm_provider_label || 'Gemini'}` }}. Clique para configurar.
-        </RouterLink>
+          <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-950/50 dark:text-red-200">
+            <span class="flex items-center gap-2">
+              <AlertCircle class="h-4 w-4 shrink-0" />
+              O núcleo local do Adito não está respondendo no momento.
+            </span>
+            <button
+              type="button"
+              :disabled="reconnecting"
+              class="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-2.5 py-1 font-semibold text-red-800 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-400/40 dark:bg-red-900/40 dark:text-red-100 dark:hover:bg-red-900/70"
+              @click="retryConnection"
+            >
+              <RefreshCw :class="['h-3.5 w-3.5', reconnecting ? 'animate-spin' : '']" />
+              Tentar reconectar
+            </button>
+          </div>
+        </div>
+        <div v-if="!llmConfigured" class="mx-auto mt-2 w-full max-w-4xl px-4">
+          <RouterLink
+            to="/configuracoes"
+            class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+          >
+            <AlertCircle class="h-4 w-4 shrink-0" />
+            O chat está desativado: falta {{ user?.llm_is_local ? `configurar ${user?.llm_provider_label || 'o provedor local'}` : `a chave do ${user?.llm_provider_label || 'Gemini'}` }}. Clique para configurar.
+          </RouterLink>
+        </div>
         <ContextoSelector
           :is-new-conversation="isNewConversation"
           :conversation-contexto-id="currentConversation?.contextoId"
@@ -576,7 +589,7 @@ const confirmDeleteConversation = async () => {
         <ChatInputArea
           v-model="input"
           :loading="isCurrentConvLoading"
-          :disable-escape="!!conversationToDelete || pinModalOpen"
+          :disable-escape="pinModalOpen"
           :can-create-report="canCreateReport"
           @create-report="openReportForm"
           @send="sendQuestion()"

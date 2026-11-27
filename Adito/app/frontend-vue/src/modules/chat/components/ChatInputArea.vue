@@ -50,11 +50,13 @@ onBeforeUnmount(() => toggleMenuListeners(false))
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isRecording = ref(false)
+const speechSupported = ref(false)
 const recognition = ref<any>(null)
 
 onMounted(() => {
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
   if (SpeechRecognition) {
+    speechSupported.value = true
     recognition.value = new SpeechRecognition()
     recognition.value.lang = 'pt-BR'
     recognition.value.continuous = false
@@ -78,10 +80,7 @@ onMounted(() => {
 })
 
 const toggleRecording = () => {
-  if (!recognition.value) {
-    alert('Reconhecimento de voz não suportado neste navegador.')
-    return
-  }
+  if (!recognition.value) return
 
   if (isRecording.value) {
     recognition.value.stop()
@@ -122,8 +121,8 @@ const handleKeydown = (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <div class="px-4 py-5 bg-transparent">
-    <div class="mx-auto flex max-w-3xl flex-col">
+  <div class="px-4 pt-3 pb-8 sm:pb-12 bg-transparent">
+    <div class="mx-auto flex max-w-4xl flex-col">
       <div class="relative flex items-end rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-card transition-all focus-within:border-[var(--brand-primary)] focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/20">
         <div v-if="canCreateReport" ref="moreRef" class="relative pl-2 pb-2 pt-2">
           <button
@@ -162,6 +161,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           :value="modelValue"
           rows="1"
           aria-label="Pergunta sobre pesquisa e extensão"
+          aria-describedby="chat-ai-notice"
           placeholder="O que você quer consultar sobre pesquisa e extensão?"
           class="min-h-[48px] w-full resize-none bg-transparent px-4 py-3 text-sm leading-relaxed text-[var(--neutral-dark)] outline-none placeholder:text-text-muted rounded-2xl"
           @input="handleInput"
@@ -169,11 +169,13 @@ const handleKeydown = (event: KeyboardEvent) => {
         />
         <div class="flex items-center gap-2 pr-3 pb-2 pt-2">
           <button
+            v-if="speechSupported"
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-surface-elevated hover:text-[var(--neutral-dark)] transition-colors disabled:opacity-50"
             @click="toggleRecording"
             :class="{ 'text-[var(--brand-accent-danger)] hover:bg-[var(--brand-accent-danger)]/10 hover:text-[var(--brand-accent-danger)]': isRecording }"
             title="Ditar por voz"
+            aria-label="Ditar por voz"
           >
             <MicOff v-if="isRecording" class="h-5 w-5 animate-pulse" />
             <Mic v-else class="h-5 w-5" />
@@ -203,9 +205,8 @@ const handleKeydown = (event: KeyboardEvent) => {
           </button>
         </div>
       </div>
-      <p class="mt-3 text-center text-xs text-text-muted">
-        <template v-if="loading">Esc para parar · Você pode continuar digitando a próxima pergunta</template>
-        <template v-else>Enter para enviar · Shift+Enter para nova linha</template>
+      <p id="chat-ai-notice" class="mt-2.5 text-center text-xs text-text-muted">
+        O Adito utiliza IA e pode cometer erros
       </p>
     </div>
   </div>

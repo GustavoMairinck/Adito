@@ -62,6 +62,8 @@ const baixandoAppEmSegundoPlano = ref(false)
 const progressoApp = ref(0)
 const erro = ref<string | null>(null)
 
+const verificando = ref(false)
+const erroVerificacao = ref<string | null>(null)
 const appBaixadoVersao = ref<string | null>(null)
 const segundosParaReinicio = ref<number | null>(null)
 const versaoAdiada = ref<string | null>(null)
@@ -69,7 +71,6 @@ const versaoAdiada = ref<string | null>(null)
 const dadosReloadSeq = ref(0)
 const ultimaVersaoDadosAtualizada = ref<string | null>(null)
 const toastDadosAtualizados = ref<string | null>(null)
-
 let verificacao: Promise<void> | null = null
 let verificacaoEmCurso: Promise<void> | null = null
 let ultimaVerificacaoEm = 0
@@ -149,6 +150,8 @@ async function carregarStatus() {
 async function verificarAgora(): Promise<void> {
   if (verificacaoEmCurso) return verificacaoEmCurso
 
+  verificando.value = true
+  erroVerificacao.value = null
   verificacaoEmCurso = (async () => {
     await carregarStatus()
     const emDesenvolvimento = Boolean(status.value?.desenvolvimento)
@@ -157,6 +160,11 @@ async function verificarAgora(): Promise<void> {
       emDesenvolvimento ? Promise.resolve(null) : appVerificar(),
     ])
     dadosRemoto.value = remoto.status === 'fulfilled' ? remoto.value : null
+    if (remoto.status === 'rejected') {
+      erroVerificacao.value = mensagem(remoto.reason)
+    } else if (!emDesenvolvimento && update.status === 'rejected') {
+      erroVerificacao.value = mensagem(update.reason)
+    }
 
     const appAnterior = app.value
     const appAnteriorEmUsoOuBaixado = Boolean(
@@ -208,6 +216,7 @@ async function verificarAgora(): Promise<void> {
     ultimaVerificacaoEm = Date.now()
   })().finally(() => {
     verificacaoEmCurso = null
+    verificando.value = false
   })
 
   await verificacaoEmCurso
@@ -217,8 +226,12 @@ async function verificarAgora(): Promise<void> {
   }
 }
 
-/** Confere uma vez por sessão; chamadas seguintes reaproveitam a mesma conferência. */
-function verificar(): Promise<void> {
+/** Confere uma vez por sessão; passe `{ forcar: true }` para forçar nova conferência. */
+function verificar(opcoes?: { forcar?: boolean }): Promise<void> {
+  if (opcoes?.forcar) {
+    verificacao = verificarAgora().catch(() => {})
+    return verificacao
+  }
   verificacao ??= verificarAgora().catch(() => {})
   return verificacao
 }
@@ -471,6 +484,8 @@ export function useAtualizacoes() {
     autoAtualizar,
     instalandoDados,
     instalandoApp,
+    verificando,
+    erroVerificacao,
     baixandoAppEmSegundoPlano,
     appProntoParaReinicio,
     segundosParaReinicio,
@@ -506,6 +521,8 @@ export function _resetAtualizacoes(opcoes?: { preservarPreferencia?: boolean }) 
   app.value = null
   instalandoDados.value = false
   instalandoApp.value = false
+  verificando.value = false
+  erroVerificacao.value = null
   baixandoAppEmSegundoPlano.value = false
   progressoApp.value = 0
   erro.value = null

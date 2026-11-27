@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
-  MessageSquare,
   FlaskConical,
   Handshake,
   Users,
@@ -24,16 +23,21 @@ interface StarterCategory {
   questions: string[]
 }
 
-const props = defineProps<{
-  messages: ChatMessage[]
-  currentConversation?: Conversation
-  loading: boolean
-  healthOnline: boolean | null
-  starterCategories: StarterCategory[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    messages: ChatMessage[]
+    currentConversation?: Conversation
+    loading: boolean
+    healthOnline: boolean | null
+    starterCategories: StarterCategory[]
+    llmConfigured?: boolean
+  }>(),
+  {
+    llmConfigured: true,
+  },
+)
 
 const emit = defineEmits<{
-  (e: 'open-conversations'): void
   (e: 'toggle-sql', id: string): void
   (e: 'pin', message: ChatMessage): void
   (e: 'export', payload: { message: ChatMessage; format: ExportFormat }): void
@@ -52,6 +56,12 @@ const categoryIcons: Record<string, unknown> = {
 
 const selected = ref<string | null>(null)
 
+const activeMessages = computed(() =>
+  props.messages.filter((message) => message.id !== 'welcome'),
+)
+
+const showWelcome = computed(() => activeMessages.value.length === 0 && !props.loading)
+
 const selectedCategory = () =>
   props.starterCategories.find(c => c.key === selected.value) ?? null
 
@@ -62,24 +72,20 @@ function select(key: string) {
 
 <template>
   <div class="relative flex h-full flex-1 flex-col overflow-hidden transition-colors bg-transparent">
-    <div class="lg:hidden sticky top-0 z-20 flex items-center justify-between border-b border-border-subtle bg-surface/92 px-4 py-3 backdrop-blur-md shadow-sm">
+    <div
+      v-if="activeMessages.length > 0"
+      class="hidden md:flex lg:hidden sticky top-0 z-20 items-center justify-between border-b border-border-subtle bg-surface/92 px-4 py-3 backdrop-blur-md shadow-sm"
+    >
       <div class="flex items-center gap-2 overflow-hidden">
         <BrandIcon alt="" class="h-4 w-4" />
         <h2 class="truncate text-xs font-semibold text-primary">{{ currentConversation?.title }}</h2>
       </div>
-      <button
-        class="flex shrink-0 items-center gap-1.5 rounded-md border border-accent/20 bg-accent/8 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent transition-colors hover:bg-accent/14"
-        @click="emit('open-conversations')"
-      >
-        <MessageSquare class="h-3 w-3" />
-        Conversas
-      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto p-4 min-h-[300px] bg-transparent md:p-6 scroll-fade-mask">
       <div
-        v-if="messages.length === 1 && messages[0]?.id === 'welcome' && !loading"
-        class="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center gap-8 py-6 text-center"
+        v-if="showWelcome"
+        class="mx-auto flex min-h-full max-w-2xl flex-col items-center gap-8 pt-6 sm:pt-12 pb-8 text-center"
       >
         <div class="flex max-w-lg flex-col items-center gap-4">
           <div class="flex items-center gap-2 text-accent">
@@ -161,22 +167,24 @@ function select(key: string) {
               <button
                 v-for="question in selectedCategory()?.questions"
                 :key="question"
-                class="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--accent-light)]/60"
+                type="button"
+                :disabled="!llmConfigured"
+                class="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--accent-light)]/60 disabled:opacity-50 disabled:hover:bg-transparent"
                 @click="emit('suggest', question)"
               >
                 <span class="text-sm text-text-secondary group-hover:text-[var(--neutral-dark)] transition-colors">
                   {{ question }}
                 </span>
-                <ArrowRight class="h-3.5 w-3.5 shrink-0 text-[var(--brand-primary)] opacity-0 group-hover:opacity-100 transition-opacity" stroke-width="2" />
+                <ArrowRight class="h-3.5 w-3.5 shrink-0 text-[var(--brand-primary)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" stroke-width="2" />
               </button>
             </div>
           </div>
         </transition>
       </div>
 
-      <div class="mx-auto flex w-full max-w-[980px] flex-col space-y-6 md:space-y-8">
+      <div class="mx-auto flex w-full max-w-4xl flex-col space-y-6 md:space-y-8">
         <template
-          v-for="message in (messages.length === 1 && messages[0]?.id === 'welcome' && !loading ? [] : messages)"
+          v-for="message in activeMessages"
           :key="message.id"
         >
           <ChatReportMessage v-if="message.report" :message="message" :report="message.report" />

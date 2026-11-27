@@ -17,7 +17,7 @@ test.describe('Chat estratégico', () => {
 
     // Abre o SQL gerado da resposta recém-recebida
     await page.getByRole('button', { name: /Ver SQL Gerado/i }).last().click()
-    await expect(page.getByText(/SELECT grande_area/i)).toBeVisible()
+    await expect(page.getByText(/SELECT grande_area/i).last()).toBeVisible()
 
     // Cria novo chat e confirma que o painel volta ao estado inicial limpo
     await page.getByRole('button', { name: /Novo chat/i }).click()
@@ -48,7 +48,7 @@ test.describe('Chat estratégico', () => {
     await input.fill('Quantas bolsas existem?')
     await input.press('Enter')
 
-    await expect(page.getByText(/Chave do Gemini não configurada/i)).toBeVisible()
+    await expect(page.getByText(/Chave do Gemini não configurada/i).first()).toBeVisible()
     expect(getErrors()).toEqual([])
   })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   AreaChart,
   BarChart2,
@@ -19,6 +19,7 @@ import {
   TrendingUp
 } from 'lucide-vue-next'
 import BrandIcon from '@/common/components/BrandIcon.vue'
+import AditoReasoningTrace from '@/modules/chat/components/AditoReasoningTrace.vue'
 import type { ChatMessage } from '@/modules/chat/types'
 import type { ExportFormat } from '@/common/utils/exportData'
 import { renderMarkdown } from '@/modules/chat/utils/markdown'
@@ -41,6 +42,21 @@ const emit = defineEmits<{
 
 const hasRenderableTable = computed(() => {
   return !!(props.message.table && props.message.table.length > 0 && Object.values(props.message.table[0])[0] !== 'null')
+})
+
+const hasTrace = computed(() => Boolean(props.message.trace?.steps?.length))
+
+const hasFinalResponseContent = computed(() => {
+  const m = props.message
+  return Boolean(
+    m.text ||
+      m.isFallback ||
+      m.explanation ||
+      hasRenderableTable.value ||
+      m.sql ||
+      m.suggestions?.length ||
+      m.interrupted,
+  )
 })
 
 const canExportTable = computed(() => hasRenderableTable.value && !props.message.isScalarResult)
@@ -146,10 +162,6 @@ const rowLimit = ref<number | 'all'>(10)
 const rowLimitOptions: Array<number | 'all'> = [5, 10, 15, 'all']
 const isCopied = ref(false)
 const isSqlCopied = ref(false)
-
-const bubbleRef = ref<HTMLElement | null>(null)
-const isVisible = ref(false)
-let scrollObserver: IntersectionObserver | null = null
 
 
 const copyToClipboard = async () => {
@@ -276,46 +288,47 @@ const pinMessage = () => {
   emit('pin', { ...props.message, chartType: chartType.value })
 }
 
-onMounted(() => {
-  if (typeof document !== 'undefined') {
-    // Setup scroll reveal animation observer
-    scrollObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          isVisible.value = entry.isIntersecting
-        })
-      },
-      {
-        rootMargin: '0px',
-        threshold: 0
-      }
-    )
-    if (bubbleRef.value) {
-      scrollObserver.observe(bubbleRef.value)
-    }
-  }
-})
-
 onBeforeUnmount(() => {
-  scrollObserver?.disconnect()
   detachExportListeners()
 })
 </script>
 
 <template>
   <div
-    ref="bubbleRef"
     :class="[
-      'flex w-full ease-out-premium transform-gpu',
+      'bubble-enter flex w-full',
       message.type === 'user' ? 'justify-end' : 'justify-start',
-      isVisible ? 'opacity-100 translate-y-0 scale-100 filter-none' : 'opacity-0 translate-y-6 scale-[0.97] blur-[2px] pointer-events-none'
     ]"
   >
     <div :class="[
       (message.chart?.series?.length || (hasRenderableTable && !message.isScalarResult) ? 'w-full' : 'max-w-full md:max-w-3xl'),
       message.type === 'user' ? 'ml-4 md:ml-12 mr-4 md:mr-0' : 'mr-4 md:mr-0'
     ]">
-      <div v-if="message.type === 'ai'" class="flex items-center justify-between gap-2 mb-3 pr-1">
+      <AditoReasoningTrace
+        v-if="message.type === 'ai' && hasTrace && message.trace"
+        :trace="message.trace"
+        :is-loading="message.isLoading"
+        :has-final-content="hasFinalResponseContent"
+        :timestamp="message.timestamp"
+      >
+        <template #actions>
+          <button
+            v-if="message.text && !message.isLoading"
+            type="button"
+            @click="copyToClipboard"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-surface-elevated text-primary dark:text-slate-300 hover:text-accent dark:hover:text-white border border-transparent hover:border-border-subtle"
+            :title="isCopied ? 'Copiado!' : 'Copiar resposta completa'"
+          >
+            <transition mode="out-in">
+              <Check v-if="isCopied" class="w-3.5 h-3.5 text-emerald-500" />
+              <Copy v-else class="w-3.5 h-3.5" />
+            </transition>
+            <span class="hidden sm:inline">{{ isCopied ? 'Copiado' : 'Copiar' }}</span>
+          </button>
+        </template>
+      </AditoReasoningTrace>
+
+      <div v-else-if="message.type === 'ai'" class="flex items-center justify-between gap-2 mb-3 pr-1">
         <div class="flex items-center gap-2">
           <div class="w-10 h-10 flex items-center justify-center relative">
             <div v-if="message.isLoading" class="loading-brand-wrapper">
@@ -344,6 +357,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
+        v-if="message.type === 'user' || hasFinalResponseContent || (message.isLoading && !hasTrace)"
         :class="[
           'relative group rounded-2xl p-4 transition-all',
           message.type === 'user'
@@ -361,7 +375,7 @@ onBeforeUnmount(() => {
                 <span class="text-sm font-semibold text-amber-800 dark:text-amber-500">Adito · Exploração</span>
               </div>
               <p class="text-sm text-amber-700 dark:text-amber-400/90 mb-3 leading-relaxed">
-                {{ message.fallbackMessage || 'Nao encontrei os dados exatos para esta pergunta. Que tal tentar uma das opcoes abaixo?' }}
+                {{ message.fallbackMessage || 'Não encontrei os dados exatos para esta pergunta. Que tal tentar uma das opções abaixo?' }}
               </p>
 
               <div v-if="message.suggestions?.length" class="space-y-1.5">
@@ -374,7 +388,7 @@ onBeforeUnmount(() => {
                   >
                     <div class="flex justify-between items-center text-xs">
                       <span class="line-clamp-2 pr-2">"{{ suggestion.question }}"</span>
-                      <span class="shrink-0 text-[10px] text-amber-600/50 dark:text-amber-500/40">Sugerido</span>
+                      <span class="shrink-0 text-[10px] font-medium text-amber-800 dark:text-amber-300">Sugerido</span>
                     </div>
                   </button>
                 </div>
@@ -387,7 +401,7 @@ onBeforeUnmount(() => {
                 <div class="flex items-center gap-1.5 mb-2.5">
                   <Database class="w-3.5 h-3.5 text-amber-600 dark:text-amber-500" />
                   <span class="text-xs font-semibold text-amber-800 dark:text-amber-400">
-                    Atributos de Banco Disponiveis Neste Dominio:
+                    Atributos de banco disponíveis neste domínio:
                   </span>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -417,11 +431,11 @@ onBeforeUnmount(() => {
           <div>
             <div
               v-if="message.text"
-              class="chat-markdown text-gray-700 dark:text-gray-300"
+              class="chat-markdown text-text-primary"
               v-html="renderedText"
             />
 
-            <div v-if="message.isLoading" :class="['chat-loading-container', message.text ? 'mt-4' : '']" aria-live="polite">
+            <div v-if="message.isLoading && !hasTrace" :class="['chat-loading-container', message.text ? 'mt-4' : '']" aria-live="polite">
               <div class="chat-loading-status">
                 <div class="status-indicator">
                   <span class="status-dot" />
@@ -659,7 +673,7 @@ onBeforeUnmount(() => {
             <div class="flex items-center gap-1.5 mb-2">
               <Database class="w-3.5 h-3.5 text-slate-500" />
               <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Atributos Relacionados Disponiveis:
+                Atributos relacionados disponíveis:
               </span>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -700,11 +714,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.ease-out-premium {
-  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, opacity, filter;
+.bubble-enter {
+  animation: bubble-enter 180ms ease-out both;
+}
+
+@keyframes bubble-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-markdown :deep(p) {
@@ -735,7 +757,7 @@ onBeforeUnmount(() => {
 
 .chat-markdown :deep(strong) {
   font-weight: 700;
-  color: rgb(var(--color-primary));
+  color: var(--text-primary);
 }
 
 .chat-markdown :deep(em) {
@@ -744,7 +766,7 @@ onBeforeUnmount(() => {
 
 .chat-markdown :deep(code) {
   border-radius: 0.375rem;
-  background: rgba(15, 25, 35, 0.06);
+  background: var(--bg-surface-elevated);
   padding: 0.1rem 0.35rem;
   font-size: 0.9em;
 }
@@ -752,7 +774,7 @@ onBeforeUnmount(() => {
 .chat-markdown :deep(hr) {
   margin: 1rem 0;
   border: 0;
-  border-top: 1px solid rgb(var(--color-border-subtle));
+  border-top: 1px solid var(--border-subtle);
 }
 
 .chat-markdown :deep(h1),
@@ -760,7 +782,7 @@ onBeforeUnmount(() => {
 .chat-markdown :deep(h3) {
   margin: 0.75rem 0 0.5rem;
   font-weight: 700;
-  color: rgb(var(--color-primary));
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
@@ -886,6 +908,7 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .bubble-enter,
   .loading-brand-ring,
   .status-dot,
   .skeleton-line::after {
