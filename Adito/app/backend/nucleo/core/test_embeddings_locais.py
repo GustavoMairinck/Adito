@@ -298,5 +298,34 @@ class PerguntaOriginalTests(unittest.TestCase):
         self.assertLess(texto.index("EXEMPLOS"), texto.index("campus = 'Serra'"))
 
 
+class ValoresInexistentesTests(unittest.TestCase):
+    CATALOGO = {
+        ("v", "campus"): {"serra": "Serra", "cariacica": "Cariacica", "vitoria": "Vitória"},
+        ("v", "programa_fomento"): {"pibic": "pibic", "pibic_em": "pibic_em"},
+        ("v", "titulo"): {"robotica educacional nas escolas": "Robótica educacional nas escolas"},
+    }
+
+    def checar(self, sql):
+        sv = importlib.import_module("agents.bi_agent.nodes.sql_validator")
+        return sv.check_valores_inexistentes(sql, self.CATALOGO, {"v"})
+
+    def test_aceita_valores_existentes_sem_acento_caixa_e_partes_agregadas(self):
+        self.assertIsNone(self.checar("SELECT 1 FROM v WHERE campus = 'vitoria' AND LOWER(programa_fomento) = 'pibic'"))
+        self.assertIsNone(self.checar("SELECT 1 FROM v WHERE campus LIKE '%Serra%' AND titulo LIKE '%robótica%'"))
+        self.assertIsNone(self.checar("SELECT 1 FROM v WHERE campus = 'Serra; Vitória'"))
+        self.assertIsNone(self.checar("SELECT 1 FROM v WHERE programa_fomento IN ('pibic', 'pibic_em')"))
+
+    def test_aponta_valor_inexistente_com_sugestao(self):
+        erro = self.checar("SELECT 1 FROM v WHERE campus = 'Cariacca'")
+        self.assertIn("'Cariacca' não existe em campus", erro)
+        self.assertIn("'Cariacica'", erro)
+        self.assertIn("'PIBIC-EM'", self.checar("SELECT 1 FROM v WHERE programa_fomento IN ('pibic', 'PIBIC-EM')"))
+
+    def test_ignora_colunas_fora_do_indice_e_views_fora_do_contexto(self):
+        self.assertIsNone(self.checar("SELECT 1 FROM v WHERE nome_autor LIKE '%Silva%'"))
+        sv = importlib.import_module("agents.bi_agent.nodes.sql_validator")
+        self.assertIsNone(sv.check_valores_inexistentes("SELECT 1 FROM v WHERE campus = 'X'", self.CATALOGO, {"outra"}))
+
+
 if __name__ == "__main__":
     unittest.main()

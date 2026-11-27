@@ -1,3 +1,4 @@
+import difflib
 import re
 import unicodedata
 
@@ -5,7 +6,7 @@ import sqlglot
 from sqlglot import exp
 
 from core.contexts import read_policy_for
-from core.datastore import connect_dados
+from core.datastore import _like_to_regex, connect_dados
 from core.rich_logging import (
     log_error,
     log_node_end,
@@ -135,6 +136,71 @@ def check_missing_null_guard(question: str, sql: str, dialect: str = "sqlite") -
     return None
 
 
+def _coluna_comparada(node: exp.Expression) -> str | None:
+    """Nome da coluna em `col`, `LOWER(col)`, `UPPER(col)` ou `TRIM(col)`."""
+    while isinstance(node, (exp.Lower, exp.Upper, exp.Trim)):
+        node = node.this
+    return (node.name or "").lower() if isinstance(node, exp.Column) else None
+
+
+def _literais_de_texto(tree: exp.Expression):
+    """(coluna, literal, é_like) de cada filtro de texto em WHERE/HAVING."""
+    for clause in _filter_clauses(tree):
+        for node in clause.find_all(exp.EQ, exp.Like, exp.ILike, exp.In):
+            if isinstance(node, exp.In):
+                coluna = _coluna_comparada(node.this)
+                literais = [a for a in node.expressions or [] if isinstance(a, exp.Literal) and a.is_string]
+                if coluna:
+                    for lit in literais:
+                        yield coluna, lit.this, False
+                continue
+            for lado, outro in ((node.this, node.expression), (node.expression, node.this)):
+                coluna = _coluna_comparada(lado)
+                if coluna and isinstance(outro, exp.Literal) and outro.is_string:
+                    yield coluna, outro.this, not isinstance(node, exp.EQ)
+                    break
+
+
+def check_valores_inexistentes(sql: str, catalogo: dict, views: set[str], dialect: str = "sqlite") -> str | None:
+    """Aponta filtros de texto cujo valor não existe no dados.db, com os valores reais mais próximos.
+
+    Só olha colunas com vetores no índice (embed_columns). Comparação sem acento e sem caixa, como
+    o LIKE do Adito; colunas agregadas com "; " passam se cada parte existir.
+    """
+    if not catalogo:
+        return None
+    try:
+        tree = sqlglot.parse_one(sql, read=dialect)
+    except Exception:
+        return None
+    problemas = []
+    for coluna, literal, e_like in _literais_de_texto(tree):
+        conhecidos: dict[str, str] = {}
+        for (view, col), valores in catalogo.items():
+            if col.lower() == coluna and view in views:
+                conhecidos.update(valores)
+        if not conhecidos or not literal.strip("% "):
+            continue
+        alvo = _norm_text(literal)
+        if e_like:
+            rx = _like_to_regex(alvo)
+            existe = any(rx.match(v) for v in conhecidos)
+        else:
+            partes = [_norm_text(p) for p in literal.split("; ")]
+            existe = alvo in conhecidos or all(p in conhecidos for p in partes)
+        if existe:
+            continue
+        proximos = difflib.get_close_matches(alvo.strip("%"), list(conhecidos), n=3, cutoff=0.6)
+        sugestao = ", ".join(f"'{conhecidos[p]}'" for p in proximos) or "nenhum parecido"
+        problemas.append(f"'{literal}' não existe em {coluna} (valores próximos: {sugestao})")
+    if not problemas:
+        return None
+    return (
+        "Filtro com valor que não existe no banco: " + "; ".join(problemas)
+        + ". Use o valor real mais próximo se ele corresponder à pergunta; se nenhum corresponder, mantenha o filtro."
+    )
+
+
 def sql_validator(
     state: BiAgentState,
     dados_path: str | None,
@@ -175,12 +241,26 @@ def sql_validator(
         log_node_end("validator", "valid=False")
         return {"validation_result": {"valid": False, "error": f"Erro de Banco: {exc}"}}
 
-    question = state.get("pergunta_original") or state.get("user_input", "")
+    question = state.get("user_input", "")
     semantic_error = check_missing_null_guard(question, sql, dialect=dialect)
     if semantic_error:
         log_warning("bi", f"Validação semântica (NULL guard) falhou: {semantic_error}")
         log_node_end("validator", "valid=False")
         return {"validation_result": {"valid": False, "error": semantic_error}}
+
+    # Uma chance só: se o valor pedido de fato não existe, a segunda tentativa passa e o resultado
+    # vazio mostra "nenhum registro" em vez de "não foi possível gerar a consulta".
+    if not state.get("correction_attempts"):
+        from analytics_index.valores import indice_valores
+
+        indice = indice_valores()
+        valor_error = check_valores_inexistentes(
+            sql, indice.catalogo() if indice.disponivel else {}, set(policy.exposed_views), dialect=dialect
+        )
+        if valor_error:
+            log_warning("bi", f"Validação de valores falhou: {valor_error}")
+            log_node_end("validator", "valid=False")
+            return {"validation_result": {"valid": False, "error": valor_error}}
 
     log_node_end("validator", "valid=True")
     return {"validation_result": {"valid": True, "error": None}}
