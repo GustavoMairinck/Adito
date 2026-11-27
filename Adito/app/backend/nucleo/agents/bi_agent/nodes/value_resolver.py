@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Container
 from functools import lru_cache
 from pathlib import Path
 
@@ -50,18 +51,21 @@ def _tokens(texto: str) -> list[str]:
     return re.findall(r"\w+", normalizar_texto(texto))
 
 
-def trechos(texto: str) -> list[tuple[int, int, str]]:
-    """(início, fim, texto) de cada trecho candidato, em palavras normalizadas."""
+def trechos(texto: str, sempre: Container[str] = frozenset()) -> list[tuple[int, int, str]]:
+    """(início, fim, texto) de cada trecho candidato, em palavras normalizadas.
+
+    Termos em `sempre` (os sinônimos do contexto) passam mesmo com palavra vazia na ponta ("pibic em").
+    """
     palavras = _tokens(texto)
     saida = []
     for n in range(1, MAX_PALAVRAS + 1):
         for i in range(len(palavras) - n + 1):
             janela = palavras[i:i + n]
-            if janela[0] in PALAVRAS_VAZIAS or janela[-1] in PALAVRAS_VAZIAS:
+            termo = " ".join(janela)
+            if termo not in sempre and (janela[0] in PALAVRAS_VAZIAS or janela[-1] in PALAVRAS_VAZIAS
+                                        or any(p.isdigit() for p in janela)):
                 continue
-            if any(p.isdigit() for p in janela):
-                continue
-            saida.append((i, i + n, " ".join(janela)))
+            saida.append((i, i + n, termo))
     return saida
 
 
@@ -92,7 +96,7 @@ def sinonimos_do_contexto(contexto_id) -> dict[str, list[dict]]:
 def resolver_valores(textos: list[str], indice, embedder, sinonimos: dict, views: set[str] | None = None) -> list[dict]:
     candidatos: list[tuple[int, int, str]] = []
     for texto in textos:
-        for t in trechos(texto):
+        for t in trechos(texto, sinonimos.keys()):
             if t not in candidatos:
                 candidatos.append(t)
 

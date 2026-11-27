@@ -1,0 +1,20 @@
+{
+  "_sobre": "Termos da pergunta que viram um valor exato do banco antes da busca semântica. Só entra aqui o que o rules.md já afirma; o resto fica na lista de sugestões para a equipe validar. Termos sem acento e sem caixa; valores exatamente como estão no dados.db.",
+  "sinonimos": [
+    {"termos": ["pibic em", "pibic-em", "pibic ensino medio"], "coluna": "programa_fomento", "valores": ["pibic_em"]},
+    {"termos": ["pibic jr", "pibic-jr"], "coluna": "programa_fomento", "valores": ["pibic_jr"]},
+    {"termos": ["pibic af", "pibic-af"], "coluna": "programa_fomento", "valores": ["pibic_af"]},
+    {"termos": ["pesquisa aplicada"], "coluna": "natureza_projeto", "valores": ["PESQUISA_APLICADA"]},
+    {"termos": ["pesquisa basica"], "coluna": "natureza_projeto", "valores": ["PESQUISA_BASICA"]},
+    {"termos": ["livro", "livros", "capitulo", "capitulos", "capitulos de livro"], "coluna": "tipo_macro_producao", "valores": ["LIVRO_OU_CAPITULO"]},
+    {"termos": ["grupos excluidos"], "coluna": "situacao_grupo", "valores": ["EXCLUIDO"]},
+    {"termos": ["grupos certificados"], "coluna": "situacao_grupo", "valores": ["CERTIFICADO", "CERTIFICADO_NAO_ATUALIZADO"]},
+    {"termos": ["em preenchimento"], "coluna": "situacao_grupo", "valores": ["EM_PREENCHIMENTO"]},
+    {"termos": ["voluntario", "voluntarios"], "coluna": "modalidade", "valores": ["VOLUNTARIO"]},
+    {"termos": ["egresso", "egressos"], "coluna": "status_participacao", "valores": ["EGRESSO"]},
+    {"termos": ["graduacao"], "coluna": "nivel_treinamento_aluno", "valores": ["GRADUACAO"]},
+    {"termos": ["ensino medio"], "coluna": "nivel_treinamento_aluno", "valores": ["ENSINO_MEDIO_2O_GRAU"]},
+    {"termos": ["mestrado"], "coluna": "nivel_treinamento_aluno", "valores": ["MESTRADO"]},
+    {"termos": ["especializacao"], "coluna": "nivel_treinamento_aluno", "valores": ["ESPECIALIZACAO"]}
+  ]
+}

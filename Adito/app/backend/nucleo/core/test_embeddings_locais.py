@@ -262,6 +262,24 @@ class ResolvedorValoresTests(unittest.TestCase):
     def test_nao_inventa_valor_quando_nada_passa_do_minimo(self):
         self.assertEqual(self.vr.resolver_valores(["quantos registros xyz?"], self.indice, embedder_falso(), {}), [])
 
+    def test_sinonimo_com_palavra_vazia_na_ponta_e_o_mais_longo_vence(self):
+        sinonimos = {
+            "pibic em": [{"coluna": "programa_fomento", "valores": ["pibic_em"]}],
+            "pibic ensino medio": [{"coluna": "programa_fomento", "valores": ["pibic_em"]}],
+            "ensino medio": [{"coluna": "nivel_treinamento_aluno", "valores": ["ENSINO_MEDIO_2O_GRAU"]}],
+        }
+        desligado = valores.IndiceValores(False, "sem vetores")
+        achados = self.vr.resolver_valores(["bolsas do PIBIC-EM"], desligado, None, sinonimos)
+        self.assertEqual([a["valor"] for a in achados], ["pibic_em"])
+        achados = self.vr.resolver_valores(["bolsas do pibic ensino médio"], desligado, None, sinonimos)
+        self.assertEqual([(a["termo"], a["valor"]) for a in achados], [("pibic ensino medio", "pibic_em")])
+
+    def test_sinonimos_do_contexto_carregam(self):
+        arquivo = RAIZ_ADITO / "app" / "contexts" / "pesquisa-extensao-ifes" / "sinonimos.json"
+        mapa = self.vr._sinonimos_do_arquivo(str(arquivo), 0)
+        self.assertEqual(mapa["pibic em"][0]["valores"], ["pibic_em"])
+        self.assertTrue(all(t == valores.normalizar_texto(t) for t in mapa))
+
     def test_sem_vetores_ainda_usa_sinonimos(self):
         desligado = valores.IndiceValores(False, "sem vetores")
         achados = self.vr.resolver_valores(
