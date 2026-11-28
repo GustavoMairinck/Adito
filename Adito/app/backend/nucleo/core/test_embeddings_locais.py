@@ -311,6 +311,19 @@ class PerguntaOriginalTests(unittest.TestCase):
         self.assertIn("mantenha os filtros da conversa", texto)
         self.assertEqual(gen.pergunta_para_o_modelo({"user_input": "X", "pergunta_original": "X"}), "X")
 
+    def test_gerador_recebe_o_sql_da_resposta_anterior(self):
+        gen = importlib.import_module("agents.bi_agent.nodes.sql_generator")
+        texto = gen.pergunta_para_o_modelo({
+            "user_input": "Os 69 pesquisadores do Serra que participaram de extensão já foram pesquisadores?",
+            "pergunta_original": "Todos esses já foram pesquisadores?",
+            "sql_anterior": "WITH pesquisadores_serra AS (SELECT 1) SELECT COUNT(*) FROM pesquisadores_serra",
+        })
+        self.assertIn("SQL da resposta anterior:\nWITH pesquisadores_serra", texto)
+        self.assertIn("nunca inverta o ponto de partida", texto)
+        self.assertIn("Pergunta do usuário: Todos esses", texto)
+        sem_anterior = gen.pergunta_para_o_modelo({"user_input": "X", "pergunta_original": "X", "sql_anterior": ""})
+        self.assertEqual(sem_anterior, "X")
+
     def test_prompt_tem_bloco_fixo_antes_e_valores_no_fim(self):
         gen = importlib.import_module("agents.bi_agent.nodes.sql_generator")
         texto = gen.contexto_do_prompt({

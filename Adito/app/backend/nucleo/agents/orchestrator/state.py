@@ -23,6 +23,8 @@ class MultiAgentState(TypedDict):
     analysis_explanation: Annotated[Optional[str], prefer_new]
     # campos para delegacao MCP
     delegation_instruction: Optional[str]
+    # SQL da resposta anterior da conversa, para o gerador partir do mesmo conjunto em "desses"
+    sql_anterior: Optional[str]
     tool_name: Optional[str]
     
     # controle de multi-tenancy

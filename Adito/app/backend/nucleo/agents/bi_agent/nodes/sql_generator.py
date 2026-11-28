@@ -11,17 +11,27 @@ from .value_resolver import bloco_valores
 
 
 def pergunta_para_o_modelo(state: BiAgentState) -> str:
-    """A instrução do orquestrador e, quando diferente, a pergunta como o usuário escreveu."""
+    """A instrução do orquestrador e, quando diferente, a pergunta como o usuário escreveu e o SQL anterior."""
     instrucao = state["user_input"].strip()
     original = (state.get("pergunta_original") or "").strip()
+    anterior = (state.get("sql_anterior") or "").strip()
     if not original or original == instrucao:
-        return instrucao
-    return (
-        f"Pergunta do usuário: {original}\n"
-        f"Pedido completo, com o contexto da conversa: {instrucao}\n"
-        "Use o pedido completo para saber a quem a pergunta se refere (\"desses\", \"esses\", \"e na Serra?\") e "
-        "mantenha os filtros da conversa que ele traz. Não acrescente filtros que não estejam em nenhum dos dois."
-    )
+        texto = instrucao
+    else:
+        texto = (
+            f"Pergunta do usuário: {original}\n"
+            f"Pedido completo, com o contexto da conversa: {instrucao}\n"
+            "Use o pedido completo para saber a quem a pergunta se refere (\"desses\", \"esses\", \"e na Serra?\") e "
+            "mantenha os filtros da conversa que ele traz. Não acrescente filtros que não estejam em nenhum dos dois."
+        )
+    if anterior:
+        texto += (
+            f"\n\nSQL da resposta anterior:\n{anterior}\n"
+            "Se a pergunta se referir ao resultado anterior (\"desses\", \"esses\", \"deles\", \"e na Serra?\"), "
+            "reaproveite esse SQL como CTE e parta exatamente do conjunto que ele contou, com os mesmos filtros; "
+            "nunca inverta o ponto de partida. Se a pergunta não se referir a ele, ignore-o."
+        )
+    return texto
 
 
 def contexto_do_prompt(state: BiAgentState) -> str:

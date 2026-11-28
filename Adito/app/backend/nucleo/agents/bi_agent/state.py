@@ -12,6 +12,8 @@ class AgentState(TypedDict):
     retrieved_schema: str
     # pergunta como o usuário escreveu (user_input é a instrução resolvida pelo orquestrador)
     pergunta_original: str
+    # SQL da resposta anterior da conversa (vazio na primeira pergunta)
+    sql_anterior: str
     # valores reais do banco achados na pergunta (nodes/value_resolver.py)
     valores_reais: list[dict[str, Any]]
     # SQL generation

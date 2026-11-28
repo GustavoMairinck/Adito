@@ -86,6 +86,7 @@ def run_bi_agent(
     contexto_id: str,
     thread_id: str = "default_session",
     pergunta_original: str = "",
+    sql_anterior: str = "",
 ) -> str:
     check_cancelled()
     print(f"[BI Agent] tenant={tenant_id!r} contexto={contexto_id!r} | instrução={instruction[:80]!r}")
@@ -154,6 +155,7 @@ def run_bi_agent(
         "callbacks": langfuse_callbacks(),
         "execute": True,
         "pergunta_original": pergunta_original or instruction,
+        "sql_anterior": sql_anterior,
     }
     if has_sink:
         ask_kwargs["on_progress"] = _on_progress
@@ -265,9 +267,12 @@ async def _arun_bi_agent(
     contexto_id: str,
     thread_id: str = "default_session",
     pergunta_original: str = "",
+    sql_anterior: str = "",
 ) -> str:
     # .ask() é síncrono (LLM + sqlite3); fora do loop para não travar o streaming SSE.
-    return await asyncio.to_thread(run_bi_agent, instruction, tenant_id, contexto_id, thread_id, pergunta_original)
+    return await asyncio.to_thread(
+        run_bi_agent, instruction, tenant_id, contexto_id, thread_id, pergunta_original, sql_anterior
+    )
 
 
 bi_agent_tool = StructuredTool.from_function(

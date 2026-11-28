@@ -76,6 +76,7 @@ class BIAgent:
         cancel_event: threading.Event | None = None,
         on_progress: Optional[Callable[[str, dict], None]] = None,
         pergunta_original: str | None = None,
+        sql_anterior: str | None = None,
     ) -> dict:
         """Processa a pergunta do usuário dentro de um contexto (views, regras e RAG do contexto)."""
         token = set_cancel_event(cancel_event) if cancel_event is not None else None
@@ -106,6 +107,7 @@ class BIAgent:
             input_data = {
                 "user_input": question,
                 "pergunta_original": pergunta_original or question,
+                "sql_anterior": sql_anterior or "",
                 "tenant_id": str(tenant_id),
                 "contexto_id": str(contexto.id),
                 "allowed_views": contexto.view_names(),

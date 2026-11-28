@@ -75,6 +75,9 @@ async def mcp_tool_node(state: MultiAgentState):
                 if "pergunta_original" in (t.args or {}):
                     # A pergunta como o usuário escreveu: a instrução do roteador pode ter acrescentado filtros.
                     invoke_args["pergunta_original"] = state.get("user_input", "")
+                if "sql_anterior" in (t.args or {}):
+                    # SQL da resposta anterior: "desses" passa a partir do mesmo conjunto, com os mesmos filtros.
+                    invoke_args["sql_anterior"] = state.get("sql_anterior") or ""
                 result = await t.ainvoke(invoke_args)
 
                 content_str = ""
@@ -172,7 +175,8 @@ def route_from_orchestrator(state: MultiAgentState):
             por_ferramenta.setdefault(c.get("intent"), []).append(c.get("delegation_instruction") or "")
         return [
             Send("mcp_tool_node", {**base, "tool_name": nome,
-                                   "delegation_instruction": merge_instructions(instrucoes)})
+                                   "delegation_instruction": merge_instructions(instrucoes),
+                                   "sql_anterior": state.get("sql_used") or ""})
             for nome, instrucoes in por_ferramenta.items()
         ]
     if INTENT_OUT_OF_SCOPE in intents:

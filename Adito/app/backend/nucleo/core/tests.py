@@ -1224,6 +1224,37 @@ class AgentesRevisaoTests(unittest.TestCase):
         sends = route_from_orchestrator({"calls": [{"intent": "bi_agent", "delegation_instruction": "contar projetos"}]})
         self.assertEqual(sends[0].arg["delegation_instruction"], "contar projetos")
 
+    def test_sql_da_resposta_anterior_chega_a_ferramenta(self):
+        """ "Todos esses já foram pesquisadores?" partia das 5.178 pessoas da extensão, e não dos 69 de antes."""
+        import asyncio
+        from langchain_core.tools import StructuredTool
+        from agents.orchestrator import graph
+
+        sends = graph.route_from_orchestrator({
+            "calls": [{"intent": "bi_agent", "delegation_instruction": "esses 69 já foram pesquisadores?"}],
+            "sql_used": "SELECT COUNT(*) FROM pesquisadores_serra",
+            "tenant_id": "t", "contexto_id": "c", "thread_id": "th",
+        })
+        self.assertEqual(sends[0].arg["sql_anterior"], "SELECT COUNT(*) FROM pesquisadores_serra")
+
+        recebido = {}
+
+        def falso(instruction: str, tenant_id: str, contexto_id: str, thread_id: str = "t",
+                  pergunta_original: str = "", sql_anterior: str = "") -> str:
+            recebido.update(sql_anterior=sql_anterior)
+            return "{}"
+
+        ferramenta = StructuredTool.from_function(func=falso, name="bi_agent", description="x")
+        with patch.object(graph, "mcp_tools", [ferramenta]):
+            asyncio.run(graph.mcp_tool_node(sends[0].arg))
+        self.assertEqual(recebido["sql_anterior"], "SELECT COUNT(*) FROM pesquisadores_serra")
+
+    def test_primeira_pergunta_vai_sem_sql_anterior(self):
+        from agents.orchestrator.graph import route_from_orchestrator
+
+        sends = route_from_orchestrator({"calls": [{"intent": "bi_agent", "delegation_instruction": "contar projetos"}]})
+        self.assertEqual(sends[0].arg["sql_anterior"], "")
+
     def test_resposta_dos_dados_passa_callbacks_do_langfuse(self):
         from agents.bi_agent import tool
 
