@@ -19,7 +19,8 @@ def pergunta_para_o_modelo(state: BiAgentState) -> str:
     return (
         f"Pergunta do usuário: {original}\n"
         f"Pedido completo, com o contexto da conversa: {instrucao}\n"
-        "Se os dois divergirem, siga a pergunta do usuário e não acrescente filtros que ele não pediu."
+        "Use o pedido completo para saber a quem a pergunta se refere (\"desses\", \"esses\", \"e na Serra?\") e "
+        "mantenha os filtros da conversa que ele traz. Não acrescente filtros que não estejam em nenhum dos dois."
     )
 
 

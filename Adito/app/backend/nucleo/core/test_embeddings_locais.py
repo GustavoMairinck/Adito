@@ -308,7 +308,7 @@ class PerguntaOriginalTests(unittest.TestCase):
             "pergunta_original": "e na Serra?",
         })
         self.assertIn("Pergunta do usuário: e na Serra?", texto)
-        self.assertIn("não acrescente filtros", texto)
+        self.assertIn("mantenha os filtros da conversa", texto)
         self.assertEqual(gen.pergunta_para_o_modelo({"user_input": "X", "pergunta_original": "X"}), "X")
 
     def test_prompt_tem_bloco_fixo_antes_e_valores_no_fim(self):
@@ -354,3 +354,4 @@ class ValoresInexistentesTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
