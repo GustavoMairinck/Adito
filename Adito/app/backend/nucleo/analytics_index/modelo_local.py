@@ -237,6 +237,12 @@ def preparar_em_segundo_plano() -> threading.Thread:
                     logger.warning("Não foi possível baixar o modelo de embedding: %s", exc)
             get_embedder_local().embed_query("aquecimento")
             from .valores import indice_valores
+            from .vetores import atualizar_dados_locais
+
+            try:  # valores que o dados.db ganhou e ainda não têm vetor: embeda só esses, aqui na máquina
+                atualizar_dados_locais(get_embedder_local())
+            except Exception as exc:
+                logger.warning("Falha na atualização incremental dos vetores: %s", exc)
 
             indice_valores()  # carrega a matriz de valores do dados.db, se houver
             _erro = None

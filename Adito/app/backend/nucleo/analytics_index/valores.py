@@ -1,7 +1,9 @@
 """Índice de valores do `dados.db`: vetores pré-gerados no release, buscados em memória por cosseno.
 
 Quem publica os dados roda `Adito/scripts/gerar_embeddings_dados.py`, que grava duas tabelas
-dentro do próprio `dados.db` antes de cifrar:
+dentro do próprio `dados.db` antes de cifrar (a carga grande). Na máquina do usuário o `dados.db`
+só é lido: os valores que ainda não têm vetor nele são embedados e guardados no app.db
+(`vetores.completar_no_app_db`), e o índice junta as duas fontes:
 
     adito_embedding_meta(chave TEXT PRIMARY KEY, valor TEXT)       -- modelo, dim, data
     adito_valor_embedding(view, coluna, valor, vetor BLOB float16)  -- um vetor por valor distinto
@@ -136,10 +138,18 @@ def carregar_indice(caminho: Path | None = None) -> IndiceValores:
                 modelo.chave,
                 versao,
             )
-        linhas = conn.execute(f"SELECT view, coluna, valor, vetor FROM {TABELA_VETORES}").fetchall()
+        linhas = [
+            (r[0], r[1], r[2], np.frombuffer(bytes(r[3]), dtype=np.float16).astype(np.float32))
+            for r in conn.execute(f"SELECT view, coluna, valor, vetor FROM {TABELA_VETORES}")
+        ]
+    # Valores que o dados.db não trazia, embedados na máquina do usuário e guardados no app.db.
+    from .vetores import vetores_locais
+
+    ja = {(r[0], r[1], r[2]) for r in linhas}
+    linhas += [r for r in vetores_locais(modelo.chave) if (r[0], r[1], r[2]) not in ja]
     if not linhas:
         return IndiceValores(True, "", modelo.chave, versao)
-    matriz = np.vstack([np.frombuffer(bytes(r[3]), dtype=np.float16) for r in linhas]).astype(np.float32)
+    matriz = np.vstack([r[3] for r in linhas])
     if matriz.shape[1] != modelo.dim:
         return IndiceValores(False, f"Dimensão dos vetores ({matriz.shape[1]}) diferente do modelo ({modelo.dim}).",
                              modelo.chave, versao)
@@ -166,6 +176,8 @@ def indice_valores() -> IndiceValores:
     versao = _versao(caminho) if caminho.exists() else ""
     with _cache_lock:
         if _cache is None or _cache.versao != versao:
+            if _cache is not None:
+                _atualizar_vetores_depois_da_troca()
             try:
                 _cache = carregar_indice(caminho)
             except Exception as exc:
@@ -174,6 +186,22 @@ def indice_valores() -> IndiceValores:
             if not _cache.disponivel:
                 logger.warning("Busca semântica de valores desligada: %s", _cache.motivo)
         return _cache
+
+
+def invalidar_indice() -> None:
+    """Força recarregar o índice na próxima busca (o app.db ganhou ou perdeu vetores locais)."""
+    global _cache
+    with _cache_lock:
+        _cache = None
+
+
+def _atualizar_vetores_depois_da_troca() -> None:
+    """O dados.db foi trocado com o app aberto: embeda os valores novos em segundo plano."""
+    from . import modelo_local
+    from .vetores import atualizar_em_segundo_plano
+
+    if modelo_local.estado()["pronto"]:
+        atualizar_em_segundo_plano(modelo_local.get_embedder_local())
 
 
 def versao_busca() -> str:

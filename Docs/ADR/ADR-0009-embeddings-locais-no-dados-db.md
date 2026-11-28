@@ -20,6 +20,8 @@ O RAG do Adito gerava embeddings pela API do provedor de IA ativo (Gemini, OpenA
 6. **O resolvedor ReAct e o rewriter saem do grafo.** No lugar deles entra `value_resolver`, um código determinístico: n-gramas da pergunta, depois `sinonimos.json` do contexto, depois valor idêntico do catálogo, depois similaridade no índice local de pelo menos 0,90, e o valor ainda precisa ter letras em comum com o termo (`parecido_em_letras` de pelo menos 0,75), o que corta falsos positivos como "futebol" virando um título. Os valores achados vão num bloco à parte do prompt, e a pergunta original do usuário viaja junto com a instrução do orquestrador até o gerador.
 7. **O validador recusa filtro com valor que não existe** nas colunas indexadas, sugere o valor mais próximo e manda para o corretor uma vez.
 
+> **2026-11-28:** além da carga completa na publicação, o app passa a completar os vetores na máquina do usuário (issue #129). O `dados.db` continua só para leitura. Quando ele muda, `analytics_index/vetores.py` embeda em segundo plano, com o modelo local, só os valores que ainda não têm vetor nele e guarda no app.db, na `analytics_text_embedding` (`embedding_provider = 'local'`), a mesma tabela que a versão por API usava. O índice junta as duas fontes. Ele não roda sobre um `dados.db` sem vetores ou com vetores de outro modelo.
+
 ## Justificativa
 1. **Custo zero de API para busca:** nenhum token é gasto em embeddings, nem na publicação nem no uso.
 2. **Vetores iguais para todo mundo:** todos usam o mesmo modelo e os mesmos vetores, gerados uma vez por carga, então não existe mais índice incompatível por usuário.

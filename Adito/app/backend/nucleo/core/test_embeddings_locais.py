@@ -189,6 +189,162 @@ class GeracaoEIndiceTests(unittest.TestCase):
         self.assertFalse(ok, erro)
 
 
+class IncrementalTests(unittest.TestCase):
+    """A carga grande vem na release; na máquina do usuário só os valores novos são embedados."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.banco = Path(self.tmp.name) / "dados.db"
+        criar_banco(self.banco)
+        self.contexto = criar_contexto(Path(self.tmp.name) / "ctx")
+        self.script = carregar_script("gerar_embeddings_dados")
+        self.script.gerar(self.banco, self.contexto, embedder_falso(), log=lambda *_: None)
+        self.embedados: list[str] = []
+        embedados = self.embedados
+
+        class Contador(MotorFalso):
+            def embed(self, textos):
+                embedados.extend(textos)
+                return super().embed(textos)
+
+        self.embedder = EmbedderLocal(MODELO_FALSO, criar=lambda m: Contador())
+
+    def _executar(self, sql, params=()):
+        conn = sqlite3.connect(self.banco)
+        conn.execute(sql, params)
+        conn.commit()
+        conn.close()
+
+    def test_so_embeda_os_valores_novos_e_apaga_os_que_sumiram(self):
+        self._executar("INSERT INTO fonte VALUES ('Linhares', 'Engenharias', 'Horta comunitária')")
+        self._executar("DELETE FROM fonte WHERE titulo = 'Oficina de leitura'")
+        resumo = self.script.atualizar(self.banco, self.contexto, self.embedder, log=lambda *_: None)
+        self.assertEqual(self.embedados, ["Linhares"])
+        self.assertEqual((resumo["novos"], resumo["removidos"]), (1, 3))  # Cariacica, Ciências Humanas, Oficina
+        with patch.object(valores, "modelo_ativo", return_value=MODELO_FALSO):
+            catalogo = valores.carregar_indice(self.banco).catalogo()
+        self.assertIn("linhares", catalogo[("vfact_teste", "campus")])
+        self.assertNotIn("cariacica", catalogo[("vfact_teste", "campus")])
+
+    def test_sem_diferenca_nao_regrava_o_banco(self):
+        antes = self.banco.stat().st_mtime_ns
+        resumo = self.script.atualizar(self.banco, self.contexto, self.embedder, log=lambda *_: None)
+        self.assertEqual((resumo["novos"], resumo["removidos"], self.embedados), (0, 0, []))
+        self.assertEqual(self.banco.stat().st_mtime_ns, antes)
+
+    def test_nao_gera_a_carga_grande_na_maquina_do_usuario(self):
+        outro = EmbedderLocal(Modelo(chave="outro", nome="outro", dim=DIM), criar=lambda m: MotorFalso())
+        self.assertFalse(self.script.atualizar(self.banco, self.contexto, outro, log=lambda *_: None)["feito"])
+        sem_vetores = Path(self.tmp.name) / "sem.db"
+        criar_banco(sem_vetores)
+        self.assertFalse(self.script.atualizar(sem_vetores, self.contexto, self.embedder, log=lambda *_: None)["feito"])
+        self.assertEqual(self.embedados, [])
+
+
+class VetoresLocaisNoAppDbTests(unittest.TestCase):
+    """Na máquina do usuário o dados.db só é lido; o que falta vai para o app.db."""
+
+    def setUp(self):
+        from core import db
+        from core.datastore import close_dados
+        from core.records import Contexto, get_local_user
+        from core.schema import ensure_schema
+
+        self.db = db
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        env = patch.dict(os.environ, {"ADITO_APP_DB": str(Path(self.tmp.name) / "app.db")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(db.close)
+        self.addCleanup(close_dados)
+        ensure_schema()
+        self.banco = Path(self.tmp.name) / "dados.db"
+        criar_banco(self.banco)
+        contexto = criar_contexto(Path(self.tmp.name) / "ctx")
+        carregar_script("gerar_embeddings_dados").gerar(self.banco, contexto, embedder_falso(), log=lambda *_: None)
+        views = json.loads((contexto / "views.json").read_text(encoding="utf-8"))["views"]
+        tenant_id = get_local_user().tenant_id
+        self.contexto = Contexto(tenant_id=tenant_id, slug="teste", name="Teste", views=views).insert()
+        self.embedados: list[str] = []
+        embedados = self.embedados
+
+        class Contador(MotorFalso):
+            def embed(self, textos):
+                embedados.extend(textos)
+                return super().embed(textos)
+
+        self.embedder = EmbedderLocal(MODELO_FALSO, criar=lambda m: Contador())
+        p = patch.object(valores, "modelo_ativo", return_value=MODELO_FALSO)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _novo_valor(self, campus):
+        conn = sqlite3.connect(self.banco)
+        conn.execute("INSERT INTO fonte VALUES (?, NULL, NULL)", [campus])
+        conn.commit()
+        conn.close()
+
+    def _completar(self):
+        from analytics_index import vetores
+
+        return vetores.completar_no_app_db(self.banco, [self.contexto], self.embedder)
+
+    def test_valor_novo_vai_para_o_app_db_e_o_dados_db_nao_muda(self):
+        self._novo_valor("Linhares")
+        antes = hashlib.sha256(self.banco.read_bytes()).hexdigest()
+        resumo = self._completar()
+        self.assertEqual((resumo["novos"], self.embedados), (1, ["Linhares"]))
+        self.assertEqual(hashlib.sha256(self.banco.read_bytes()).hexdigest(), antes)
+        linha = self.db.execute(
+            "SELECT source_table, embedding_text, embedding_provider, embedding_model FROM analytics_text_embedding"
+        ).fetchone()
+        self.assertEqual(tuple(linha), ("vfact_teste", "Linhares", "local", "falso"))
+        indice = valores.carregar_indice(self.banco)
+        self.assertEqual(len(indice), 9)
+        self.assertEqual(indice.catalogo()[("vfact_teste", "campus")]["linhares"], "Linhares")
+
+    def test_sem_diferenca_nao_embeda_e_sobra_local_e_apagada(self):
+        self._novo_valor("Linhares")
+        self._completar()
+        self.embedados.clear()
+        self.assertEqual(self._completar()["novos"], 0)
+        self.assertEqual(self.embedados, [])
+        conn = sqlite3.connect(self.banco)
+        conn.execute("DELETE FROM fonte WHERE campus = 'Linhares'")
+        conn.commit()
+        conn.close()
+        self.assertEqual(self._completar()["removidos"], 1)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM analytics_text_embedding").fetchone()[0], 0)
+
+    def test_vetores_antigos_da_api_saem_e_sem_vetores_no_dados_db_nada_e_gerado(self):
+        self.db.execute(
+            "INSERT INTO analytics_text_embedding (id, tenant_id, contexto_id, source_table, embedding_text, payload_json, "
+            "value_hash, embedding_provider, embedding_model, created_at, updated_at) "
+            "VALUES ('x', ?, ?, 'vfact_teste', 'Serra', '{}', 'h', 'gemini', 'text-embedding-004', '2026-01-01', '2026-01-01')",
+            [self.db.to_db_id(self.contexto.tenant_id), self.db.to_db_id(self.contexto.id)],
+        )
+        self.assertEqual(self._completar()["removidos"], 1)
+        sem_vetores = Path(self.tmp.name) / "sem.db"
+        criar_banco(sem_vetores)
+        from analytics_index import vetores
+
+        self.assertFalse(vetores.completar_no_app_db(sem_vetores, [self.contexto], self.embedder)["feito"])
+        self.assertEqual(self.embedados, [])
+
+    def test_app_roda_uma_vez_por_versao_do_dados_db(self):
+        from analytics_index import vetores
+
+        self._novo_valor("Linhares")
+        with patch.object(vetores, "_feitas", set()), patch.dict(os.environ, {"ADITO_DADOS_DB": str(self.banco)}):
+            primeiro = vetores.atualizar_dados_locais(self.embedder)
+            segundo = vetores.atualizar_dados_locais(self.embedder)
+        self.assertEqual(primeiro["novos"], 1)
+        self.assertIsNone(segundo)
+        self.assertEqual(self.embedados, ["Linhares"])
+
+
 class ExemplosLocaisTests(unittest.TestCase):
     EXEMPLOS = [
         {"pergunta": "Quantas bolsas do PIBIC por campus?", "texto": "A"},
